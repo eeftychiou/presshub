@@ -49,6 +49,8 @@ class PressHub_AI_Social_Trending {
     const AI_IMAGE_HOOK = 'presshub_ai_social_trending_ai_image';
     /** Post meta: the AI image job for this roundup was queued (once per post). */
     const AI_IMAGE_META = '_presshub_trending_ai_image_queued';
+    /** Post meta: the QA gate release waits for the AI image job, so social shares get the AI image. */
+    const AI_RELEASE_META = '_presshub_trending_ai_release_pending';
     const RUN_ACTION = 'presshub_ai_social_trending_run_now';
 
     /** Post meta on roundup posts: the run key and the items shown. */
@@ -1224,7 +1226,7 @@ class PressHub_AI_Social_Trending {
             self::maybe_set_featured_image( $existing, $items );
             // A new set of posts is checked again (whether or not the AI
             // summary is on); the numbers changing alone is not.
-            if ( $new_set ) {
+            if ( $new_set && ! self::release_waits_for_ai_image( $existing ) ) {
                 self::release_through_gate( $existing );
             }
             return $existing;
@@ -1270,8 +1272,15 @@ class PressHub_AI_Social_Trending {
         update_option( self::OPTION_POSTS, $map, false );
         self::save_summary_meta( (int) $id, $summary );
         self::maybe_set_featured_image( (int) $id, $items );
-        self::release_through_gate( (int) $id );
+        if ( ! self::release_waits_for_ai_image( (int) $id ) ) {
+            self::release_through_gate( (int) $id );
+        }
         return (int) $id;
+    }
+
+    /** True while the AI image job for this roundup has not run: the job releases the post. */
+    private static function release_waits_for_ai_image( int $post_id ): bool {
+        return function_exists( 'get_post_meta' ) && '1' === (string) get_post_meta( $post_id, self::AI_RELEASE_META, true );
     }
 
     /** Legal check of the summary and quoted posts plus the measured SEO checks; then the configured status. */
@@ -1846,6 +1855,8 @@ class PressHub_AI_Social_Trending {
             return;
         }
         update_post_meta( $post_id, self::AI_IMAGE_META, (string) time() );
+        // Release (and so the social shares, which copy the featured image) waits for the AI image.
+        update_post_meta( $post_id, self::AI_RELEASE_META, '1' );
     }
 
     /** Up to 10 post texts, each cut to 300 characters. */
@@ -1869,19 +1880,34 @@ class PressHub_AI_Social_Trending {
      */
     public static function run_ai_featured_image( $post_id, $texts = [] ): int {
         $post_id = (int) $post_id;
-        if ( $post_id <= 0 || ( function_exists( 'get_post' ) && ! get_post( $post_id ) ) ) {
+        $post    = ( $post_id > 0 && function_exists( 'get_post' ) ) ? get_post( $post_id ) : null;
+        if ( ! $post || 'trash' === (string) ( $post->post_status ?? '' ) ) {
+            if ( $post_id > 0 && function_exists( 'delete_post_meta' ) ) {
+                delete_post_meta( $post_id, self::AI_RELEASE_META );
+            }
             return 0;
         }
-        if ( function_exists( 'set_time_limit' ) ) {
-            @set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- may be disabled by the host.
+        $att = 0;
+        // The settings may have changed since the job was queued.
+        if ( 'auto_generate' === PressHub_AI_Settings_Storage::get_social_trending_image_source() && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
+            if ( function_exists( 'set_time_limit' ) ) {
+                @set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- may be disabled by the host.
+            }
+            $items = [];
+            foreach ( (array) $texts as $text ) {
+                $items[] = [ 'text' => (string) $text ];
+            }
+            $att = self::ai_featured_image( $post_id, $items );
+            if ( $att > 0 ) {
+                set_post_thumbnail( $post_id, $att );
+            }
+        } else {
+            self::log( 'info', 'Social trending: AI roundup image no longer chosen; keeping the top post picture.', [ 'post_id' => $post_id ] );
         }
-        $items = [];
-        foreach ( (array) $texts as $text ) {
-            $items[] = [ 'text' => (string) $text ];
-        }
-        $att = self::ai_featured_image( $post_id, $items );
-        if ( $att > 0 ) {
-            set_post_thumbnail( $post_id, $att );
+        if ( self::release_waits_for_ai_image( $post_id ) ) {
+            // Released now, with the AI image or the top post picture, so its shares carry it.
+            delete_post_meta( $post_id, self::AI_RELEASE_META );
+            self::release_through_gate( $post_id );
         }
         return $att;
     }
@@ -1902,7 +1928,7 @@ class PressHub_AI_Social_Trending {
         $content = "What people in Cyprus are posting about on social media:\n" . implode( "\n", $lines );
         try {
             require_once __DIR__ . '/class-image-prompt-templates.php';
-            $tpl = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_auto_image_template( 'social_trending' ), 'social_trending' );
+            $tpl = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_auto_image_template( 'social_trending' ), 'social_trending', PressHub_AI_Settings_Storage::default_social_trending_image_template() );
             if ( is_callable( self::$ai_image ) ) {
                 $att = call_user_func( self::$ai_image, $content, $title, $tpl, $post_id );
                 return is_wp_error( $att ) ? 0 : max( 0, (int) $att );

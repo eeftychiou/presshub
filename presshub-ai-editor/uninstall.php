@@ -218,6 +218,8 @@ while ( true ) {
 // SEO metadata and SEO review results stored on posts.
 if ( function_exists( 'delete_post_meta_by_key' ) ) {
     delete_post_meta_by_key( '_presshub_ai_seo' );
+    delete_post_meta_by_key( '_presshub_trending_ai_image_queued' );
+    delete_post_meta_by_key( '_presshub_trending_ai_release_pending' );
     delete_post_meta_by_key( '_presshub_ai_seo_review' );
     delete_post_meta_by_key( '_presshub_policy_source_hash' );
     delete_post_meta_by_key( '_presshub_stakeholders_source_hash' );
@@ -227,3 +229,6 @@ if ( function_exists( 'delete_post_meta_by_key' ) ) {
 wp_clear_scheduled_hook( 'presshub_ai_cleanup_research' );
 wp_clear_scheduled_hook( 'presshub_ai_do_research' );
 wp_clear_scheduled_hook( 'presshub_ai_social_trending_tick' );
+if ( function_exists( 'wp_unschedule_hook' ) ) {
+    wp_unschedule_hook( 'presshub_ai_social_trending_ai_image' );
+}

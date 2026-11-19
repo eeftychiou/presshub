@@ -341,6 +341,10 @@ class ImagePromptTemplatesTest {
         $this->assert( 'top_post' === PressHub_AI_Settings_Storage::get_social_trending_image_source(), 'Trending keeps the top post picture by default' );
         $this->assert( 'editorial_cartoon' === PressHub_AI_Settings_Storage::get_auto_image_template( 'social_trending' ), 'Trending draws an illustration by default' );
         $this->assert( 'editorial_cartoon' === PressHub_AI_Settings_Storage::sanitize_social_trending_image_template( 'custom_nope' ), 'Unknown trending template becomes its default' );
+        $this->assert( in_array( 'Trending in Cyprus', PressHub_AI_Image_Prompt_Templates::used_by( 'editorial_cartoon' ), true ), 'used_by() reads the trending default (rule 2.3)' );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] = '';
+        $this->assert( 'editorial_cartoon' === PressHub_AI_Settings_Storage::get_auto_image_template( 'social_trending' ), 'A stored empty value reads as the default' );
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] );
         $this->assert( 'top_post' === PressHub_AI_Settings_Storage::sanitize_social_trending_image_source( 'nope' ), 'Unknown trending source becomes the default' );
         $this->assert( [ 'Noon podcast' ] === PressHub_AI_Image_Prompt_Templates::used_by( 'custom_night_photo' ), 'Noon podcast use blocks deletion' );
 

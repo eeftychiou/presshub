@@ -264,8 +264,10 @@ class PressHub_AI_Image_Prompt_Templates {
      */
     public static function used_by( string $id ): array {
         $out = [];
+        $kinds = array_flip( PressHub_AI_Settings_Storage::auto_image_template_options() );
         foreach ( self::usage_options() as $option => $label ) {
-            if ( (string) get_option( $option, self::DEFAULT_ID ) === $id ) {
+            $stored = isset( $kinds[ $option ] ) ? PressHub_AI_Settings_Storage::get_auto_image_template( $kinds[ $option ] ) : (string) get_option( $option, self::DEFAULT_ID );
+            if ( $stored === $id ) {
                 $out[] = $label;
             }
         }
@@ -279,16 +281,16 @@ class PressHub_AI_Image_Prompt_Templates {
      *
      * @return array{id:string,template:string}
      */
-    public static function resolve( string $id, string $context = '' ): array {
+    public static function resolve( string $id, string $context = '', string $fallback = self::DEFAULT_ID ): array {
         $tpl = '' !== $id ? self::get( $id ) : null;
         if ( null === $tpl ) {
+            $tpl = self::get( $fallback ) ?? self::get( self::DEFAULT_ID );
             if ( '' !== $id && class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::warning( 'Image prompt template not found; using Editorial photo.', [
+                PressHub_AI_Logger::warning( sprintf( 'Image prompt template not found; using %s.', $tpl ? $tpl['name'] : 'Editorial photo' ), [
                     'template_id' => $id,
                     'context'     => $context,
                 ] );
             }
-            $tpl = self::get( self::DEFAULT_ID );
         }
         return [
             'id'       => $tpl ? (string) $tpl['id'] : self::DEFAULT_ID,

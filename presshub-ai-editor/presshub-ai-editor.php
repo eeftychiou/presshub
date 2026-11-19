@@ -389,6 +389,9 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     wp_clear_scheduled_hook( 'presshub_ai_prune_log_files' );
     wp_clear_scheduled_hook( PressHub_AI_Social_Trending::CRON_HOOK );
+    if ( function_exists( 'wp_unschedule_hook' ) ) {
+        wp_unschedule_hook( PressHub_AI_Social_Trending::AI_IMAGE_HOOK ); // Its events carry arguments.
+    }
     PressHub_AI_Memory_Rollup_Builder::clear_cron();
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::deactivate();

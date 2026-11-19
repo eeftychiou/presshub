@@ -110,6 +110,13 @@
             var $sel = $(this);
             var value = $sel.val();
             $sel.find('optgroup[data-group="saved"]').remove();
+            // A "Missing template" entry whose id now exists again is no longer missing.
+            $sel.find('option[data-missing="1"]').each(function () {
+                var id = this.value;
+                if (saved.some(function (x) { return x.id === id; })) {
+                    $(this).remove();
+                }
+            });
             if (saved.length) {
                 var $group = $('<optgroup data-group="saved" />').attr('label', t.saved_group || 'Saved templates');
                 saved.forEach(function (tpl) {
@@ -119,6 +126,10 @@
             }
             if (value && $sel.find('option').filter(function () { return this.value === value; }).length) {
                 $sel.val(value);
+            } else if (value) {
+                // An unsaved pick was deleted: fall back to the first template and
+                // tell the Reset link and unsaved-changes tracking about it.
+                $sel.prop('selectedIndex', 0).trigger('change');
             }
         });
     }

@@ -4150,7 +4150,8 @@ class PressHub_AI_Settings_Storage {
         if ( ! isset( $options[ $kind ] ) ) {
             return self::default_briefing_image_template();
         }
-        return (string) get_option( $options[ $kind ], self::default_auto_image_template( $kind ) );
+        $id = (string) get_option( $options[ $kind ], self::default_auto_image_template( $kind ) );
+        return '' !== $id ? $id : self::default_auto_image_template( $kind );
     }
 
     /** Briefing or podcast template for an edition. */
