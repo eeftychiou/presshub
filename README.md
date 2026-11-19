@@ -260,7 +260,7 @@ Open **PressHub → Settings** (`admin.php?page=presshub-ai&section=<slug>`). Th
 - **Clean-up (2.45.0)**: unused settings (a second GitHub token, three X OAuth1 keys and the old podcast prompts 1–3) are deleted on upgrade after a copy of all settings is saved; the report and the copy are on PressHub → Usage & logs.
 - **Old API keys (2.46.0)**: PressHub reads keys only from the providers in Connections. The old single API key, the old Gemini key and the separate speech key are copied into a matching provider if none has them, then removed; the Speech key field is gone from Connections. Each clean-up run has its own report and copy on Usage & logs.
 
-- **Defaults, translations and uninstall (2.69.0)**:
+- **Defaults, translations and uninstall (2.70.0)**:
   - Every setting shows its default with Reset to default, except prompts, which use Load default template.
   - Setting names and help in Settings search appear in the site's language.
   - Deleting the plugin removes every PressHub setting, store and saved key, on every site of a network.
