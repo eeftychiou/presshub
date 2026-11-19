@@ -257,6 +257,7 @@ graph TD
 - **Content Format Invariant**:
   - By default, podcast post `post_content` contains **only the audio player block** (`wp:audio`) and strips transcript text to maintain a clean podcast player presentation for readers.
   - Controlled by option `presshub_ai_briefing_podcast_include_text` (default: 0/disabled).
+  - **Lead story text (2.62.0)**: `create_podcast_post()` and `update_podcast_post()` open the body with a `<p class="presshub-podcast-lead">` paragraph before the player. `lead_story_text( $date, $edition )` takes the written brief of that date and edition (`find_brief_post()`), keeps its content before the first `<h1>`–`<h6>`, strips tags and entities, and cuts it to whole sentences of at most `LEAD_MAX_WORDS` (60) words (`cut_to_sentences()`); without a lead section it uses the brief's excerpt. The text is saved in `_presshub_podcast_lead` and as `post_excerpt` (ahead of the transcript excerpt and the saved SEO description). With the transcript off, `filter_podcast_excerpt()` returns that meta, or for older posts reads the brief live (no write). The QA gate reviews it as part of `post_content`. Filters: `presshub_ai_podcast_lead_enabled`, `presshub_ai_podcast_lead_text`.
 - **Dialogue Script Persistence & Editor Metabox**:
   - The complete spoken dialogue script is stored in post meta `_presshub_podcast_script`.
   - On podcast edit screens, a dedicated metabox **"Podcast Audio & Dialogue Editor"** (`presshub_ai_podcast_editor`) provides:

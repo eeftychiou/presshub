@@ -419,6 +419,8 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_podcast_host1_name` | code only |
 | `presshub_ai_podcast_host2_name` | code only |
 | `presshub_ai_podcast_host3_name` | code only |
+| `presshub_ai_podcast_lead_enabled` | code only |
+| `presshub_ai_podcast_lead_text` | code only |
 | `presshub_ai_podcast_producer_system_prompt` | code only |
 | `presshub_ai_podcast_show_notes_enabled` | `presshub_ai_podcast_show_notes_enabled` |
 | `presshub_ai_podcast_words_per_minute` | code only |

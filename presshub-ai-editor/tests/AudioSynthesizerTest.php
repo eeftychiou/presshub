@@ -770,6 +770,42 @@ $sn_post_id = $synthesizer->create_podcast_post( 'http://example.test/sn.mp3', 4
 $sn_content = get_post( (int) $sn_post_id )->post_content ?? '';
 as_check( 'issue_191: create_podcast_post adds the show notes after the player', false !== strpos( $sn_content, 'presshub-podcast-show-notes' ) && strpos( $sn_content, 'wp:audio' ) < strpos( $sn_content, 'presshub-podcast-show-notes' ) );
 
+// 2.62.0 — lead story text on morning and noon podcast posts.
+as_check( 'lead: no brief gives no lead text', '' === $synthesizer->lead_story_text( '2026-11-15', 'morning' ) && false === strpos( $sn_content, 'presshub-podcast-lead' ) );
+$lead_brief = (object) [
+    'ID'           => 5151,
+    'post_status'  => 'publish',
+    'post_title'   => 'Πρωινή Ενημέρωση 19/11',
+    'post_excerpt' => 'Περίληψη της ενημέρωσης.',
+    'post_content' => '<p>Η <a href="https://presshub.cy/tag/x/">Σύνοδος</a> Κύπρου &amp; Ελλάδας ολοκληρώθηκε.</p>' . "\n" . '<p>Δεύτερη πρόταση με ' . str_repeat( 'λέξη ', 70 ) . '.</p><h2>Πολιτική</h2><p>Άλλο θέμα.</p>',
+];
+$GLOBALS['GET_POSTS_RESULT'] = [ $lead_brief ];
+$lead = $synthesizer->lead_story_text( '2026-11-19', 'morning' );
+as_check( 'lead: takes the brief lead as plain text with entities decoded', 'Η Σύνοδος Κύπρου & Ελλάδας ολοκληρώθηκε.' === $lead );
+as_check( 'lead: stops before the first section heading', false === strpos( $lead, 'Άλλο θέμα' ) );
+as_check( 'lead: a long first sentence is cut at a word with an ellipsis', '…' === mb_substr( PressHub_AI_Audio_Synthesizer::cut_to_sentences( str_repeat( 'λέξη ', 80 ), 10 ), -1 ) && 10 === count( explode( ' ', rtrim( PressHub_AI_Audio_Synthesizer::cut_to_sentences( str_repeat( 'λέξη ', 80 ), 10 ), '…' ) ) ) );
+as_check( 'lead: keeps whole sentences within the limit', 'Ένα δύο. Τρία τέσσερα!' === PressHub_AI_Audio_Synthesizer::cut_to_sentences( 'Ένα δύο. Τρία τέσσερα! Πέντε έξι επτά.', 4 ) );
+$lead_brief_no_lead = clone $lead_brief;
+$lead_brief_no_lead->post_content = '<h2>Πολιτική</h2><p>Άλλο θέμα.</p>';
+$GLOBALS['GET_POSTS_RESULT'] = [ $lead_brief_no_lead ];
+as_check( 'lead: falls back to the brief excerpt', 'Περίληψη της ενημέρωσης.' === $synthesizer->lead_story_text( '2026-11-19', 'noon' ) );
+$GLOBALS['GET_POSTS_RESULT'] = [ $lead_brief ];
+delete_option( 'presshub_ai_briefing_podcast_include_text' );
+$lead_post_id = $synthesizer->create_podcast_post( 'http://example.test/lead.mp3', 4322, $sn_script, '2026-11-19', 'Lead', 'noon' );
+$lead_post    = get_post( (int) $lead_post_id );
+as_check( 'lead: create_podcast_post opens the body with the lead paragraph before the player', false !== strpos( $lead_post->post_content, '<p class="presshub-podcast-lead">Η Σύνοδος Κύπρου &amp; Ελλάδας ολοκληρώθηκε.</p>' ) && strpos( $lead_post->post_content, 'presshub-podcast-lead' ) < strpos( $lead_post->post_content, 'wp:audio' ) );
+as_check( 'lead: create_podcast_post sets the excerpt and meta to the lead', 'Η Σύνοδος Κύπρου & Ελλάδας ολοκληρώθηκε.' === $lead_post->post_excerpt && 'Η Σύνοδος Κύπρου & Ελλάδας ολοκληρώθηκε.' === get_post_meta( (int) $lead_post_id, '_presshub_podcast_lead', true ) );
+as_check( 'lead: the excerpt filter shows the lead while the transcript is off', 'Η Σύνοδος Κύπρου & Ελλάδας ολοκληρώθηκε.' === PressHub_AI_Audio_Synthesizer::filter_podcast_excerpt( '[SPEAKER_1]: script', $lead_post ) );
+$GLOBALS['POST_META_STORE'][ 5160 ] = [ '_presshub_briefing_type' => 'podcast', '_presshub_briefing_date' => '2026-11-19', '_presshub_briefing_edition' => 'morning' ];
+as_check( 'lead: an older podcast post without saved lead reads it from the brief', 'Η Σύνοδος Κύπρου & Ελλάδας ολοκληρώθηκε.' === PressHub_AI_Audio_Synthesizer::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
+$synthesizer->update_podcast_post( (int) $lead_post_id, 'http://example.test/lead2.mp3', 4323, $sn_script, '2026-11-19', '', 'noon' );
+$lead_post = get_post( (int) $lead_post_id );
+as_check( 'lead: update_podcast_post keeps one lead paragraph and the lead excerpt', 1 === substr_count( $lead_post->post_content, 'presshub-podcast-lead' ) / 2 && 'Η Σύνοδος Κύπρου & Ελλάδας ολοκληρώθηκε.' === $lead_post->post_excerpt );
+add_filter( 'presshub_ai_podcast_lead_enabled', '__return_false' );
+as_check( 'lead: the presshub_ai_podcast_lead_enabled filter turns it off', '' === $synthesizer->lead_story_text( '2026-11-19', 'morning' ) );
+remove_filter( 'presshub_ai_podcast_lead_enabled', '__return_false' );
+$GLOBALS['GET_POSTS_RESULT'] = [];
+
 
 // =========================================================================
 // 12. Topic SFX Stitching — Zero Transition SFX between Intro/Outro and Topics
