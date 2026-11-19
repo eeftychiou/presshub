@@ -194,6 +194,13 @@ class PressHub_Social_Queue_Admin {
                                                 <?php echo esc_html( sprintf( /* translators: %s: YouTube's error */ __( 'Uploaded, but not in the podcast playlist: %s', 'presshub-social-autopost' ), wp_trim_words( $yt_playlist_error, 10 ) ) ); ?>
                                             </div>
                                         <?php endif; ?>
+                                        <?php $yt_episode_note = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::episode_note( $job ) : ''; ?>
+                                        <?php if ( '' !== $yt_episode_note ) : ?>
+                                            <div class="presshub-error-msg" title="<?php echo esc_attr( $yt_episode_note ); ?>">
+                                                <span class="dashicons dashicons-warning" style="font-size:14px; width:14px; height:14px; vertical-align:middle; color:#dba617;"></span>
+                                                <?php echo esc_html( sprintf( /* translators: %s: what the episode video lacks */ __( 'Episode published without: %s', 'presshub-social-autopost' ), wp_trim_words( $yt_episode_note, 10 ) ) ); ?>
+                                            </div>
+                                        <?php endif; ?>
                                         <?php if ( ! empty( $job['last_error'] ) ) : ?>
                                             <div class="presshub-error-msg" title="<?php echo esc_attr( $job['last_error'] ); ?>">
                                                 <span class="dashicons dashicons-warning" style="font-size:14px; width:14px; height:14px; vertical-align:middle; color:#d63638;"></span>

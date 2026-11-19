@@ -52,7 +52,7 @@ export interface YouTubeUploadResult {
    * daily upload quota is used up) or `auth` (the sign-in was refused). WordPress then
    * holds the job and pauses YouTube instead of failing it.
    */
-  reason?: 'quota' | 'auth';
+  reason?: 'quota' | 'auth' | 'refused';
   videoId?: string;
   url?: string;
   playlistItemId?: string;
@@ -82,7 +82,7 @@ export interface YouTubeUploadOptions {
    * can remember it even if the worker stops before the upload call returns.
    */
   onUploaded?: (videoId: string, url: string) => void;
-  /** Wait before reading back the status of the finished upload (ms, default 5000). */
+  /** First wait before reading back the status of the finished upload (ms, default 5000; 0 for tests). */
   statusCheckDelayMs?: number;
 }
 
@@ -101,8 +101,10 @@ export function uploadRefusal(status: any): string {
 const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos';
 const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
 const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
-/** Wait before reading back the status of a finished upload (ms). */
+/** First wait before reading back the status of a finished upload (ms). */
 const STATUS_CHECK_DELAY_MS = 5000;
+/** Waits between status reads, as multiples of the first wait. */
+const STATUS_CHECK_STEPS = [1, 2, 4, 6];
 const CHUNK_UNIT = 256 * 1024;
 /** 8 MiB: large enough to be quick, small enough that a failed chunk costs little. */
 export const DEFAULT_CHUNK_SIZE = 32 * CHUNK_UNIT;
@@ -425,25 +427,42 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
   // be read is a warning, not a failure.
   let refusal = uploadRefusal(video?.status);
   if (!refusal) {
-    const delay = Math.max(0, options.statusCheckDelayMs ?? STATUS_CHECK_DELAY_MS);
-    if (delay > 0) await sleep(delay);
+    // A long upload can outlast the first token: ask WordPress again (it returns the
+    // cached one while it has time left) and keep the old one if that fails.
     try {
-      const res = await fetchFn(`${VIDEOS_URL}?part=status&id=${encodeURIComponent(videoId)}`, withTimeout({
-        headers: { Authorization: `Bearer ${token}` }
-      }, requestTimeout));
-      const body = await readJson(res);
-      if (res.ok) {
-        refusal = uploadRefusal(body?.items?.[0]?.status);
-      } else {
-        WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${apiError(res.status, body)}`);
-      }
+      token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn, requestTimeout);
     } catch (err: any) {
-      WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${err.message}`);
+      WorkerLogger.warn('YouTube', `Could not refresh the access token before the status check: ${err.message}`);
+    }
+    // YouTube checks a finished upload on its side; while the status is still "uploaded"
+    // it is read again, with growing waits (5, 10, 20 and 30 s by default, about a minute
+    // in all). "processed" or a refusal ends it early.
+    const base = Math.max(0, options.statusCheckDelayMs ?? STATUS_CHECK_DELAY_MS);
+    for (const factor of STATUS_CHECK_STEPS) {
+      if (base > 0) await sleep(base * factor);
+      let state = '';
+      try {
+        const res = await fetchFn(`${VIDEOS_URL}?part=status&id=${encodeURIComponent(videoId)}`, withTimeout({
+          headers: { Authorization: `Bearer ${token}` }
+        }, requestTimeout));
+        const body = await readJson(res);
+        if (res.ok) {
+          const status = body?.items?.[0]?.status;
+          refusal = uploadRefusal(status);
+          state = String(status?.uploadStatus || '');
+        } else {
+          WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${apiError(res.status, body)}`);
+        }
+      } catch (err: any) {
+        WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${err.message}`);
+      }
+      if (refusal || state !== 'uploaded') break;
     }
   }
   if (refusal) {
     WorkerLogger.error('YouTube', `YouTube refused the uploaded ${meta.kind} ${videoId} (${refusal}).`);
-    return { success: false, videoId, error: `YouTube refused the uploaded video ${videoId} (${refusal}). Nothing was published; the refused video stays in YouTube Studio and can be deleted there.` };
+    // Not retried: uploading the same video again would be refused again.
+    return { success: false, reason: 'refused', videoId, error: `YouTube refused the uploaded video ${videoId} (${refusal}). Nothing was published; the refused video stays in YouTube Studio and can be deleted there.` };
   }
   const result: YouTubeUploadResult = { success: true, videoId, url };
   if (options.onUploaded) {

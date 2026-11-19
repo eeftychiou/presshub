@@ -779,9 +779,17 @@ class PressHub_Social_YouTube {
         if ( $is_ep ) {
             $video = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::episode_video( $post_id, $ep_lang ) : self::episode_video( $post_id );
             if ( null === $video && PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
-                PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) is rendered the plain way, on the featured image without captions: the podcast has no caption timeline (made before 2.54.0) and its shorts have no story images.', (int) ( $job['id'] ?? 0 ), $post_id ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
+                $tl_error = ( '' === $ep_lang && class_exists( 'PressHub_AI_Podcast_Timeline' ) ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
+                $why      = '' !== $tl_error
+                    ? sprintf( 'its caption timeline could not be built when the podcast was made (%s)', $tl_error )
+                    : ( '' !== $ep_lang ? 'its translation has no caption timeline' : 'the podcast has no caption timeline (made before 2.54.0)' );
+                PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) is rendered the plain way, on the featured image without captions: %s and its shorts have no story images.', (int) ( $job['id'] ?? 0 ), $post_id, $why ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
             } elseif ( null !== $video ) {
                 $upload['episode_video'] = $video;
+                $tl_error                = ( '' === $ep_lang && ! isset( $video['segments'] ) && class_exists( 'PressHub_AI_Podcast_Timeline' ) ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
+                if ( '' !== $tl_error ) {
+                    PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) has story images but no captions: its caption timeline could not be built when the podcast was made (%s).', (int) ( $job['id'] ?? 0 ), $post_id, $tl_error ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
+                }
                 // Chapters only from a measured timeline: an estimated one (MP3) may be off.
                 $timeline                = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::timeline( $post_id, $ep_lang ) : ( class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null );
                 $chapters                = class_exists( 'PressHub_AI_Podcast_Timeline' ) && null !== $timeline && ! empty( $video['scenes'] ) && empty( $video['estimated'] )
@@ -813,18 +821,16 @@ class PressHub_Social_YouTube {
      * Why a due episode must wait, or null when it may be uploaded now:
      * [ 'delay' => seconds until it is due again, 'note' => why, shown on the Queue ].
      * The claim moves a held episode's scheduled_at forward by the delay (no attempt is
-     * used), so held episodes never crowd the front of the queue.
-     * - Story images (episode_ready()): while a short of the post is still being prepared,
-     *   for at most Wait for Story Images after the episode was queued.
+     * used), so held episodes never crowd the front of the queue. Length is checked first,
+     * so the image wait (and its timeout warning) only runs for an episode that may go up.
      * - Length (episode_length_ok()): while the episode is longer than 15 minutes and the
      *   channel may not upload long videos (status.longUploadsStatus is not "allowed").
+     * - Story images (episode_ready()): while a short of the post is still being prepared,
+     *   for at most Wait for Story Images after the episode was queued.
      */
     public static function episode_hold( array $job, ?int $now = null ): ?array {
         if ( ! self::is_episode_job( $job ) ) {
             return null;
-        }
-        if ( ! self::episode_ready( $job, $now ) ) {
-            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting for the story images of the podcast\'s shorts, for at most %d minutes after the episode was queued.', PressHub_Social_Settings_Storage::get_youtube_episode_image_wait_minutes() ) ];
         }
         if ( ! self::episode_length_ok( $job ) ) {
             $status = self::long_uploads_status();
@@ -832,10 +838,13 @@ class PressHub_Social_YouTube {
                 'delay' => self::HOLD_RECHECK_LENGTH,
                 'note'  => sprintf(
                     'Waiting: the episode is %d minutes long and the YouTube channel may not upload videos over 15 minutes yet (long uploads: %s). Verify the channel in YouTube Studio (Settings, Channel, Feature eligibility); the episode then goes up on its own.',
-                    (int) ceil( self::episode_seconds( (int) ( $job['post_id'] ?? 0 ) ) / 60 ),
+                    (int) ceil( self::job_seconds( $job ) / 60 ),
                     '' !== $status ? $status : 'could not be read'
                 ),
             ];
+        }
+        if ( ! self::episode_ready( $job, $now ) ) {
+            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting for the story images of the podcast\'s shorts, for at most %d minutes after the episode was queued.', PressHub_Social_Settings_Storage::get_youtube_episode_image_wait_minutes() ) ];
         }
         return null;
     }
@@ -886,22 +895,31 @@ class PressHub_Social_YouTube {
         if ( ! self::is_episode_job( $job ) ) {
             return true;
         }
-        $post_id = (int) ( $job['post_id'] ?? 0 );
-        $ep_lang = self::episode_language( $job );
-        $seconds = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::duration( $post_id, $ep_lang ) : self::episode_seconds( $post_id );
+        $seconds = self::job_seconds( $job );
         if ( $seconds + self::LONG_UPLOAD_MARGIN <= self::LONG_UPLOAD_SECONDS ) {
             return true;
         }
         return 'allowed' === self::long_uploads_status();
     }
 
-    /** Length of a podcast post's audio in seconds: the timeline's, else the stored audio length. */
+    /** Length of an episode job's audio: its translation's for an English or Turkish episode. */
+    public static function job_seconds( array $job ): float {
+        $post_id = (int) ( $job['post_id'] ?? 0 );
+        $ep_lang = self::episode_language( $job );
+        return '' !== $ep_lang ? PressHub_AI_Podcast_Translations::duration( $post_id, $ep_lang ) : self::episode_seconds( $post_id );
+    }
+
+    /**
+     * Length of a podcast post's audio in seconds: a measured timeline's, else the longer of
+     * an estimated timeline and the stored audio length (an MP3 estimate can be short).
+     */
     public static function episode_seconds( int $post_id ): float {
         $timeline = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null;
-        if ( null !== $timeline ) {
+        if ( null !== $timeline && empty( $timeline['estimated'] ) ) {
             return (float) $timeline['duration'];
         }
-        return $post_id > 0 ? (float) get_post_meta( $post_id, '_presshub_audio_duration_sec', true ) : 0.0;
+        $stored = $post_id > 0 ? (float) get_post_meta( $post_id, '_presshub_audio_duration_sec', true ) : 0.0;
+        return max( $stored, null !== $timeline ? (float) $timeline['duration'] : 0.0 );
     }
 
     /**
@@ -1183,6 +1201,15 @@ class PressHub_Social_YouTube {
         }
         $meta = self::decode_metadata( $job['metadata'] ?? null );
         return trim( (string) ( $meta['youtube_playlist_error'] ?? '' ) );
+    }
+
+    /** What an enhanced episode was published without (story images, captions), or ''. */
+    public static function episode_note( array $job ): string {
+        if ( 'youtube' !== ( $job['platform'] ?? '' ) ) {
+            return '';
+        }
+        $meta = self::decode_metadata( $job['metadata'] ?? null );
+        return trim( (string) ( $meta['youtube_episode_note'] ?? '' ) );
     }
 
     /**

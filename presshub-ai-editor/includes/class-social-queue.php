@@ -789,7 +789,11 @@ class PressHub_Social_Queue {
         if ( is_array( $repost_meta ) ) {
             unset( $repost_meta['instagram_creation_id'], $repost_meta['instagram_container_started_at'] );
             // A re-post is a new upload: the earlier video's results do not carry over.
-            unset( $repost_meta['youtube_playlist_error'], $repost_meta['youtube_playlist_item_id'], $repost_meta['youtube_kind'], $repost_meta['youtube_error_reason'] );
+            unset( $repost_meta['youtube_playlist_error'], $repost_meta['youtube_playlist_item_id'], $repost_meta['youtube_kind'], $repost_meta['youtube_error_reason'], $repost_meta['youtube_episode_note'] );
+            // A re-posted episode waits for story images from now, not from the first queueing.
+            if ( isset( $repost_meta['youtube_episode'] ) && is_array( $repost_meta['youtube_episode'] ) ) {
+                $repost_meta['youtube_episode']['queued_at'] = gmdate( 'c' );
+            }
         }
 
         $new_job_data = [

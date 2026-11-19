@@ -659,7 +659,9 @@ export class PressHubPoller {
             } else {
               const error = upload.error || 'YouTube upload failed';
               WorkerLogger.warn('Poller', `${jobTag} YouTube upload failed: ${error}`);
-              if (upload.reason) {
+              // A quota or sign-in stop halts the batch's other YouTube jobs; a refused
+              // video concerns this job only.
+              if (upload.reason === 'quota' || upload.reason === 'auth') {
                 youtubeHalt = { reason: upload.reason, error };
               }
               await this.reportComplete({

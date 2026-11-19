@@ -311,7 +311,7 @@ async function prepareEpisodeImage(src: string, dest: string): Promise<boolean> 
   const h = Math.round(EPISODE_CANVAS.height * SOURCE_SCALE);
   try {
     // Turned upright first, by the camera's EXIF orientation.
-    const upright = await sharp(src).rotate().toBuffer();
+    const upright = await sharp(src).rotate().png().toBuffer();
     const meta = await sharp(upright).metadata();
     const ratio = (meta.width || 1) / (meta.height || 1);
     if (ratio >= 1.4) {
@@ -492,6 +492,11 @@ export async function generateEpisodeVideo(options: GenerateEpisodeOptions): Pro
     for (const [i, src] of (options.imagePaths || []).entries()) {
       const dest = path.join(work, `local-${i}.jpg`);
       if (await prepareEpisodeImage(src, dest)) images.push(dest);
+    }
+    if (storyUrls > 0 && indexOfUrl.size === 0 && (options.imagePaths || []).length === 0) {
+      // The job asked for story images and none could be used: fail (the job is retried)
+      // rather than publish the episode on generic backgrounds.
+      throw new Error(`None of the episode's ${storyUrls} story image(s) could be downloaded or read.`);
     }
     const usable = images.length;
     const notes: string[] = [];
