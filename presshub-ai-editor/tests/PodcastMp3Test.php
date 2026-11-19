@@ -55,6 +55,39 @@ function mp3_check( string $label, $condition ): void {
     }
 }
 
+/** $wpdb double: post_content updates land in POSTS_STORE, and every call is recorded. */
+class Mp3_Test_WPDB extends PressHub_Test_WPDB {
+    public $posts = 'wp_posts';
+    public $last_error = '';
+    public $fail_next = false;
+    public function update( $table, $data, $where, $format = null, $where_format = null ) {
+        $this->queries[] = [ 'update', $table, $data, $where ];
+        if ( $this->fail_next ) {
+            $this->fail_next  = false;
+            $this->last_error = 'Lost connection';
+            return false;
+        }
+        if ( 'wp_posts' === $table && isset( $GLOBALS['POSTS_STORE'][ $where['ID'] ] ) ) {
+            foreach ( $data as $k => $v ) {
+                $GLOBALS['POSTS_STORE'][ $where['ID'] ][ $k ] = $v;
+            }
+            return 1;
+        }
+        return 0;
+    }
+}
+
+/** Runs $fn when the sideload stub records its file, i.e. mid-sideload. */
+class Mp3_Sideload_Spy extends ArrayObject {
+    public $fn;
+    public function offsetSet( $key, $value ): void {
+        parent::offsetSet( $key, $value );
+        if ( $this->fn ) {
+            ( $this->fn )();
+        }
+    }
+}
+
 $M = 'PressHub_AI_Podcast_Mp3';
 $S = 'PressHub_AI_Settings_Storage';
 
@@ -65,7 +98,8 @@ function mp3_reset(): void {
     $GLOBALS['SCHEDULED_EVENTS']    = [];
     $GLOBALS['DELETED_ATTACHMENTS'] = [];
     $GLOBALS['ATTACHED_FILES']      = [];
-    unset( $GLOBALS['SIDELOAD_FAIL'], $GLOBALS['SIDELOAD_RETURN_ID'] );
+    unset( $GLOBALS['SIDELOAD_FAIL'], $GLOBALS['SIDELOAD_RETURN_ID'], $GLOBALS['SIDELOAD_CAPTURE'] );
+    $GLOBALS['wpdb'] = new Mp3_Test_WPDB();
 }
 
 /** A podcast post playing WAV attachment $att. */
@@ -167,6 +201,68 @@ $ev = $GLOBALS['SCHEDULED_EVENTS'][0] ?? [];
 mp3_check( 'complete: WAV deletion scheduled a day later', $M::DELETE_WAV_HOOK === ( $ev['hook'] ?? '' ) && [ 20, 10 ] === ( $ev['args'] ?? [] ) && ( $ev['time'] ?? 0 ) >= time() + $M::WAV_DELETE_DELAY - 5 );
 mp3_check( 'complete: entry leaves the queue', [] === $M::get_queue() );
 mp3_check( 'complete: nothing deleted yet', [] === $GLOBALS['DELETED_ATTACHMENTS'] );
+$upd = array_values( array_filter( $GLOBALS['wpdb']->queries, function ( $q ) { return 'update' === $q[0] && 'wp_posts' === $q[1]; } ) );
+mp3_check( 'complete: only post_content written, straight to the posts table', 1 === count( $upd ) && [ 'post_content' ] === array_keys( $upd[0][2] ) && [ 'ID' => 10 ] === $upd[0][3] );
+
+// The QA gate's review and override follow the new content, but only when they matched the old one.
+mp3_reset();
+mp3_plant_post( 10, 20, $wav_url );
+$GLOBALS['POST_META_STORE'][10]['_presshub_briefing_type'] = 'podcast';
+$old_hash = PressHub_AI_Publish_Gate::input_hash_for_post( get_post( 10 ), 'podcast' );
+$GLOBALS['POST_META_STORE'][10][ PressHub_AI_Publish_Gate::META_REVIEW ]   = [ 'verdict' => 'pass', 'content_hash' => $old_hash ];
+$GLOBALS['POST_META_STORE'][10][ PressHub_AI_Publish_Gate::META_OVERRIDE ] = $old_hash;
+$M::queue( 10, 20, $wav_url );
+$M::claim_next();
+$GLOBALS['SIDELOAD_RETURN_ID'] = 77;
+$r = $M::complete( 10, 20, $mp3 );
+$new_hash = PressHub_AI_Publish_Gate::input_hash_for_post( get_post( 10 ), 'podcast' );
+$review   = get_post_meta( 10, PressHub_AI_Publish_Gate::META_REVIEW, true );
+mp3_check( 'complete: content hash changed', is_array( $r ) && $new_hash !== $old_hash );
+mp3_check( 'complete: QA review carried over to the new content', $new_hash === ( $review['content_hash'] ?? '' ) && 'pass' === ( $review['verdict'] ?? '' ) );
+mp3_check( 'complete: QA override carried over', $new_hash === get_post_meta( 10, PressHub_AI_Publish_Gate::META_OVERRIDE, true ) );
+mp3_reset();
+mp3_plant_post( 10, 20, $wav_url );
+$GLOBALS['POST_META_STORE'][10]['_presshub_briefing_type'] = 'podcast';
+$GLOBALS['POST_META_STORE'][10][ PressHub_AI_Publish_Gate::META_REVIEW ]   = [ 'verdict' => 'fail', 'content_hash' => 'stale' ];
+$GLOBALS['POST_META_STORE'][10][ PressHub_AI_Publish_Gate::META_OVERRIDE ] = 'stale';
+$M::queue( 10, 20, $wav_url );
+$M::claim_next();
+$GLOBALS['SIDELOAD_RETURN_ID'] = 77;
+$M::complete( 10, 20, $mp3 );
+mp3_check( 'complete: a stale QA review stays stale', 'stale' === ( get_post_meta( 10, PressHub_AI_Publish_Gate::META_REVIEW, true )['content_hash'] ?? '' ) && 'stale' === get_post_meta( 10, PressHub_AI_Publish_Gate::META_OVERRIDE, true ) );
+
+// The episode is regenerated while the MP3 is being stored: the new attachment is thrown away.
+mp3_reset();
+mp3_plant_post( 10, 20, $wav_url );
+mp3_plant_post( 11, 21, str_replace( 'abc', 'def', $wav_url ) );
+$M::queue( 10, 20, $wav_url );
+$M::claim_next();
+$M::queue( 11, 21, str_replace( 'abc', 'def', $wav_url ) );
+$spy = new Mp3_Sideload_Spy();
+$spy->fn = function () {
+    $GLOBALS['POST_META_STORE'][10]['_presshub_audio_attachment_id'] = 30;
+    $q = PressHub_AI_Podcast_Mp3::get_queue();
+    $q[12] = [ 'post_id' => 12, 'attachment_id' => 22, 'source_url' => 'x.wav', 'status' => 'pending', 'attempts' => 0, 'queued_at' => time() ];
+    update_option( PressHub_AI_Podcast_Mp3::QUEUE_OPTION, $q );
+};
+$GLOBALS['SIDELOAD_CAPTURE']   = $spy;
+$GLOBALS['SIDELOAD_RETURN_ID'] = 77;
+$r = $M::complete( 10, 20, $mp3 );
+mp3_check( 'complete: regenerated during the sideload is refused', is_wp_error( $r ) && 'mp3_superseded' === $r->get_error_code() );
+mp3_check( 'complete: the orphan MP3 is deleted', [ 77 ] === $GLOBALS['DELETED_ATTACHMENTS'] );
+mp3_check( 'complete: post content untouched', false !== strpos( (string) $GLOBALS['POSTS_STORE'][10]['post_content'], $wav_url ) );
+mp3_check( 'complete: other episodes queued meanwhile are kept', [ 11, 12 ] === array_keys( $M::get_queue() ) );
+
+// A failed database write throws the MP3 away and retries later.
+mp3_reset();
+mp3_plant_post( 10, 20, $wav_url );
+$M::queue( 10, 20, $wav_url );
+$M::claim_next();
+$GLOBALS['wpdb']->fail_next    = true;
+$GLOBALS['SIDELOAD_RETURN_ID'] = 77;
+$r = $M::complete( 10, 20, $mp3 );
+mp3_check( 'complete: a failed post write is reported', is_wp_error( $r ) && 'mp3_post_update_failed' === $r->get_error_code() );
+mp3_check( 'complete: ...the MP3 deleted, the meta untouched, retried later', [ 77 ] === $GLOBALS['DELETED_ATTACHMENTS'] && 20 === get_post_meta( 10, '_presshub_audio_attachment_id', true ) && 'pending' === ( $M::get_queue()[10]['status'] ?? '' ) );
 
 mp3_reset();
 mp3_plant_post( 10, 20, $wav_url );
@@ -233,6 +329,9 @@ $GLOBALS['SIDELOAD_RETURN_ID'] = 78;
 $done = $M::rest_complete( [ 'post_id' => '10', 'attachment_id' => '20', 'body' => $mp3 ] );
 mp3_check( 'rest: complete stores the MP3', is_array( $done ) && true === $done['ok'] && 78 === $done['attachment_id'] );
 $src = file_get_contents( dirname( __DIR__ ) . '/includes/class-audio-synthesizer.php' );
+$queue_at = strpos( $src, 'PressHub_AI_Podcast_Mp3::queue(' );
+$done_at  = strpos( $src, "'_presshub_audio_completed_at'" );
+mp3_check( 'synthesizer: queues only after the audio meta is complete', false !== $queue_at && false !== $done_at && $queue_at > $done_at );
 mp3_check( 'synthesizer: queues WAV episodes after the post is saved', 1 === preg_match( "/'\\.wav' === \\\$ext \\) \\{\\s*PressHub_AI_Podcast_Mp3::queue\\( \\(int\\) \\\$post_id, \\\$attachment_id, \\\$audio_url \\);/", $src ) );
 
 if ( $failures > 0 ) {

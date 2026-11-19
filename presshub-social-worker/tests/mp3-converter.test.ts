@@ -24,6 +24,12 @@ function fakeWp(routes: Record<string, (init: any) => any>) {
   return { calls, fetchFn };
 }
 
+/** A request that never answers, until its abort signal fires. */
+const hang = (init: any) =>
+  new Promise((_resolve, reject) => {
+    init.signal.addEventListener('abort', () => reject(init.signal.reason));
+  });
+
 const wavResponse = () => ({ ok: true, status: 200, arrayBuffer: async () => new Uint8Array(Buffer.from('RIFF....WAVEdata')).buffer });
 
 describe('Podcast MP3 converter', () => {
@@ -120,6 +126,41 @@ describe('Podcast MP3 converter', () => {
     expect(JSON.parse(wp.calls.find((c) => c.url.endsWith('/fail'))!.init.body).error).toBe('Upload failed with HTTP 500: Disk full');
   });
 
+  test('a WAV download that hangs is stopped and reported', async () => {
+    const wp = fakeWp({
+      '/worker/audio/claim': () => json({ job: JOB }),
+      'podcast.wav': (init) => hang(init),
+      '/worker/audio/fail': () => json({ ok: true })
+    });
+    const encodeFn = jest.fn();
+    const result = await new Mp3Converter({ wpUrl: WP, workerSecret: 's', fetchFn: wp.fetchFn, encodeFn, timeouts: { transferMs: 50 } }).runOnce();
+    expect(result).toMatchObject({ ran: true, ok: false, error: 'Downloading the WAV timed out after 0 s' });
+    expect(encodeFn).not.toHaveBeenCalled();
+    expect(wp.calls.some((c) => c.url.endsWith('/fail'))).toBe(true);
+  });
+
+  test('an upload that hangs is stopped and reported; a hanging claim just ends the cycle', async () => {
+    const wp = fakeWp({
+      '/worker/audio/claim': () => json({ job: JOB }),
+      'podcast.wav': () => wavResponse(),
+      '/worker/audio/complete': (init) => hang(init),
+      '/worker/audio/fail': () => json({ ok: true })
+    });
+    const encodeFn = jest.fn(async (_i: string, o: string, _k: number, ms?: number) => {
+      expect(ms).toBe(1234);
+      fs.writeFileSync(o, FAKE_MP3);
+    });
+    const result = await new Mp3Converter({ wpUrl: WP, workerSecret: 's', fetchFn: wp.fetchFn, encodeFn, timeouts: { transferMs: 50, encodeMs: 1234 } }).runOnce();
+    expect(result).toMatchObject({ ran: true, ok: false, error: 'Uploading the MP3 timed out after 0 s' });
+    expect(JSON.parse(wp.calls.find((c) => c.url.endsWith('/fail'))!.init.body).error).toBe('Uploading the MP3 timed out after 0 s');
+
+    const stuck = fakeWp({ '/worker/audio/claim': (init) => hang(init) });
+    const conv = new Mp3Converter({ wpUrl: WP, workerSecret: 's', fetchFn: stuck.fetchFn, timeouts: { requestMs: 50 } });
+    expect(await conv.runOnce()).toEqual({ ran: false });
+    expect(await conv.runOnce()).toEqual({ ran: false });
+    expect(stuck.calls).toHaveLength(2); // the guard was released
+  });
+
   test('converts one episode at a time', async () => {
     let release: () => void = () => undefined;
     const wp = fakeWp({
@@ -152,6 +193,7 @@ describe('Podcast MP3 converter', () => {
     const out = fs.readFileSync(mp3);
     expect(looksLikeMp3(out)).toBe(true);
     expect(out.length).toBeLessThan(fs.statSync(wav).size / 4);
+    await expect(encodeMp3(wav, path.join(dir, 'slow.mp3'), 64, 1)).rejects.toThrow('ffmpeg was stopped after 0 s');
     fs.rmSync(dir, { recursive: true, force: true });
   }, 30000);
 });

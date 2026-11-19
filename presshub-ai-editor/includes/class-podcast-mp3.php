@@ -208,8 +208,7 @@ class PressHub_AI_Podcast_Mp3 {
             return new WP_Error( 'mp3_not_claimed', __( 'This conversion is not waiting for a result.', 'presshub-ai-editor' ), [ 'status' => 409 ] );
         }
         if ( self::current_attachment( $post_id ) !== $attachment_id ) {
-            unset( $queue[ $post_id ] );
-            self::save_queue( $queue );
+            self::forget_entry( $post_id, $attachment_id );
             return new WP_Error( 'mp3_superseded', __( 'The episode plays another file now; the MP3 was not used.', 'presshub-ai-editor' ), [ 'status' => 409 ] );
         }
         if ( strlen( $mp3 ) > self::MAX_MP3_BYTES || ! self::looks_like_mp3( $mp3 ) ) {
@@ -233,17 +232,22 @@ class PressHub_AI_Podcast_Mp3 {
         $new_id  = (int) $media['id'];
         $new_url = (string) $media['url'];
 
+        // The episode may have been regenerated while the MP3 was being saved.
+        if ( self::current_attachment( $post_id ) !== $attachment_id ) {
+            self::discard_attachment( $new_id );
+            self::forget_entry( $post_id, $attachment_id );
+            return new WP_Error( 'mp3_superseded', __( 'The episode plays another file now; the MP3 was not used.', 'presshub-ai-editor' ), [ 'status' => 409 ] );
+        }
+
         $post = get_post( $post_id );
         if ( is_object( $post ) ) {
             $content = self::swap_audio_in_content( (string) ( $post->post_content ?? '' ), $old_url, $attachment_id, $new_url, $new_id );
             if ( $content !== (string) ( $post->post_content ?? '' ) ) {
-                $updated = wp_update_post( [ 'ID' => $post_id, 'post_content' => $content ], true );
-                if ( is_wp_error( $updated ) ) {
-                    if ( function_exists( 'wp_delete_attachment' ) ) {
-                        wp_delete_attachment( $new_id, true );
-                    }
-                    self::record_failure( $post_id, $attachment_id, 'Updating the post failed: ' . $updated->get_error_message() );
-                    return $updated;
+                $written = self::write_content( $post, $content );
+                if ( is_wp_error( $written ) ) {
+                    self::discard_attachment( $new_id );
+                    self::record_failure( $post_id, $attachment_id, 'Updating the post failed: ' . $written->get_error_message() );
+                    return $written;
                 }
             }
         }
@@ -258,8 +262,7 @@ class PressHub_AI_Podcast_Mp3 {
             wp_schedule_single_event( time() + self::WAV_DELETE_DELAY, self::DELETE_WAV_HOOK, [ $attachment_id, $post_id ] );
         }
 
-        unset( $queue[ $post_id ] );
-        self::save_queue( $queue );
+        self::forget_entry( $post_id, $attachment_id );
 
         PressHub_AI_Logger::info( 'Podcast MP3: episode now plays the MP3.', [
             'post_id'           => $post_id,
@@ -269,6 +272,70 @@ class PressHub_AI_Podcast_Mp3 {
         ] );
 
         return [ 'post_id' => $post_id, 'attachment_id' => $new_id, 'url' => $new_url, 'bytes' => strlen( $mp3 ) ];
+    }
+
+    /**
+     * Remove a post's entry, re-reading the queue first so entries written
+     * meanwhile (another episode queued, this one regenerated) are kept.
+     */
+    private static function forget_entry( int $post_id, int $attachment_id ): void {
+        $queue = self::get_queue();
+        if ( isset( $queue[ $post_id ] ) && (int) ( $queue[ $post_id ]['attachment_id'] ?? 0 ) === $attachment_id ) {
+            unset( $queue[ $post_id ] );
+            self::save_queue( $queue );
+        }
+    }
+
+    private static function discard_attachment( int $attachment_id ): void {
+        if ( $attachment_id > 0 && function_exists( 'wp_delete_attachment' ) ) {
+            wp_delete_attachment( $attachment_id, true );
+        }
+    }
+
+    /**
+     * Save the swapped content. Only the audio URL and block id change, so the
+     * row is written directly: no kses pass for user 0 (which would strip
+     * markup an editor with unfiltered_html added), no revision, no save hooks.
+     * A QA review or "Publish anyway" made for the WAV version is carried over
+     * to the new content hash, since the reviewed text is unchanged.
+     *
+     * @return true|WP_Error
+     */
+    private static function write_content( $post, string $content ) {
+        $post_id  = (int) $post->ID;
+        $old_hash = class_exists( 'PressHub_AI_Publish_Gate' ) ? PressHub_AI_Publish_Gate::input_hash_for_post( $post, 'podcast' ) : '';
+
+        global $wpdb;
+        if ( isset( $wpdb ) && is_object( $wpdb ) && method_exists( $wpdb, 'update' ) ) {
+            $ok = $wpdb->update( $wpdb->posts, [ 'post_content' => $content ], [ 'ID' => $post_id ], [ '%s' ], [ '%d' ] );
+            if ( false === $ok ) {
+                return new WP_Error( 'mp3_post_update_failed', (string) ( $wpdb->last_error ?: 'Database update failed.' ) );
+            }
+            if ( function_exists( 'clean_post_cache' ) ) {
+                clean_post_cache( $post_id );
+            }
+        } else {
+            $updated = wp_update_post( function_exists( 'wp_slash' ) ? wp_slash( [ 'ID' => $post_id, 'post_content' => $content ] ) : [ 'ID' => $post_id, 'post_content' => $content ], true );
+            if ( is_wp_error( $updated ) ) {
+                return $updated;
+            }
+        }
+
+        if ( '' !== $old_hash ) {
+            $fresh    = get_post( $post_id );
+            $new_hash = is_object( $fresh ) ? PressHub_AI_Publish_Gate::input_hash_for_post( $fresh, 'podcast' ) : '';
+            if ( '' !== $new_hash && $new_hash !== $old_hash ) {
+                $review = get_post_meta( $post_id, PressHub_AI_Publish_Gate::META_REVIEW, true );
+                if ( is_array( $review ) && (string) ( $review['content_hash'] ?? '' ) === $old_hash ) {
+                    $review['content_hash'] = $new_hash;
+                    update_post_meta( $post_id, PressHub_AI_Publish_Gate::META_REVIEW, $review );
+                }
+                if ( (string) get_post_meta( $post_id, PressHub_AI_Publish_Gate::META_OVERRIDE, true ) === $old_hash ) {
+                    update_post_meta( $post_id, PressHub_AI_Publish_Gate::META_OVERRIDE, $new_hash );
+                }
+            }
+        }
+        return true;
     }
 
     /**
