@@ -155,6 +155,7 @@ function presshub_settings_inventory_filters( array $all ): string {
         'presshub_ai_stakeholders_budgets'           => 'presshub_ai_stakeholders_budgets',
         'presshub_ai_editorial_agenda_budgets'       => 'presshub_ai_editorial_agenda_budgets',
         'presshub_ai_podcast_show_notes_enabled'     => 'presshub_ai_podcast_show_notes_enabled',
+        'presshub_ai_podcast_lead_enabled'           => 'presshub_ai_podcast_lead_enabled',
         'presshub_social_trending_max_per_account'   => 'presshub_ai_social_trending_max_per_account',
         'presshub_social_trending_share_after_hour'  => 'presshub_ai_social_trending_share_after_hour',
         'presshub_ai_debug_prompts'                  => 'presshub_ai_debug_prompts',

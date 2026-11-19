@@ -928,6 +928,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_podcast_lead_enabled"><?php echo __( 'Podcast lead story text', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_switch_field( 'presshub_ai_podcast_lead_enabled', __( 'Open each podcast post with the top story', 'presshub-ai-editor' ), __( 'A short paragraph from the published written brief, also shown on the home page card. Default: on.', 'presshub-ai-editor' ) ); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_title_prefix"><?php echo __( 'Morning Podcast Title Prefix', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_title_prefix_field(); ?>
