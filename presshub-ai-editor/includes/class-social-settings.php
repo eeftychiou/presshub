@@ -121,7 +121,7 @@ class PressHub_Social_Settings {
         <div class="wrap">
             <h1><?php echo esc_html__( 'PressHub Social Dispatch Queue', 'presshub-social-autopost' ); ?></h1>
             <p><?php echo esc_html__( 'Manage and monitor pending, publishing, and published social media posts.', 'presshub-social-autopost' ); ?></p>
-            <div style="background:#fff; border:1px solid #ccd0d4; padding:20px; border-radius:4px; margin-top:15px;">
+            <div class="card presshub-queue-fallback">
                 <p><em><?php echo esc_html__( 'The queue management interface is active.', 'presshub-social-autopost' ); ?></em></p>
                 <p>
                     <a href="<?php echo esc_url( self::settings_url() ); ?>" class="button button-primary">
@@ -169,6 +169,9 @@ class PressHub_Social_Settings {
 
         PressHub_Social_Settings_Storage::reset_prompts_to_defaults();
         PressHub_Social_Logger::info( 'Operator reset social prompts and templates to asset defaults.' );
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'social_prompts_reset', 'settings', 'social-publishing', [ 'reset_to' => 'asset defaults' ] );
+        }
 
         wp_safe_redirect( add_query_arg( 'message', 'prompts_reset', self::settings_url( 'post-copy' ) ) );
         exit;

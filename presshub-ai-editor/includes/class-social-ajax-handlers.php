@@ -246,6 +246,10 @@ class PressHub_Social_Ajax_Handlers {
 
         $secret = wp_generate_password( 32, false );
         update_option( 'presshub_social_worker_secret', $secret );
+        // #309 (E4): audited, never with the secret itself.
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'worker_secret_regenerated', 'setting', 'presshub_social_worker_secret', [ 'masked' => PressHub_Social_Logger::mask_secret( $secret ) ] );
+        }
         require_once __DIR__ . '/class-connection-status.php';
         PressHub_Connection_Status::forget( 'worker' );
         // The worker's last heartbeat was signed with the old secret.

@@ -29,6 +29,13 @@
         if (!form) {
             return null;
         }
+        // A saved key, token or password (#309 E3): point at its Replace key button,
+        // or the field box, never at the value.
+        var secretBox = form.querySelector('.presshub-secret[data-secret-for="' + key + '"]');
+        if (secretBox) {
+            var replaceBtn = secretBox.querySelector('.presshub-secret-replace:not([hidden])');
+            return replaceBtn || secretBox;
+        }
         // AI models: the list shown in place of the model ID field (#236).
         if (typeof window.PressHubModelControl === 'function') {
             var model = window.PressHubModelControl(key);

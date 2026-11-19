@@ -1873,7 +1873,12 @@ class PressHub_AI_Settings_Render {
     }
 
     public function render_logging_section() {
-        echo '<p>' . esc_html__( 'Configure diagnostic logging verbosity, prompt/response exchange recording, speech synthesis payload captures and how long logs are kept. Logs live in a protected folder (wp-content/uploads/presshub-ai/ by default) with random file names, and can be reviewed or downloaded in the Diagnostic Inspector below. To keep them outside the web root, define PRESSHUB_AI_LOG_DIR in wp-config.php.', 'presshub-ai-editor' ) . '</p>';
+        echo '<p>' . sprintf(
+            /* translators: 1: the constant to define, 2: the file it goes in */
+            esc_html__( 'Configure diagnostic logging verbosity, prompt/response exchange recording, speech synthesis payload captures and how long logs are kept. Logs live in a protected folder (wp-content/uploads/presshub-ai/ by default) with random file names, and can be reviewed or downloaded in the Diagnostic Inspector below. To keep them outside the web root, define %1$s in %2$s.', 'presshub-ai-editor' ),
+            '<code>PRESSHUB_AI_LOG_DIR</code>',
+            '<code>wp-config.php</code>'
+        ) . '</p>';
         if ( class_exists( 'PressHub_AI_Log_Exposure_Check' ) ) {
             PressHub_AI_Log_Exposure_Check::render_panel();
         }
@@ -3455,7 +3460,7 @@ class PressHub_AI_Settings_Render {
             <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to the protected log folder (tts channel).', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
-            <?php echo esc_html__( 'Raw debug dump for developers. Generation records already keep every TTS call (model, voices, request body without audio, status, duration, audio length) for editors, so leave this off unless you need the raw file. Use it only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Raw debug dump for developers. Generation records already keep every TTS call (model, voices, request body without audio, status, duration, audio length) for editors, so leave this off unless you need the raw file. Use it only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }
@@ -5011,7 +5016,7 @@ class PressHub_AI_Settings_Render {
             </p>
 
             <div class="ph-margin-top-8px presshub-empty-prompt-warning notice notice-warning inline<?php echo empty( trim( $article_val ) ) ? '' : ' presshub-is-hidden'; ?>">
-                <p>⚠️ <strong><?php echo esc_html__( 'Note:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'When left empty, PressHub AI automatically uses the built-in default prompt asset from assets/prompts/scorecard/article_qa_user_prompt.txt.', 'presshub-ai-editor' ); ?></p>
+                <p>⚠️ <strong><?php echo esc_html__( 'Note:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'When left empty, PressHub AI uses its built-in default prompt.', 'presshub-ai-editor' ); ?></p>
             </div>
 
             <p class="ph-margin-top-8px description">
