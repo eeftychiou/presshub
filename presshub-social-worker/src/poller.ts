@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { SocialMonitor } from './monitor/monitor-client';
 import { TrendingClient } from './trending/trending-client';
+import { Mp3Converter } from './media/mp3-converter';
 import { uploadToYouTube, YouTubeUploadMeta, YouTubeUploadOptions, YouTubeUploadResult } from './youtube/uploader';
 import { findUpload, recordUpload } from './youtube/upload-log';
 
@@ -81,6 +82,8 @@ export interface PollerOptions {
   monitor?: SocialMonitor;
   /** Trending in Cyprus roundup reader, run after the monitor (WordPress decides when a run is due). */
   trending?: TrendingClient;
+  /** Converts WAV podcast episodes to MP3, one per poll, beside job polling. */
+  mp3?: Mp3Converter;
 }
 
 export interface PollStats {
@@ -118,6 +121,7 @@ export class PressHubPoller {
   private readonly reportSleepFn: (ms: number) => Promise<void>;
   private readonly monitor?: SocialMonitor;
   private readonly trending?: TrendingClient;
+  private readonly mp3?: Mp3Converter;
   private scansRunning = false;
 
   private pollTimer?: NodeJS.Timeout;
@@ -151,6 +155,7 @@ export class PressHubPoller {
     this.reportSleepFn = options.reportSleepFn || ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     this.monitor = options.monitor;
     this.trending = options.trending;
+    this.mp3 = options.mp3;
   }
 
   /**
@@ -775,6 +780,17 @@ export class PressHubPoller {
   }
 
   /**
+   * Converts one waiting podcast episode to MP3 in the background (the converter
+   * skips a cycle while the previous one is still running).
+   */
+  private runMp3(): void {
+    if (!this.mp3) return;
+    this.mp3.runOnce().catch((err: any) => {
+      WorkerLogger.warn('Poller', `MP3 cycle failed: ${err.message}`);
+    });
+  }
+
+  /**
    * Starts periodic polling in background mode.
    */
   public start(): void {
@@ -789,10 +805,12 @@ export class PressHubPoller {
       WorkerLogger.error('Poller', `Immediate poll failed: ${err.message}`, err);
     });
     this.runMonitor();
+    this.runMp3();
 
     this.pollTimer = setInterval(async () => {
       if (!this.isRunning) return;
       this.runMonitor();
+      this.runMp3();
       try {
         await this.pollOnce();
       } catch (err: any) {
