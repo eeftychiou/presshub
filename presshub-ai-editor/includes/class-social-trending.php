@@ -53,6 +53,8 @@ class PressHub_AI_Social_Trending {
     const AI_RELEASE_META = '_presshub_trending_ai_release_pending';
     /** Longest wait for the AI image job before the roundup is released with the stand-in picture. */
     const AI_IMAGE_MAX_WAIT = 900;
+    /** Post meta: the watchdog released this roundup before its AI image arrived. */
+    const AI_WATCHDOG_META = '_presshub_trending_ai_watchdog_release';
     const RUN_ACTION = 'presshub_ai_social_trending_run_now';
 
     /** Post meta on roundup posts: the run key and the items shown. */
@@ -1309,16 +1311,23 @@ class PressHub_AI_Social_Trending {
         if ( $queued > 0 && ( $now - $queued ) < self::AI_IMAGE_MAX_WAIT ) {
             return false;
         }
-        delete_post_meta( $post_id, self::AI_RELEASE_META );
+        if ( false === delete_post_meta( $post_id, self::AI_RELEASE_META ) ) {
+            return false; // The job claimed it first.
+        }
+        update_post_meta( $post_id, self::AI_WATCHDOG_META, (string) $now );
         self::log( 'warning', 'Social trending: the AI roundup image did not arrive in time; releasing with the top post picture.', [ 'post_id' => $post_id ] );
         self::release_through_gate( $post_id );
         return true;
     }
 
+    private static function released_by_watchdog( int $post_id ): bool {
+        return '' !== (string) get_post_meta( $post_id, self::AI_WATCHDOG_META, true );
+    }
+
     /** The watchdog over the latest roundups. */
     private static function release_stale_ai_waits( int $now ): void {
         $map = get_option( self::OPTION_POSTS, [] );
-        foreach ( array_slice( is_array( $map ) ? array_values( $map ) : [], -5 ) as $post_id ) {
+        foreach ( array_slice( is_array( $map ) ? array_values( $map ) : [], -30 ) as $post_id ) {
             self::maybe_release_stale_ai_wait( (int) $post_id, $now );
         }
     }
@@ -1944,16 +1953,21 @@ class PressHub_AI_Social_Trending {
                     $items[] = [ 'text' => (string) $text ];
                 }
                 $att = self::ai_featured_image( $post_id, $items );
-                if ( $att > 0 ) {
+                // A job that ran past the watchdog finds the roundup already released
+                // with the top post picture; its shares carry that one, so it stays.
+                if ( $att > 0 && self::released_by_watchdog( $post_id ) ) {
+                    self::log( 'info', 'Social trending: AI roundup image arrived after the release; keeping the top post picture.', [ 'post_id' => $post_id ] );
+                    $att = 0;
+                } elseif ( $att > 0 ) {
                     set_post_thumbnail( $post_id, $att );
                 }
             } else {
                 self::log( 'info', 'Social trending: AI roundup image no longer chosen; keeping the top post picture.', [ 'post_id' => $post_id ] );
             }
         } finally {
-            if ( self::release_waits_for_ai_image( $post_id ) ) {
-                // Released now, with the AI image or the top post picture, so its shares carry it.
-                delete_post_meta( $post_id, self::AI_RELEASE_META );
+            // Released now, with the AI image or the top post picture, so its shares carry it.
+            // Claimed by deleting the meta, so the watchdog and the job never both release.
+            if ( self::release_waits_for_ai_image( $post_id ) && false !== delete_post_meta( $post_id, self::AI_RELEASE_META ) ) {
                 self::release_through_gate( $post_id );
             }
         }

@@ -127,7 +127,7 @@
             if (value && $sel.find('option').filter(function () { return this.value === value; }).length) {
                 $sel.val(value);
             } else if (value) {
-                // An unsaved pick was deleted: fall back to the first template and
+                // An unsaved pick was deleted: fall back to the row's default and
                 // tell the Reset link and unsaved-changes tracking about it.
                 var def = $sel.attr('data-default');
                 var $pick = $sel.find('option').filter(function () { return this.value === def; });

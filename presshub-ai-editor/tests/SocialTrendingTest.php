@@ -462,7 +462,10 @@ st_check( 'featured source: a missing template falls back to Editorial cartoon',
 $GLOBALS['POSTS_STORE'][86] = [ 'ID' => 86, 'post_title' => 'Trending', 'post_status' => 'pending' ];
 $GLOBALS['POST_META_STORE'][86] = [ '_presshub_trending_ai_release_pending' => '1', '_presshub_trending_ai_image_queued' => (string) ( $now - 60 ), '_presshub_gate_target_status' => 'publish' ];
 st_check( 'watchdog: a fresh job is waited for', false === $T::maybe_release_stale_ai_wait( 86, $now ) && '1' === $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] );
-st_check( 'watchdog: a stale job releases the roundup', true === $T::maybe_release_stale_ai_wait( 86, $now + 901 ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_gate_target_status'] ) );
+st_check( 'watchdog: a stale job releases the roundup', true === $T::maybe_release_stale_ai_wait( 86, $now + 901 ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_gate_target_status'] ) && 'publish' === get_post( 86 )->post_status );
+$T::$ai_image = static function () { return 9800; };
+unset( $GLOBALS['THUMBS'][86] );
+st_check( 'watchdog: a late job keeps the released picture and does not release again', 0 === $T::run_ai_featured_image( 86, [ 'x' ] ) && empty( $GLOBALS['THUMBS'][86] ) );
 // A new roundup with an AI image planned is held as pending even with the gate off for Trending.
 $GLOBALS['SCHEDULED_EVENTS'] = [];
 $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
