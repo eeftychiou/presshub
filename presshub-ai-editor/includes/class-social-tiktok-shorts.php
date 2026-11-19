@@ -500,7 +500,7 @@ class PressHub_Social_TikTok_Shorts {
             $cat_name = is_object( $cat ) ? (string) ( $cat->name ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['name'] ?? '' ) : '' );
             $slug     = is_object( $cat ) ? (string) ( $cat->slug ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['slug'] ?? '' ) : '' );
             $term_id  = is_object( $cat ) ? (int) ( $cat->term_id ?? 0 ) : ( is_array( $cat ) ? (int) ( $cat['term_id'] ?? 0 ) : 0 );
-            $lc_name  = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $cat_name ) ) : strtolower( trim( $cat_name ) );
+            $lc_name  = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $cat_name ), 'UTF-8' ) : strtolower( trim( $cat_name ) );
             if ( '' === trim( $cat_name ) || 'uncategorized' === $slug || 'uncategorized' === $lc_name || 'χωρίς κατηγορία' === $lc_name ) {
                 continue;
             }
@@ -761,11 +761,18 @@ class PressHub_Social_TikTok_Shorts {
             $copy = is_wp_error( $generated ) ? sprintf( '[AI Copy Generation Failed: %s]', $generated->get_error_message() ) : (string) $generated;
         }
 
-        $updated = PressHub_Social_Queue::update_job( $job_id, [
+        $fields = [
             'metadata'   => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
             'post_copy'  => $copy,
             'last_error' => sprintf( 'Article short could not be made (%s); posted the classic way.', $error->get_error_message() ),
-        ] );
+        ];
+        // A posting time already past restarts now, so AI post images get their usual
+        // wait (PressHub_Social_Post_Images::MAX_WAIT counts from the posting time).
+        $scheduled = strtotime( (string) ( $job['scheduled_at'] ?? '' ) . ' UTC' );
+        if ( false === $scheduled || $scheduled < time() ) {
+            $fields['scheduled_at'] = gmdate( 'Y-m-d H:i:s' );
+        }
+        $updated = PressHub_Social_Queue::update_job( $job_id, $fields );
         if ( ! $updated ) {
             return false;
         }

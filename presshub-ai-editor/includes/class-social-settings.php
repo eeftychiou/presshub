@@ -1090,7 +1090,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
-                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used for podcast posts when TikTok Shorts, Instagram Reels or YouTube Shorts are on. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from the Shorts tab: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -1103,7 +1103,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_article_short',
                 'rows'   => 10,
-                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the platform\'s usual caption prompt (TikTok, Instagram or YouTube); this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the platform\'s usual caption prompt (TikTok, Instagram or YouTube); this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way (and skipped on YouTube).', 'presshub-social-autopost' ),
             ]
         );
 
