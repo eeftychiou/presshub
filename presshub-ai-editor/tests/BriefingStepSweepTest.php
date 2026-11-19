@@ -1,6 +1,6 @@
 <?php
 /**
- * BriefingStepSweepTest - lost briefing step sweep (2.60.0).
+ * BriefingStepSweepTest - lost briefing step sweep (2.64.0).
  *
  * On 19/11/2026 the noon script step was queued on presshub_ai_run_briefing_step
  * and its event vanished from the cron list before it ran (a request holding an
