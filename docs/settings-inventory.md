@@ -12,13 +12,13 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 |---|---|---|---|
 | Connections (`connections`) | 42 | 18 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
-| Writing & QA (`writing-qa`) | 23 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 80 | 2 | 0 |
+| Writing & QA (`writing-qa`) | 28 | 0 | 0 |
+| Daily Briefing (`daily-briefing`) | 78 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 74 | 5 | 0 |
-| Social listening (`social-listening`) | 32 | 0 | 0 |
+| Social listening (`social-listening`) | 33 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **317** | | |
+| **Total** | **321** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -111,11 +111,16 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_ai_timeout` | Social copy timeout (s) | integer | s | social / ai | was: Request Timeout |
 | `presshub_social_tiktok_shorts_music_model` | Music Model | string |  | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on |
 
-## Writing & QA (`writing-qa`, 23)
+## Writing & QA (`writing-qa`, 28)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
 | `presshub_ai_fetch_urls` | Fetch source URLs before prompting | boolean |  | ai / coauthor | checkbox, was: Fetch and extract source URLs server-side before prompting (recommended — models cannot browse web pages). |
+| `presshub_ai_briefing_image_template` | Morning briefing image template | string |  | ai / images | was: Text briefing image template |
+| `presshub_ai_briefing_noon_image_template` | Noon briefing image template | string |  | ai / images |  |
+| `presshub_ai_briefing_podcast_image_template` | Morning podcast image template | string |  | ai / images | was: Podcast image template |
+| `presshub_ai_briefing_noon_podcast_image_template` | Noon podcast image template | string |  | ai / images |  |
+| `presshub_ai_social_trending_image_template` | Trending in Cyprus image template | string |  | ai / images |  |
 | `presshub_ai_image_feature_enabled` | Generate featured images | integer |  | ai / images | checkbox, was: Enable Feature |
 | `presshub_ai_image_aspect_ratio` | Default Aspect Ratio | string |  | ai / images |  |
 | `presshub_ai_image_analysis_prompt` | Article Analysis Prompt Template | string |  | ai / images |  |
@@ -139,7 +144,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 | `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
-## Daily Briefing (`daily-briefing`, 80)
+## Daily Briefing (`daily-briefing`, 78)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -206,8 +211,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_featured_image_ids` | Featured Image Pool (Attachment IDs) | string |  | ai / briefing | not shown on screen |
 | `presshub_ai_briefing_featured_image_source` | Text Briefing Featured Image Source | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_featured_image_source` | Podcast Featured Image Source | string |  | ai / briefing |  |
-| `presshub_ai_briefing_image_template` | Text briefing image template | string |  | ai / briefing |  |
-| `presshub_ai_briefing_podcast_image_template` | Podcast image template | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_include_text` | Include transcript in podcast post | integer |  | ai / briefing | checkbox, was: Include Transcript in Podcast Post |
 | `presshub_ai_briefing_podcast_status` | Podcast Post Status | string |  | ai / briefing |  |
 | `presshub_ai_briefing_text_prompt` | Curator System Prompt | string |  | ai / briefing |  |
@@ -322,7 +325,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_prompt_youtube` | YouTube Caption Prompt | string |  | social / prompts |  |
 | `presshub_social_template_youtube` | YouTube Static Fallback Template | string |  | social / prompts |  |
 
-## Social listening (`social-listening`, 32)
+## Social listening (`social-listening`, 33)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -336,6 +339,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_social_monitor_max_video_seconds` | Longest video transcribed (s) | string | s | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
 | `presshub_ai_social_monitor_max_video_mb` | Largest video transcribed (MB) | string | MB | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
 | `presshub_ai_social_trending_enabled` | Publish trending roundup | string |  | ai / social_listening | checkbox, was: Publish Trending Roundup |
+| `presshub_ai_social_trending_image_source` | Roundup featured image | string |  | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 | `presshub_ai_social_trending_interval_hours` | Trending roundup interval (h) | string | h | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Publish Trending Roundup |
 | `presshub_ai_social_trending_platform_x` | Trending from X | string |  | ai / social_listening | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
 | `presshub_ai_social_trending_platform_tiktok` | Trending from TikTok | string |  | ai / social_listening | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |

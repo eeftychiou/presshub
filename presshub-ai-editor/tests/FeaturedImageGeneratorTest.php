@@ -305,7 +305,8 @@ class FeaturedImageGeneratorTest {
     }
 
     public function test_briefing_and_podcast_use_chosen_template(): void {
-        foreach ( [ 'text', 'podcast' ] as $kind ) {
+        foreach ( [ [ 'text', 'morning' ], [ 'podcast', 'morning' ], [ 'text', 'noon' ], [ 'podcast', 'noon' ] ] as $case ) {
+            list( $kind, $edition ) = $case;
             $this->reset_env();
             $GLOBALS['CAPTURED_REQUESTS'] = [];
             PressHub_AI_Provider_Store::save_provider( [
@@ -321,6 +322,9 @@ class FeaturedImageGeneratorTest {
             $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_featured_image_source'] = 'auto_generate';
             $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_image_template']                = 'editorial_cartoon';
             $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_image_template']        = 'landscape_aerial';
+            // Noon swaps them, so each edition is shown to read its own setting.
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_noon_image_template']           = 'landscape_aerial';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_noon_podcast_image_template']   = 'editorial_cartoon';
             $GLOBALS['OPTIONS_STORE']['presshub_ai_image_prompt_provider']                  = 'openai-tpl';
             $GLOBALS['OPTIONS_STORE']['presshub_ai_image_generation_provider']              = 'openai-tpl';
             $GLOBALS['REMOTE_RESPONSES']['https://api.openai.com/v1/chat/completions'] = [
@@ -332,13 +336,14 @@ class FeaturedImageGeneratorTest {
                 'body'     => json_encode( [ 'data' => [ [ 'b64_json' => base64_encode( 'IMG' ) ] ] ] ),
             ];
 
+            $cartoon = ( 'text' === $kind ) === ( 'morning' === $edition );
+            $expect  = $cartoon ? 'editorial cartoonist' : 'aerial photographer';
             if ( 'text' === $kind ) {
-                ( new PressHub_AI_News_Curator() )->create_wordpress_post( 'Water cuts across Nicosia today.', '2026-10-18', 'Water cuts', 'morning' );
-                $this->assert( false !== strpos( $this->last_chat_user_prompt(), 'editorial cartoonist' ), 'Text briefing image drafted with the chosen cartoon template' );
+                ( new PressHub_AI_News_Curator() )->create_wordpress_post( 'Water cuts across Nicosia today.', '2026-10-18', 'Water cuts', $edition );
             } else {
-                ( new PressHub_AI_Audio_Synthesizer() )->create_podcast_post( '2026-10-18', 123, 'http://example.test/audio.mp3', 'SPEAKER 1: Good morning...', 'morning' );
-                $this->assert( false !== strpos( $this->last_chat_user_prompt(), 'aerial photographer' ), 'Podcast image drafted with the chosen aerial template' );
+                ( new PressHub_AI_Audio_Synthesizer() )->create_podcast_post( 'http://example.test/audio.mp3', 123, 'SPEAKER 1: Good morning...', '2026-10-18', '', $edition );
             }
+            $this->assert( false !== strpos( $this->last_chat_user_prompt(), $expect ), "{$edition} {$kind} image drafted with its own template ({$expect})" );
         }
 
         // A deleted template falls back to Editorial photo.

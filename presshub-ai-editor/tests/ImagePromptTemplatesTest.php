@@ -277,7 +277,7 @@ class ImagePromptTemplatesTest {
         $this->assert( 'editorial_photo' === $r['id'] && '' !== $r['template'], 'resolve() falls back to Editorial photo' );
 
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_image_template'] = 'custom_day_photo';
-        $this->assert( [ 'Podcast image template' ] === PressHub_AI_Image_Prompt_Templates::used_by( 'custom_day_photo' ), 'used_by() names the briefing setting' );
+        $this->assert( [ 'Morning podcast' ] === PressHub_AI_Image_Prompt_Templates::used_by( 'custom_day_photo' ), 'used_by() names the briefing setting' );
         $del = PressHub_AI_Image_Prompt_Templates::delete( 'custom_day_photo' );
         $this->assert( is_wp_error( $del ) && 'in_use' === $del->get_error_code(), 'A template Daily Briefing uses cannot be deleted' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_image_template'] = 'editorial_photo';
@@ -325,22 +325,45 @@ class ImagePromptTemplatesTest {
     public function test_briefing_template_setting(): void {
         $this->reset_env();
         PressHub_AI_Image_Prompt_Templates::add( 'Night photo', 'Night {content}', 7 );
-        $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::get_briefing_image_template(), 'Default text briefing template is Editorial photo' );
-        $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::get_briefing_podcast_image_template(), 'Default podcast template is Editorial photo' );
+        foreach ( [ 'briefing_morning', 'briefing_noon', 'podcast_morning', 'podcast_noon', 'social_trending' ] as $kind ) {
+            $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::get_auto_image_template( $kind ), "Default {$kind} template is Editorial photo" );
+        }
+        $this->assert( 5 === count( PressHub_AI_Settings_Storage::auto_image_template_options() ), 'Five automatic post types' );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_noon_image_template']         = 'editorial_cartoon';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_noon_podcast_image_template'] = 'custom_night_photo';
+        $this->assert( 'editorial_cartoon' === PressHub_AI_Settings_Storage::get_briefing_edition_image_template( 'briefing', 'noon' ), 'Noon briefing reads its own setting' );
+        $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::get_briefing_edition_image_template( 'briefing', 'morning' ), 'Morning briefing reads its own setting' );
+        $this->assert( 'custom_night_photo' === PressHub_AI_Settings_Storage::get_briefing_edition_image_template( 'podcast', 'noon' ), 'Noon podcast reads its own setting' );
         $this->assert( 'editorial_cartoon' === PressHub_AI_Settings_Storage::sanitize_briefing_image_template( 'editorial_cartoon' ), 'Built-in id kept' );
         $this->assert( 'custom_night_photo' === PressHub_AI_Settings_Storage::sanitize_briefing_podcast_image_template( 'custom_night_photo' ), 'Saved id kept' );
         $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::sanitize_briefing_image_template( 'custom_nope' ), 'Unknown id becomes the default' );
         $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::sanitize_briefing_image_template( '<script>' ), 'Junk becomes the default' );
+        $this->assert( 'top_post' === PressHub_AI_Settings_Storage::get_social_trending_image_source(), 'Trending keeps the top post picture by default' );
+        $this->assert( 'top_post' === PressHub_AI_Settings_Storage::sanitize_social_trending_image_source( 'nope' ), 'Unknown trending source becomes the default' );
+        $this->assert( [ 'Noon podcast' ] === PressHub_AI_Image_Prompt_Templates::used_by( 'custom_night_photo' ), 'Noon podcast use blocks deletion' );
 
         $render = ( new ReflectionClass( 'PressHub_AI_Settings_Render' ) )->newInstanceWithoutConstructor();
         ob_start();
-        $render->render_briefing_image_template_field( 'presshub_ai_briefing_image_template', 'custom_night_photo', 'Help.' );
+        $render->render_auto_images_table();
         $html = ob_get_clean();
-        $this->assert( false !== strpos( $html, 'name="presshub_ai_briefing_image_template"' ), 'Select posts the setting' );
-        $this->assert( (bool) preg_match( '/value="custom_night_photo"\s+selected/', $html ), 'Stored template selected' );
-        $this->assert( false !== strpos( $html, 'Editorial cartoon' ), 'Built-ins listed' );
-        $this->assert( false !== strpos( $html, 'section=writing-qa' ), 'Links to the template editor' );
+        foreach ( PressHub_AI_Settings_Storage::auto_image_template_options() as $option ) {
+            $this->assert( false !== strpos( $html, 'name="' . $option . '"' ), "Table posts {$option}" );
+            $this->assert( false !== strpos( $html, 'label for="' . $option . '"' ), "{$option} has a label" );
+        }
+        foreach ( [ 'Morning briefing', 'Noon briefing', 'Morning podcast', 'Noon podcast', 'Trending in Cyprus' ] as $label ) {
+            $this->assert( false !== strpos( $html, $label ), "Row {$label}" );
+        }
+        $this->assert( (bool) preg_match( '/name="presshub_ai_briefing_noon_podcast_image_template".*?value="custom_night_photo"\s+selected/s', $html ), 'Stored template selected' );
+        $this->assert( false !== strpos( $html, 'Featured Image Pool, so no AI image is made' ), 'Shows that the pool is the image source' );
+        $this->assert( false !== strpos( $html, 'Enable Feature is off' ), 'Warns that the feature is off' );
         $this->assert( false === strpos( $html, 'style=' ), 'No inline styles' );
+
+        // Daily Briefing shows the templates read-only, linking to their home.
+        $line = ( new ReflectionMethod( 'PressHub_AI_Settings_Render', 'auto_image_templates_line' ) );
+        $line->setAccessible( true );
+        $out = $line->invoke( $render, [ 'briefing_morning', 'podcast_noon' ] );
+        $this->assert( false !== strpos( $out, 'Morning briefing: Editorial photo' ) && false !== strpos( $out, 'Noon podcast: Night photo' ), 'Read-only line names each template' );
+        $this->assert( false !== strpos( $out, 'featured-images' ) && false === strpos( $out, '<select' ), 'Read-only line links to Writing & QA, no field' );
     }
 
     public function test_settings_manager(): void {

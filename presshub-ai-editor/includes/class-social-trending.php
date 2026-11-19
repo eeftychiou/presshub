@@ -1453,6 +1453,9 @@ class PressHub_AI_Social_Trending {
     /** @var callable|null fn( string $image_url, int $post_id, string $desc ): int|WP_Error — sideload override for tests. */
     public static $sideload = null;
 
+    /** @var callable|null fn( string $content, string $title, array $template, int $post_id ): int|WP_Error — AI featured image override for tests. */
+    public static $ai_image = null;
+
     /** TikTok photo image URLs whose copy failed in this request, so one roundup build downloads each at most once. */
     private static $photo_failed = [];
 
@@ -1774,13 +1777,23 @@ class PressHub_AI_Social_Trending {
     }
 
     /**
-     * Give a roundup post without a featured image the picture of its top
-     * post. The image is copied into the Media Library (platform image links
-     * are signed and expire), once per post, so a daily post adds one image a day.
+     * Give a roundup post without a featured image its picture, once per post.
+     * With "Roundup featured image" set to an AI image (and Generate featured
+     * images on), the image is drawn from the roundup with the Trending in
+     * Cyprus prompt template; otherwise, or if that fails, it is the picture
+     * of the top post, copied into the Media Library (platform image links
+     * are signed and expire), so a daily post adds one image a day.
      */
     public static function maybe_set_featured_image( int $post_id, array $items ): int {
         if ( $post_id <= 0 || ( function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id ) ) ) {
             return 0;
+        }
+        if ( 'auto_generate' === PressHub_AI_Settings_Storage::get_social_trending_image_source() && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
+            $att = self::ai_featured_image( $post_id, $items );
+            if ( $att > 0 ) {
+                set_post_thumbnail( $post_id, $att );
+                return $att;
+            }
         }
         $pick = null;
         foreach ( $items as $it ) {
@@ -1806,6 +1819,53 @@ class PressHub_AI_Social_Trending {
         }
         set_post_thumbnail( $post_id, (int) $att );
         return (int) $att;
+    }
+
+    /**
+     * Draw an AI featured image for a roundup from its title and the text of
+     * its top posts, with the Trending in Cyprus prompt template.
+     *
+     * @return int Attachment id, or 0 when it failed (logged).
+     */
+    private static function ai_featured_image( int $post_id, array $items ): int {
+        $lines = [];
+        foreach ( array_slice( $items, 0, 10 ) as $it ) {
+            $text = trim( (string) ( $it['text'] ?? '' ) );
+            if ( '' !== $text ) {
+                $lines[] = '- ' . self::excerpt( $text, 300 );
+            }
+        }
+        if ( empty( $lines ) ) {
+            self::log( 'info', 'Social trending: no post text for an AI image; using the top post picture.' );
+            return 0;
+        }
+        $title   = function_exists( 'get_the_title' ) ? (string) get_the_title( $post_id ) : '';
+        $content = "What people in Cyprus are posting about on social media:\n" . implode( "\n", $lines );
+        try {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+            $tpl = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_auto_image_template( 'social_trending' ), 'social_trending' );
+            if ( is_callable( self::$ai_image ) ) {
+                $att = call_user_func( self::$ai_image, $content, $title, $tpl, $post_id );
+                return is_wp_error( $att ) ? 0 : max( 0, (int) $att );
+            }
+            require_once __DIR__ . '/class-api-client.php';
+            $client = new PressHub_AI_API_Client();
+            $prompt = $client->analyze_article_for_image_prompt( $content, $title, $tpl['template'], $tpl['id'] );
+            if ( is_wp_error( $prompt ) || '' === trim( (string) $prompt ) ) {
+                self::log( 'warning', 'Social trending: AI image prompt failed; using the top post picture.', [ 'error' => is_wp_error( $prompt ) ? $prompt->get_error_message() : 'empty prompt' ] );
+                return 0;
+            }
+            $img = $client->generate_featured_image( (string) $prompt, '', $post_id );
+            if ( is_wp_error( $img ) || empty( $img['id'] ) ) {
+                self::log( 'warning', 'Social trending: AI image failed; using the top post picture.', [ 'error' => is_wp_error( $img ) ? $img->get_error_message() : 'no attachment' ] );
+                return 0;
+            }
+            self::log( 'info', 'Social trending: AI featured image set.', [ 'post_id' => $post_id, 'template_id' => $tpl['id'] ] );
+            return (int) $img['id'];
+        } catch ( Throwable $t ) {
+            self::log( 'warning', 'Social trending: AI image failed; using the top post picture.', [ 'error' => $t->getMessage() ] );
+            return 0;
+        }
     }
 
     /* ------------------------------------------------------------------

@@ -244,13 +244,16 @@ class PressHub_AI_Image_Prompt_Templates {
     }
 
     /**
-     * Settings that name a template for automatic Daily Briefing images:
+     * Settings that name a template for automatic images (the Automatic images table):
      * option => label. A template they use cannot be deleted.
      */
     public static function usage_options(): array {
         return [
-            'presshub_ai_briefing_image_template'         => __( 'Text briefing image template', 'presshub-ai-editor' ),
-            'presshub_ai_briefing_podcast_image_template' => __( 'Podcast image template', 'presshub-ai-editor' ),
+            'presshub_ai_briefing_image_template'              => __( 'Morning briefing', 'presshub-ai-editor' ),
+            'presshub_ai_briefing_noon_image_template'         => __( 'Noon briefing', 'presshub-ai-editor' ),
+            'presshub_ai_briefing_podcast_image_template'      => __( 'Morning podcast', 'presshub-ai-editor' ),
+            'presshub_ai_briefing_noon_podcast_image_template' => __( 'Noon podcast', 'presshub-ai-editor' ),
+            'presshub_ai_social_trending_image_template'       => __( 'Trending in Cyprus', 'presshub-ai-editor' ),
         ];
     }
 
@@ -307,7 +310,7 @@ class PressHub_AI_Image_Prompt_Templates {
         if ( ! empty( $used ) ) {
             return new WP_Error( 'in_use', sprintf(
                 /* translators: %s: setting labels, comma separated. */
-                __( 'This template is used by Daily Briefing (%s). Choose another template there first.', 'presshub-ai-editor' ),
+                __( 'This template is used for automatic images (%s). Choose another template for them first, in Automatic images above.', 'presshub-ai-editor' ),
                 implode( ', ', $used )
             ) );
         }

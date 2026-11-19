@@ -1318,7 +1318,7 @@ class PressHub_AI_News_Curator {
             try {
                 $client     = new PressHub_AI_API_Client();
                 require_once __DIR__ . '/class-image-prompt-templates.php';
-                $img_tpl    = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_briefing_image_template(), 'briefing_text' );
+                $img_tpl    = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_briefing_edition_image_template( 'briefing', $edition ), 'briefing_text_' . $edition );
                 $gen_prompt = $client->analyze_article_for_image_prompt( $story_content, $post_title, $img_tpl['template'], $img_tpl['id'] );
                 if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
                     $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );

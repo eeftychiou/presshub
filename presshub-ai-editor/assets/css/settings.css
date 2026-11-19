@@ -618,3 +618,18 @@ html:has(#presshub-settings-page) { scroll-padding-top: 90px; scroll-padding-bot
     .presshub-image-templates-actions .button-link,
     .presshub-image-templates-actions a { display: inline-block; min-height: 44px; line-height: 44px; padding: 0 4px; }
 }
+
+/* Writing & QA → Featured images: prompt template per automatic post. */
+.presshub-auto-images-table { max-width: 800px; margin-top: 8px; }
+.presshub-auto-images-table th[scope="row"] { font-weight: 600; width: 22%; }
+.presshub-auto-images-select { max-width: 100%; }
+.presshub-auto-images-source { color: #50575e; }
+.presshub-auto-images-source.is-ai { color: #1d2327; }
+.presshub-auto-images-off { margin: 6px 0 0; padding: 4px 8px; border-left: 4px solid #dba617; background: #fcf9e8; max-width: 800px; }
+@media screen and (max-width: 782px) {
+    .presshub-auto-images-table thead { display: none; }
+    .presshub-auto-images-table tr,
+    .presshub-auto-images-table th,
+    .presshub-auto-images-table td { display: block; width: auto !important; }
+    .presshub-auto-images-table td { padding-top: 0; }
+}

@@ -487,6 +487,16 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_image_template' ],
             'type'              => 'string',
         ] );
+        foreach ( [ 'presshub_ai_briefing_noon_image_template', 'presshub_ai_briefing_noon_podcast_image_template', 'presshub_ai_social_trending_image_template' ] as $tpl_option ) {
+            PressHub_Settings_Registry::register( 'presshub_ai_options', $tpl_option, [
+                'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_image_template' ],
+                'type'              => 'string',
+            ] );
+        }
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_trending_image_source', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_social_trending_image_source' ],
+            'type'              => 'string',
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_image_feature_enabled', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_image_feature_enabled' ],
             'type'              => 'integer',
@@ -4089,14 +4099,50 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_briefing_image_template( $value );
     }
 
-    /** Template id for automatic text briefing images (read through resolve(), which handles a deleted one). */
-    public static function get_briefing_image_template(): string {
-        return (string) get_option( 'presshub_ai_briefing_image_template', self::default_briefing_image_template() );
+    /**
+     * The automatic post types that make an AI featured image, in the order
+     * of the Settings table: kind => template option.
+     */
+    public static function auto_image_template_options(): array {
+        return [
+            'briefing_morning' => 'presshub_ai_briefing_image_template',
+            'briefing_noon'    => 'presshub_ai_briefing_noon_image_template',
+            'podcast_morning'  => 'presshub_ai_briefing_podcast_image_template',
+            'podcast_noon'     => 'presshub_ai_briefing_noon_podcast_image_template',
+            'social_trending'  => 'presshub_ai_social_trending_image_template',
+        ];
     }
 
-    /** Template id for automatic podcast images. */
-    public static function get_briefing_podcast_image_template(): string {
-        return (string) get_option( 'presshub_ai_briefing_podcast_image_template', self::default_briefing_image_template() );
+    /**
+     * Template id for one automatic post type (a kind of auto_image_template_options()).
+     * Read it through PressHub_AI_Image_Prompt_Templates::resolve(), which handles a deleted one.
+     */
+    public static function get_auto_image_template( string $kind ): string {
+        $options = self::auto_image_template_options();
+        if ( ! isset( $options[ $kind ] ) ) {
+            return self::default_briefing_image_template();
+        }
+        return (string) get_option( $options[ $kind ], self::default_briefing_image_template() );
+    }
+
+    /** Briefing or podcast template for an edition. */
+    public static function get_briefing_edition_image_template( string $type, string $edition ): string {
+        $kind = ( 'podcast' === $type ? 'podcast_' : 'briefing_' ) . ( 'noon' === $edition ? 'noon' : 'morning' );
+        return self::get_auto_image_template( $kind );
+    }
+
+    /** Trending in Cyprus featured image: the top post's picture (default) or an AI image. */
+    public static function default_social_trending_image_source(): string {
+        return 'top_post';
+    }
+
+    public static function sanitize_social_trending_image_source( $value ): string {
+        $val = trim( (string) $value );
+        return in_array( $val, [ 'top_post', 'auto_generate' ], true ) ? $val : self::default_social_trending_image_source();
+    }
+
+    public static function get_social_trending_image_source(): string {
+        return self::sanitize_social_trending_image_source( get_option( 'presshub_ai_social_trending_image_source', self::default_social_trending_image_source() ) );
     }
 
     public static function default_image_feature_enabled(): int {
