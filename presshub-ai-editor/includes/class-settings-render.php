@@ -3489,7 +3489,7 @@ class PressHub_AI_Settings_Render {
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $engine      = PressHub_AI_Settings_Storage::get_briefing_tts_engine();
         $engine_id   = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
-        $voices      = $synthesizer ? $synthesizer->get_available_voices( $engine_id ) : [];
+        $voices      = $synthesizer ? $synthesizer->get_available_voices( $engine_id, 'google_cloud' === $engine_id ? $lang : '' ) : [];
         $female      = $voices['female'] ?? [];
         $male        = $voices['male'] ?? [];
         $host_count  = PressHub_AI_Settings_Storage::get_briefing_host_count();
@@ -3526,7 +3526,7 @@ class PressHub_AI_Settings_Render {
                 <br />
             <?php endforeach; ?>
         </fieldset>
-        <p class="description"><?php echo esc_html__( 'Gemini voices speak every language, so the Greek podcast\'s voices are used by default. With Google Cloud TTS, choose voices made for this language.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Gemini voices speak every language, so the Greek podcast\'s voices are used by default. With Google Cloud TTS, choose a voice made for this language for every presenter, or this language is not voiced.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

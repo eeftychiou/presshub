@@ -232,6 +232,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-embeds.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-translations.php';
+if ( function_exists( 'add_action' ) ) {
+    add_action( 'before_delete_post', [ 'PressHub_AI_Podcast_Translations', 'on_before_delete_post' ] );
+}
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
@@ -1211,17 +1214,7 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
             }
-            // Then the English and Turkish versions, when they are turned on.
-            // Never lets a translation problem count as a failed Greek synthesis.
-            if ( is_array( $result ) && ! empty( $result['post_id'] ) && class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
-                try {
-                    PressHub_AI_Podcast_Translations::start( (string) $date, (string) $edition, (int) $result['post_id'] );
-                } catch ( \Throwable $t ) {
-                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                        PressHub_AI_Logger::error( 'Podcast languages could not start: ' . $t->getMessage(), [ 'date' => $date, 'edition' => $edition ] );
-                    }
-                }
-            }
+            // synthesize_podcast() has started the English and Turkish versions.
         }
     } catch ( \Throwable $t ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {

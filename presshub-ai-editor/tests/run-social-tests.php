@@ -2749,6 +2749,15 @@ update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => arr
 $GLOBALS['POSTS_STORE'][880]['post_status'] = 'pending';
 assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language waits while the Greek post is held' );
 $GLOBALS['POSTS_STORE'][880]['post_status'] = 'publish';
+$yt_was = get_option( 'presshub_social_enabled_youtube', null );
+update_option( 'presshub_social_enabled_youtube', 0 );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while YouTube is off under Where to post' );
+null === $yt_was ? delete_option( 'presshub_social_enabled_youtube' ) : update_option( 'presshub_social_enabled_youtube', $yt_was );
+update_post_meta( 880, '_presshub_social_platforms', [ 'facebook' ] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued when YouTube is not ticked on the post' );
+update_post_meta( 880, '_presshub_social_platforms', [ 'facebook', 'youtube' ] );
+assert_true( PressHub_AI_Podcast_Translations::youtube_allowed( 880 ), 'YouTube ticked on the post lets the languages go' );
+delete_post_meta( 880, '_presshub_social_platforms' );
 $en_id = PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' );
 assert_true( $en_id > 0, 'A voiced language of a published podcast gets its YouTube episode' );
 assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'Each language is queued once' );
@@ -2756,6 +2765,8 @@ assert_equals( [], PressHub_AI_Podcast_Translations::enqueue_ready( 880 ), 'Queu
 $en_job = PressHub_Social_Queue::get_job( $en_id );
 assert_true( PressHub_Social_YouTube::is_episode_job( $en_job ) && 'en' === PressHub_Social_YouTube::episode_language( $en_job ), 'The job is the English episode' );
 assert_equals( '', PressHub_Social_YouTube::episode_language( $ep_job ), 'The Greek episode has no language of its own' );
+assert_equals( 'Youtube (EN)', PressHub_Social_YouTube::platform_label( $en_job ), 'The Queue shows the English episode as YouTube (EN)' );
+assert_equals( 'Youtube', PressHub_Social_YouTube::platform_label( $ep_job ), 'The Greek episode is plain YouTube' );
 assert_equals( 'The House passes the budget. #Cyprus', $en_job['post_copy'], 'The English description is the translation\'s' );
 assert_true( abs( PressHub_AI_Podcast_Translations::duration( 880, 'en' ) - $tl_en['duration'] ) < 0.001, 'The English episode\'s length is its own audio\'s' );
 
@@ -2782,6 +2793,9 @@ assert_true( str_contains( $en_yt['description'] ?? '', "0:00 Parliament passes 
 $tr_job = PressHub_Social_YouTube::episode_job( 880, 'Açıklama', null, null, gmdate( 'Y-m-d H:i:s' ), null, 'tr' );
 $tr_up  = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
 assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_up ) ? $tr_up->get_error_code() : '', 'A language without its own audio never uploads the Greek audio' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'voiced', 'audio_url' => 'https://example.com/uploads/podcast-880-tr.wav', 'title' => '' ] ] ) );
+$tr_up2 = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_title', is_wp_error( $tr_up2 ) ? $tr_up2->get_error_code() : '', 'A language without its own title never takes the Greek title' );
 
 PressHub_Social_Queue::cancel_job( (int) $budget_short );
 PressHub_Social_Queue::cancel_job( $en_id );

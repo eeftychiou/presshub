@@ -108,6 +108,9 @@ class PressHub_AI_Audio_Synthesizer {
             return $this->synthesize_podcast_run( $date, $script, 'noon' === $edition ? 'noon' : 'morning', $api_client, 0 );
         } finally {
             $this->audio_only = null;
+            if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                PressHub_AI_TTS_Call_Recorder::end_session();
+            }
         }
     }
 
@@ -286,8 +289,13 @@ class PressHub_AI_Audio_Synthesizer {
      *         carries `name`, `label`, `gender`, `type`, and (for
      *         manifest-loaded voices) `language`, `engine_version`.
      */
-    public function get_available_voices( string $engine = 'gemini' ): array {
+    public function get_available_voices( string $engine = 'gemini', string $language = '' ): array {
         $engine = '' === trim( $engine ) ? 'gemini' : trim( $engine );
+        // Google Cloud voices speak one language each: the Greek podcast's lists show the
+        // el-GR ones, an English or Turkish podcast's its own (`language` "en", "tr").
+        if ( '' === $language && 'google_cloud' === $engine ) {
+            $language = 'el';
+        }
 
         // Backward-compat shim: legacy callers pass 'gemini' to mean
         // the canonical Gemini 2.5 catalog. Map that to the new
@@ -306,7 +314,14 @@ class PressHub_AI_Audio_Synthesizer {
             return [ 'female' => [], 'male' => [] ];
         }
 
-        return $this->group_voices_by_gender( $engine_slice['voices'] ?? [] );
+        $voices = (array) ( $engine_slice['voices'] ?? [] );
+        if ( '' !== $language ) {
+            $prefix = strtolower( $language ) . '-';
+            $voices = array_filter( $voices, static function ( $v ) use ( $prefix ) {
+                return ! is_array( $v ) || ! isset( $v['language'] ) || str_starts_with( strtolower( (string) $v['language'] ), $prefix );
+            } );
+        }
+        return $this->group_voices_by_gender( $voices );
     }
 
     /**
@@ -1660,6 +1675,9 @@ class PressHub_AI_Audio_Synthesizer {
         $result         = null;
         try {
             $result = $this->synthesize_podcast_run( $date, $custom_script, $edition_or_client, $api_client, $existing_post_id );
+            if ( is_array( $result ) && ! empty( $result['success'] ) && ! empty( $result['post_id'] ) ) {
+                self::start_languages( $result );
+            }
             return $result;
         } catch ( \Throwable $e ) {
             // Keep the exception's message for the audio card, then let it through.
@@ -1670,6 +1688,25 @@ class PressHub_AI_Audio_Synthesizer {
                 PressHub_AI_TTS_Call_Recorder::end_session();
             }
             self::log_audio_run( $result, $date, $custom_script, $edition_or_client, $run_started, $run_started_at );
+        }
+    }
+
+    /**
+     * Starts the English and Turkish versions (those turned on) of a Greek podcast just
+     * voiced, by any path: the cron step, the watchdog retry, the Hub's re-run or a
+     * corrected script. A language whose Greek script did not change keeps its
+     * translation. A problem here never counts as a failed Greek synthesis.
+     */
+    private static function start_languages( array $result ): void {
+        if ( ! class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+            return;
+        }
+        try {
+            PressHub_AI_Podcast_Translations::start( (string) ( $result['date'] ?? '' ), 'noon' === ( $result['edition'] ?? '' ) ? 'noon' : 'morning', (int) $result['post_id'] );
+        } catch ( \Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast languages could not start: ' . $t->getMessage(), [ 'date' => (string) ( $result['date'] ?? '' ), 'edition' => (string) ( $result['edition'] ?? '' ) ] );
+            }
         }
     }
 
@@ -1795,7 +1832,9 @@ class PressHub_AI_Audio_Synthesizer {
         // Issue #140 - every TTS call below is appended to the podcast_script record that
         // produced this script (tts_calls_json). Without one, the calls go to a tts_test record.
         if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
-            $tts_parent_id = (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
+            // A translation's calls go to a record of their own (a tts_test record carrying
+            // the origin and language), never over the Greek podcast's calls.
+            $tts_parent_id = null !== $this->audio_only ? 0 : (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
             $tts_context   = [ 'origin' => null !== $this->audio_only ? 'podcast_translation' : 'podcast_synthesis', 'date' => $date, 'edition' => $edition ];
             if ( null !== $this->audio_only ) {
                 $tts_context['language'] = (string) $this->audio_only['language'];

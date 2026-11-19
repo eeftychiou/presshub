@@ -2133,6 +2133,10 @@ class PressHub_AI_Settings_Storage {
 
     /** Known language codes only, in the order of LANGUAGES, each once. */
     public static function sanitize_briefing_podcast_languages( $value ): array {
+        if ( null === $value ) {
+            // Not in this save (another tab's form): keep what is stored.
+            $value = get_option( 'presshub_ai_briefing_podcast_languages', [] );
+        }
         $value = is_array( $value ) ? array_map( 'strval', $value ) : [];
         $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
         return array_values( array_intersect( $known, $value ) );
@@ -2186,15 +2190,23 @@ class PressHub_AI_Settings_Storage {
         return $all[ $lang ] ?? [ 'presenter_1' => '', 'presenter_2' => '', 'presenter_3' => '' ];
     }
 
-    /** Voice names per known language and presenter; anything else is dropped. */
+    /**
+     * Voice names per known language and presenter; anything else is dropped. A
+     * language or presenter missing from the posted value (another tab's form, or a
+     * presenter hidden while the podcast has fewer hosts) keeps its stored voice.
+     */
     public static function sanitize_briefing_podcast_language_voices( $value ): array {
-        $value = is_array( $value ) ? $value : [];
-        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
-        $out   = [];
+        $stored = get_option( 'presshub_ai_briefing_podcast_language_voices', [] );
+        $stored = is_array( $stored ) ? $stored : [];
+        $value  = is_array( $value ) ? $value : [];
+        $known  = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out    = [];
         foreach ( $known as $lang ) {
             $row = is_array( $value[ $lang ] ?? null ) ? $value[ $lang ] : [];
+            $old = is_array( $stored[ $lang ] ?? null ) ? $stored[ $lang ] : [];
             foreach ( [ 'presenter_1', 'presenter_2', 'presenter_3' ] as $p ) {
-                $voice = is_string( $row[ $p ] ?? null ) ? trim( $row[ $p ] ) : '';
+                $voice = array_key_exists( $p, $row ) ? $row[ $p ] : ( $old[ $p ] ?? '' );
+                $voice = is_string( $voice ) ? trim( $voice ) : '';
                 // Gemini names (Kore) and Google Cloud names (en-US-Chirp3-HD-Achird).
                 $out[ $lang ][ $p ] = preg_match( '/^[A-Za-z0-9][A-Za-z0-9_\-]{1,63}$/', $voice ) ? $voice : '';
             }

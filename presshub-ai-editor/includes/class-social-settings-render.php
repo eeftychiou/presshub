@@ -692,6 +692,7 @@ class PressHub_Social_Settings_Render {
         endforeach;
         ?>
         <p class="description"><?php echo esc_html__( 'The playlist each language\'s episodes are added to. Make one playlist per language in YouTube Studio, set it as a podcast there, then paste its link or ID. Empty uploads that language\'s episodes without a playlist.', 'presshub-social-autopost' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Each language adds two uploads a day (morning and midday) to the channel\'s 100 uploads a day, which shorts share. Adding an episode to its playlist uses 50 of the project\'s 10,000 daily API units.', 'presshub-social-autopost' ); ?></p>
         <?php
     }
 

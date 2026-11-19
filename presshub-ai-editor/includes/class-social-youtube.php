@@ -693,6 +693,13 @@ class PressHub_Social_YouTube {
         return ( '' !== $lang && class_exists( 'PressHub_AI_Podcast_Translations' ) && PressHub_AI_Podcast_Translations::is_language( $lang ) ) ? $lang : '';
     }
 
+    /** A job's platform as the Queue and the post box show it: "Youtube (EN)" for a language episode. */
+    public static function platform_label( array $job ): string {
+        $label = ucfirst( (string) ( $job['platform'] ?? '' ) );
+        $lang  = 'youtube' === ( $job['platform'] ?? '' ) ? self::episode_language( $job ) : '';
+        return '' !== $lang ? sprintf( '%s (%s)', $label, strtoupper( $lang ) ) : $label;
+    }
+
     /**
      * Job row of a podcast episode, for PressHub_Social_Queue::enqueue(). $language
      * (en, tr) makes it the episode of that translation instead of the Greek one.
@@ -734,9 +741,11 @@ class PressHub_Social_YouTube {
         if ( '' !== $ep_lang ) {
             $tr               = PressHub_AI_Podcast_Translations::get_entry( $post_id, $ep_lang );
             $job['audio_url'] = (string) ( $tr['audio_url'] ?? '' );
-            if ( '' !== trim( (string) ( $tr['title'] ?? '' ) ) ) {
-                $title = (string) $tr['title'];
+            if ( '' !== $job['audio_url'] && '' === trim( (string) ( $tr['title'] ?? '' ) ) ) {
+                // Never the Greek title on an English or Turkish episode.
+                return new WP_Error( 'youtube_episode_no_title', sprintf( 'The %s version of podcast post #%d has no title, so it is not uploaded.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], $post_id ) );
             }
+            $title = '' !== trim( (string) ( $tr['title'] ?? '' ) ) ? (string) $tr['title'] : $title;
         }
 
         if ( ! $is_ep && ! $is_shrt ) {

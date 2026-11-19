@@ -208,6 +208,10 @@ if ( [ 'a', 'b' ] !== ( PressHub_Settings_Registry::expand_bracket_keys( [ 'x[]'
 if ( [ 'a' ] !== ( PressHub_Settings_Registry::expand_bracket_keys( [ 'x[]' => 'a' ] )['x'] ?? null ) ) {
     $failures[] = 'expand_bracket_keys() should still accept a single "option[]" value.';
 }
+$two = PressHub_Settings_Registry::expand_bracket_keys( [ 'v[en][presenter_1]' => 'Kore', 'v[en][presenter_2]' => 'Puck', 'v[tr][presenter_1]' => 'Leda' ] );
+if ( [ 'en' => [ 'presenter_1' => 'Kore', 'presenter_2' => 'Puck' ], 'tr' => [ 'presenter_1' => 'Leda' ] ] !== ( $two['v'] ?? null ) || count( $two ) !== 1 ) {
+    $failures[] = 'expand_bracket_keys() must fold two-level keys such as "v[en][presenter_1]"; got ' . var_export( $two, true );
+}
 $js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/admin.js' );
 if ( 2 !== substr_count( $js, '= collectSettingsPayload($' ) || false === strpos( $js, "if (/\\[\\]$/.test(name))" ) ) {
     $failures[] = 'Both settings saves in admin.js should use collectSettingsPayload(), which posts "option[]" fields as lists.';

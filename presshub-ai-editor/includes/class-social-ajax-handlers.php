@@ -53,6 +53,28 @@ class PressHub_Social_Ajax_Handlers {
             wp_send_json_error( [ 'message' => __( 'Invalid post ID provided.', 'presshub-social-autopost' ) ], 400 );
         }
 
+        // An English or Turkish episode's description is its translation's, never the
+        // Greek copywriter's.
+        if ( class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::episode_language( $job ) && class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+            $entry   = PressHub_AI_Podcast_Translations::get_entry( $post_id, PressHub_Social_YouTube::episode_language( $job ) );
+            $caption = trim( (string) ( $entry['description'] ?? '' ) );
+            if ( '' === $caption ) {
+                $caption = trim( (string) ( $entry['title'] ?? '' ) );
+            }
+            if ( '' === $caption ) {
+                wp_send_json_error( [ 'message' => __( 'This episode\'s translation has no description.', 'presshub-social-autopost' ) ], 400 );
+            }
+            PressHub_Social_Queue::update_job_copy( $job_id, $caption );
+            wp_send_json_success( [
+                'message'  => __( 'Translated episode description restored.', 'presshub-social-autopost' ),
+                'job_id'   => $job_id,
+                'post_id'  => $post_id,
+                'platform' => $platform,
+                'new_copy' => $caption,
+                'preview'  => wp_trim_words( $caption, 15 ),
+            ] );
+        }
+
         if ( ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
             wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-social-autopost' ) ], 500 );
         }

@@ -10,7 +10,8 @@
  *    model in one call (action `podcast_translation`, so no agenda or fiches are added:
  *    the translation must say what the Greek says). The answer carries the episode
  *    title, a YouTube description and the script, with the speaker and topic markers of
- *    the original. A translation that lost topics or most of its turns is refused.
+ *    the original. A translation that lost a topic, turns, text or a presenter is refused
+ *    (structure_error()) and asked for once more.
  * 2. voice:<lang>      The translated script is voiced with the podcast's voice settings
  *    (PressHub_AI_Audio_Synthesizer::synthesize_script_audio()), with the delivery style
  *    in that language and the language's own voices where they are set. The audio goes
@@ -41,12 +42,14 @@ class PressHub_AI_Podcast_Translations {
             'name'     => 'English',
             'label'    => 'English',
             'example'  => 'PressHub Morning Briefing: …',
+            'example_noon' => 'PressHub Midday Briefing: …',
             'end_card' => 'Full stories and sources at %s',
         ],
         'tr' => [
             'name'     => 'Turkish',
             'label'    => 'Türkçe (Turkish)',
             'example'  => 'PressHub Sabah Bülteni: …',
+            'example_noon' => 'PressHub Öğle Bülteni: …',
             'end_card' => 'Haberlerin tamamı ve kaynakları: %s',
         ],
     ];
@@ -57,19 +60,31 @@ class PressHub_AI_Podcast_Translations {
     /** API client action of the translation call (no agenda, people or policy fiches). */
     const ACTION = 'podcast_translation';
 
-    /** Shortest translated script, as a share of the Greek one's turns, that is accepted. */
+    /** Fewest turns a translated topic may have, as a share of the Greek topic's turns. */
     const MIN_TURN_SHARE = 0.8;
+
+    /** Shortest translated topic, as a share of the Greek topic's characters. */
+    const MIN_LENGTH_SHARE = 0.4;
+
+    /** Shortest translated script, as a share of the Greek script's characters. */
+    const MIN_TOTAL_LENGTH_SHARE = 0.55;
+
+    /** Low temperature: a translation, not new writing. */
+    const TEMPERATURE = 0.2;
+
+    /** Calls per translation: the first, and one more told why the first was refused. */
+    const ATTEMPTS = 2;
 
     /** Built-in translator's notes per language (Settings → Daily Briefing → Other languages). */
     public static function default_notes(): array {
         return [
             'en' => "Place names: Nicosia, Limassol, Larnaca, Paphos, Famagusta, Kyrenia, Morphou, Ayia Napa, Paralimni, Troodos.\n"
-                . "Institutions: House of Representatives (Βουλή), Presidential Palace, Council of Ministers, Central Bank of Cyprus, Electricity Authority of Cyprus (EAC), Cyprus Police.\n"
-                . "Keep the original's wording on the Cyprus problem: \"κατεχόμενα\" is \"the occupied areas\", \"ψευδοκράτος\" is \"the pseudo-state\", \"γραμμή κατάπαυσης του πυρός\" is \"the ceasefire line\".\n"
+                . "Institutions: House of Representatives (Βουλή), Presidential Palace, Council of Ministers, Central Bank of Cyprus, Electricity Authority of Cyprus (EAC), Cyprus Police, National Guard (Εθνική Φρουρά), Republic of Cyprus (Κυπριακή Δημοκρατία).\n"
+                . "Keep the original's wording on the Cyprus problem: \"κατεχόμενα\" is \"the occupied areas\", \"ψευδοκράτος\" is \"the pseudo-state\", \"γραμμή κατάπαυσης του πυρός\" is \"the ceasefire line\", \"Πράσινη Γραμμή\" is \"the Green Line\", \"κατοχικός στρατός\" is \"the occupation army\", \"Τουρκοκύπριος ηγέτης\" is \"the Turkish Cypriot leader\", \"ΑΟΖ\" is \"the exclusive economic zone (EEZ)\".\n"
                 . "Amounts stay in euros (\"two million euros\").",
-            'tr' => "Yer adları (Kıbrıslı Türklerin kullandığı adlar): Lefkoşa, Limasol, Larnaka, Baf, Gazimağusa, Girne, Güzelyurt, Aya Napa, Trodos.\n"
-                . "Kurumlar: Temsilciler Meclisi (Βουλή), Cumhurbaşkanlığı Sarayı, Bakanlar Kurulu, Kıbrıs Merkez Bankası, Kıbrıs Elektrik Kurumu (EAC), Kıbrıs Polisi.\n"
-                . "Kıbrıs sorunuyla ilgili ifadelerde orijinalin dilini koru: \"κατεχόμενα\" = \"işgal altındaki bölgeler\", \"ψευδοκράτος\" = \"sözde devlet\", \"γραμμή κατάπαυσης του πυρός\" = \"ateşkes hattı\".\n"
+            'tr' => "Yer adları (Kıbrıslı Türklerin kullandığı adlar): Lefkoşa, Limasol, Larnaka, Baf, Gazimağusa, Girne, Güzelyurt, Aya Napa, Paralimni, Trodos.\n"
+                . "Kurumlar: Temsilciler Meclisi (Βουλή), Cumhurbaşkanlığı Sarayı, Bakanlar Kurulu, Kıbrıs Merkez Bankası, Kıbrıs Elektrik Kurumu (EAC), Kıbrıs Polisi, Ulusal Muhafız (Εθνική Φρουρά), Kıbrıs Cumhuriyeti (Κυπριακή Δημοκρατία).\n"
+                . "Kıbrıs sorunuyla ilgili ifadelerde orijinalin dilini koru: \"κατεχόμενα\" = \"işgal altındaki bölgeler\", \"ψευδοκράτος\" = \"sözde devlet\" (asla \"KKTC\" veya \"Kuzey Kıbrıs\" değil), \"γραμμή κατάπαυσης του πυρός\" = \"ateşkes hattı\", \"Πράσινη Γραμμή\" = \"Yeşil Hat\", \"κατοχικός στρατός\" = \"işgal ordusu\", \"Τουρκοκύπριος ηγέτης\" = \"Kıbrıslı Türk lider\", \"ΑΟΖ\" = \"Münhasır Ekonomik Bölge (MEB)\".\n"
                 . "Tutarlar euro olarak kalır (\"iki milyon euro\").",
         ];
     }
@@ -114,6 +129,17 @@ class PressHub_AI_Podcast_Translations {
         return $entry;
     }
 
+    /** A Greek podcast post deleted for good takes its English and Turkish audio files with it. */
+    public static function on_before_delete_post( $post_id ): void {
+        $post_id = (int) $post_id;
+        foreach ( self::get_all( $post_id ) as $entry ) {
+            $attachment = (int) ( is_array( $entry ) ? ( $entry['attachment_id'] ?? 0 ) : 0 );
+            if ( $attachment > 0 && function_exists( 'wp_delete_attachment' ) ) {
+                wp_delete_attachment( $attachment, true );
+            }
+        }
+    }
+
     private static function fail( int $post_id, string $lang, string $step, WP_Error $error ): WP_Error {
         self::update_entry( $post_id, $lang, [
             'status'    => 'failed',
@@ -153,10 +179,22 @@ class PressHub_AI_Podcast_Translations {
         self::queue( $date, $edition, 'translate:' . $langs[0] );
     }
 
-    /** Queues a step as its own cron event, or runs it now (without a time budget). */
+    /**
+     * Queues a step as its own cron event. Without cron steps (turned off) it runs now,
+     * without a time budget. When the same step is already waiting (WordPress refuses an
+     * identical event within ten minutes) nothing more is done; any other refusal runs it
+     * now within the time budget, so a long voice step stops instead of timing out.
+     */
     private static function queue( string $date, string $edition, string $step, int $part = 0 ) {
-        if ( function_exists( 'presshub_ai_schedule_briefing_step' ) && presshub_ai_schedule_briefing_step( $date, $edition, $step, $part ) ) {
+        $split = function_exists( 'presshub_ai_briefing_split_steps' ) && presshub_ai_briefing_split_steps();
+        if ( $split && function_exists( 'presshub_ai_schedule_briefing_step' ) && presshub_ai_schedule_briefing_step( $date, $edition, $step, $part ) ) {
             return 'scheduled';
+        }
+        if ( $split ) {
+            if ( function_exists( 'wp_next_scheduled' ) && false !== wp_next_scheduled( 'presshub_ai_run_briefing_step', [ (string) $date, (string) $edition, (string) $step, (int) $part ] ) ) {
+                return 'scheduled';
+            }
+            return self::run_step( $date, $edition, $step, $part, true );
         }
         return self::run_step( $date, $edition, $step, $part, false );
     }
@@ -192,8 +230,12 @@ class PressHub_AI_Podcast_Translations {
         if ( 'translate' === $kind ) {
             $result = self::translate( $post_id, $lang );
             if ( ! is_wp_error( $result ) ) {
-                self::queue( $date, $edition, 'voice:' . $lang );
-                return $result;
+                if ( empty( $result['unchanged'] ) || 'voiced' !== ( $result['status'] ?? '' ) || '' === (string) ( $result['audio_url'] ?? '' ) ) {
+                    self::queue( $date, $edition, 'voice:' . $lang );
+                    return $result;
+                }
+                // Already voiced from the same Greek script.
+                self::maybe_enqueue( $post_id, $lang );
             }
         } else {
             $budget = ( $budgeted && function_exists( 'presshub_ai_briefing_step_time_budget_sec' ) ) ? presshub_ai_briefing_step_time_budget_sec() : 0;
@@ -236,15 +278,49 @@ class PressHub_AI_Podcast_Translations {
         return trim( (string) ( new PressHub_AI_Podcast_Producer() )->get_script( $date, $edition ) );
     }
 
+    /**
+     * The script in the form the translation is asked to keep: every topic as
+     * [TOPIC_START: title] ... [TOPIC_END] and every turn as [SPEAKER_N]: text, parsed
+     * the way the audio was made. Presenter names in the labels never reach the
+     * translator, so it cannot translate or spell them differently.
+     */
+    public static function canonical_script( string $script ): string {
+        if ( '' === trim( $script ) || ! class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+            return trim( $script );
+        }
+        $hosts  = self::host_names();
+        $topics = ( new PressHub_AI_Podcast_Producer() )->parse_script_topics( $script, $hosts[0], $hosts[1], $hosts[2] );
+        $index  = [ 'female' => 1, 'male' => 2, 'tertiary' => 3 ];
+        $blocks = [];
+        foreach ( $topics as $topic ) {
+            $lines = [ '[TOPIC_START: ' . trim( str_replace( [ '[', ']' ], '', (string) ( $topic['title'] ?? '' ) ) ) . ']' ];
+            foreach ( (array) ( $topic['turns'] ?? [] ) as $turn ) {
+                $text = trim( preg_replace( '/\s+/u', ' ', (string) ( $turn['text'] ?? '' ) ) );
+                if ( '' !== $text ) {
+                    $lines[] = sprintf( '[SPEAKER_%d]: %s', $index[ (string) ( $turn['speaker'] ?? '' ) ] ?? 1, $text );
+                }
+            }
+            $lines[]  = '[TOPIC_END]';
+            $blocks[] = implode( "\n", $lines );
+        }
+        return empty( $blocks ) ? trim( $script ) : implode( "\n\n", $blocks );
+    }
+
     /** System prompt of the translation into $lang. */
-    public static function build_system_prompt( string $lang ): string {
+    public static function build_system_prompt( string $lang, string $edition = 'morning' ): string {
         $template = class_exists( 'PressHub_AI_Prompt_Loader' ) ? PressHub_AI_Prompt_Loader::load( 'podcast/translate_script.txt' ) : '';
         $notes    = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_language_notes( $lang ) : '';
         return strtr( $template, [
             '{language}'      => self::LANGUAGES[ $lang ]['name'],
             '{notes}'         => '' !== trim( $notes ) ? $notes : '-',
-            '{example_title}' => self::LANGUAGES[ $lang ]['example'],
+            '{example_title}' => self::example_title( $lang, $edition ),
         ] );
+    }
+
+    /** Example episode title of an edition in $lang. */
+    public static function example_title( string $lang, string $edition = 'morning' ): string {
+        $info = self::LANGUAGES[ $lang ] ?? [];
+        return (string) ( 'noon' === $edition ? ( $info['example_noon'] ?? $info['example'] ?? '' ) : ( $info['example'] ?? '' ) );
     }
 
     /**
@@ -256,10 +332,19 @@ class PressHub_AI_Podcast_Translations {
         if ( ! self::is_language( $lang ) ) {
             return new WP_Error( 'unknown_language', sprintf( 'Unknown podcast language: %s', $lang ) );
         }
-        $greek = self::greek_script( $post_id );
-        if ( '' === $greek ) {
+        $source = self::greek_script( $post_id );
+        if ( '' === $source ) {
             return self::fail( $post_id, $lang, 'translate', new WP_Error( 'no_script', __( 'The Greek podcast script of this post was not found.', 'presshub-ai-editor' ) ) );
         }
+        $previous = self::get_entry( $post_id, $lang );
+        if ( md5( $source ) === ( $previous['source_hash'] ?? '' )
+            && in_array( $previous['status'] ?? '', [ 'translated', 'voiced' ], true )
+            && '' !== trim( (string) ( $previous['script'] ?? '' ) )
+        ) {
+            // The Greek script did not change (a retry or re-run of the audio): keep it.
+            return array_merge( $previous, [ 'unchanged' => true ] );
+        }
+        $greek              = self::canonical_script( $source );
         [ $date, $edition ] = self::post_edition( $post_id );
         $post  = get_post( $post_id );
         $title = $post ? (string) ( is_object( $post ) ? $post->post_title : ( $post['post_title'] ?? '' ) ) : '';
@@ -270,7 +355,7 @@ class PressHub_AI_Podcast_Translations {
         if ( method_exists( $api_client, 'set_action' ) ) {
             $api_client->set_action( self::ACTION );
         }
-        $system = self::build_system_prompt( $lang );
+        $system = self::build_system_prompt( $lang, $edition );
         $user   = sprintf(
             "Greek episode title: %s\nEdition: %s, %s\n\nGreek script:\n%s",
             $title,
@@ -279,29 +364,41 @@ class PressHub_AI_Podcast_Translations {
             $greek
         );
 
-        $started  = microtime( true );
-        $response = $api_client->call_provider( $system, $user, false, [], null, [ 'edition' => $edition, 'language' => $lang ] );
-        if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( sprintf( 'Podcast translation into %s for post #%d took %d ms.', self::LANGUAGES[ $lang ]['name'], $post_id, (int) round( ( microtime( true ) - $started ) * 1000 ) ), [
-                'post_id'     => $post_id,
-                'language'    => $lang,
-                'provider'    => method_exists( $api_client, 'get_provider' ) ? $api_client->get_provider() : '',
-                'model'       => method_exists( $api_client, 'get_model' ) ? $api_client->get_model() : '',
-                'action'      => self::ACTION,
-                'duration_ms' => (int) round( ( microtime( true ) - $started ) * 1000 ),
-            ] );
+        $error = null;
+        for ( $attempt = 1; $attempt <= self::ATTEMPTS; $attempt++ ) {
+            $prompt = null === $error ? $user : $user . "\n\nYour previous translation was refused: " . $error->get_error_message() . ' Translate the whole script again, keeping every topic, every turn and every marker exactly as in the Greek script.';
+            $started  = microtime( true );
+            $response = $api_client->call_provider( $system, $prompt, false, [], self::TEMPERATURE, [ 'edition' => $edition, 'language' => $lang, 'attempt' => $attempt ] );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( sprintf( 'Podcast translation into %s for post #%d (attempt %d) took %d ms.', self::LANGUAGES[ $lang ]['name'], $post_id, $attempt, (int) round( ( microtime( true ) - $started ) * 1000 ) ), [
+                    'post_id'     => $post_id,
+                    'language'    => $lang,
+                    'attempt'     => $attempt,
+                    'provider'    => method_exists( $api_client, 'get_provider' ) ? $api_client->get_provider() : '',
+                    'model'       => method_exists( $api_client, 'get_model' ) ? $api_client->get_model() : '',
+                    'action'      => self::ACTION,
+                    'duration_ms' => (int) round( ( microtime( true ) - $started ) * 1000 ),
+                ] );
+            }
+            if ( is_wp_error( $response ) ) {
+                // A failed call (quota, network) is not retried here: the provider client retries.
+                return self::fail( $post_id, $lang, 'translate', $response );
+            }
+            $parsed = self::parse_response( (string) $response );
+            if ( is_wp_error( $parsed ) ) {
+                $error = $parsed;
+                continue;
+            }
+            $problem = self::structure_error( $greek, $parsed['script'] );
+            if ( '' !== $problem ) {
+                $error = new WP_Error( 'translation_structure', $problem );
+                continue;
+            }
+            $error = null;
+            break;
         }
-        if ( is_wp_error( $response ) ) {
-            return self::fail( $post_id, $lang, 'translate', $response );
-        }
-
-        $parsed = self::parse_response( (string) $response );
-        if ( is_wp_error( $parsed ) ) {
-            return self::fail( $post_id, $lang, 'translate', $parsed );
-        }
-        $problem = self::structure_error( $greek, $parsed['script'] );
-        if ( '' !== $problem ) {
-            return self::fail( $post_id, $lang, 'translate', new WP_Error( 'translation_structure', $problem ) );
+        if ( null !== $error ) {
+            return self::fail( $post_id, $lang, 'translate', $error );
         }
 
         return self::update_entry( $post_id, $lang, [
@@ -311,7 +408,7 @@ class PressHub_AI_Podcast_Translations {
             'title'         => $parsed['title'],
             'description'   => $parsed['description'],
             'script'        => $parsed['script'],
-            'source_hash'   => md5( $greek ),
+            'source_hash'   => md5( $source ),
             'translated_at' => self::now(),
         ] );
     }
@@ -343,31 +440,61 @@ class PressHub_AI_Podcast_Translations {
     }
 
     /**
-     * Why a translated script does not match the Greek one, or '' when it does: it must
-     * have every topic of the original, speakers the original has, and at least
-     * MIN_TURN_SHARE of its turns.
+     * Why a translated script does not match the Greek one, or '' when it does. Both are
+     * split into topics the way the audio is made. The translation must have the same
+     * topics in the same order, each with at least MIN_TURN_SHARE of the Greek topic's
+     * turns and MIN_LENGTH_SHARE of its text, the same presenters, and at least
+     * MIN_TOTAL_LENGTH_SHARE of the whole script's text (a summary is refused).
      */
     public static function structure_error( string $greek, string $translated ): string {
         $producer = new PressHub_AI_Podcast_Producer();
         $hosts    = self::host_names();
-        $a        = $producer->parse_script_turns( $greek, $hosts[0], $hosts[1], $hosts[2] );
-        $b        = $producer->parse_script_turns( $translated, $hosts[0], $hosts[1], $hosts[2] );
+        $a        = $producer->parse_script_topics( $greek, $hosts[0], $hosts[1], $hosts[2] );
+        $b        = $producer->parse_script_topics( $translated, $hosts[0], $hosts[1], $hosts[2] );
         if ( empty( $b ) ) {
             return __( 'The translated script has no speaker turns.', 'presshub-ai-editor' );
         }
-        $topics_a = preg_match_all( '/\[TOPIC_START\s*:/u', $greek );
-        $topics_b = preg_match_all( '/\[TOPIC_START\s*:/u', $translated );
-        if ( $topics_a !== $topics_b ) {
-            return sprintf( __( 'The translated script has %1$d topics; the Greek one has %2$d.', 'presshub-ai-editor' ), $topics_b, $topics_a );
+        $raw_a = preg_match_all( '/\[TOPIC_START\s*:/u', $greek );
+        $raw_b = preg_match_all( '/\[TOPIC_START\s*:/u', $translated );
+        if ( count( $a ) !== count( $b ) || $raw_a !== $raw_b ) {
+            return sprintf( __( 'The translated script has %1$d topics; the Greek one has %2$d.', 'presshub-ai-editor' ), max( count( $b ), $raw_b ), max( count( $a ), $raw_a ) );
         }
-        if ( count( $b ) < (int) floor( count( $a ) * self::MIN_TURN_SHARE ) ) {
-            return sprintf( __( 'The translated script has %1$d turns; the Greek one has %2$d.', 'presshub-ai-editor' ), count( $b ), count( $a ) );
+        $len       = static fn( array $turns ): int => array_sum( array_map( static fn( $t ) => mb_strlen( trim( (string) ( $t['text'] ?? '' ) ) ), $turns ) );
+        $total_a   = 0;
+        $total_b   = 0;
+        $speakers_a = [];
+        $speakers_b = [];
+        foreach ( $a as $i => $topic_a ) {
+            $turns_a = (array) ( $topic_a['turns'] ?? [] );
+            $turns_b = (array) ( $b[ $i ]['turns'] ?? [] );
+            $n       = $i + 1;
+            if ( count( $turns_b ) < max( 1, (int) ceil( count( $turns_a ) * self::MIN_TURN_SHARE - 1e-9 ) ) ) {
+                return sprintf( __( 'Topic %1$d of the translated script has %2$d turns; the Greek one has %3$d.', 'presshub-ai-editor' ), $n, count( $turns_b ), count( $turns_a ) );
+            }
+            $la = $len( $turns_a );
+            $lb = $len( $turns_b );
+            if ( $la > 0 && $lb < $la * self::MIN_LENGTH_SHARE ) {
+                return sprintf( __( 'Topic %1$d of the translated script is much shorter than the Greek one (%2$d characters against %3$d): it looks summarised.', 'presshub-ai-editor' ), $n, $lb, $la );
+            }
+            $total_a += $la;
+            $total_b += $lb;
+            foreach ( $turns_a as $t ) {
+                $speakers_a[ (string) ( $t['speaker'] ?? '' ) ] = true;
+            }
+            foreach ( $turns_b as $t ) {
+                $speakers_b[ (string) ( $t['speaker'] ?? '' ) ] = true;
+            }
         }
-        $speakers_a = array_unique( array_map( static fn( $t ) => (string) ( $t['speaker'] ?? '' ), $a ) );
-        $speakers_b = array_unique( array_map( static fn( $t ) => (string) ( $t['speaker'] ?? '' ), $b ) );
-        $extra      = array_diff( $speakers_b, $speakers_a );
+        if ( $total_a > 0 && $total_b < $total_a * self::MIN_TOTAL_LENGTH_SHARE ) {
+            return sprintf( __( 'The translated script is much shorter than the Greek one (%1$d characters against %2$d): it looks summarised.', 'presshub-ai-editor' ), $total_b, $total_a );
+        }
+        $extra   = array_diff( array_keys( $speakers_b ), array_keys( $speakers_a ) );
+        $missing = array_diff( array_keys( $speakers_a ), array_keys( $speakers_b ) );
         if ( ! empty( $extra ) ) {
             return sprintf( __( 'The translated script has speakers the Greek one does not have: %s.', 'presshub-ai-editor' ), implode( ', ', $extra ) );
+        }
+        if ( ! empty( $missing ) ) {
+            return sprintf( __( 'The translated script lost speakers of the Greek one: %s.', 'presshub-ai-editor' ), implode( ', ', $missing ) );
         }
         return '';
     }
@@ -406,9 +533,16 @@ class PressHub_AI_Podcast_Translations {
         }
         $voices = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_language_voices( $lang ) : [];
         $engine = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
-        if ( 'google_cloud' === $engine && '' === (string) ( $voices['presenter_1'] ?? '' ) ) {
-            // Google Cloud voices speak one language; the Greek ones cannot read English.
-            return self::fail( $post_id, $lang, 'voice', new WP_Error( 'translation_voice_missing', sprintf( __( 'Google Cloud TTS needs %s voices: choose them under Daily Briefing, Other languages.', 'presshub-ai-editor' ), self::LANGUAGES[ $lang ]['name'] ) ) );
+        if ( 'google_cloud' === $engine ) {
+            // Google Cloud voices speak one language: every presenter needs a voice of this
+            // language, or its turns would be read by a Greek voice.
+            $hosts = class_exists( 'PressHub_AI_Settings_Storage' ) ? max( 1, min( 3, PressHub_AI_Settings_Storage::get_briefing_host_count() ) ) : 2;
+            for ( $p = 1; $p <= $hosts; $p++ ) {
+                $voice = (string) ( $voices[ 'presenter_' . $p ] ?? '' );
+                if ( '' === $voice || 0 !== stripos( $voice, $lang . '-' ) ) {
+                    return self::fail( $post_id, $lang, 'voice', new WP_Error( 'translation_voice_missing', sprintf( __( 'Google Cloud TTS needs a %1$s voice for presenter %2$d: choose it under Daily Briefing, Other languages.', 'presshub-ai-editor' ), self::LANGUAGES[ $lang ]['name'], $p ) ) );
+                }
+            }
         }
         [ $date, $edition ] = self::post_edition( $post_id );
 
@@ -481,7 +615,7 @@ class PressHub_AI_Podcast_Translations {
         if ( ! class_exists( 'PressHub_Social_YouTube' ) || ! class_exists( 'PressHub_Social_Queue' ) || ! self::is_language( $lang ) ) {
             return 0;
         }
-        if ( ! PressHub_Social_YouTube::wants_episode( $post_id ) || ! in_array( $lang, self::enabled_languages(), true ) ) {
+        if ( ! PressHub_Social_YouTube::wants_episode( $post_id ) || ! in_array( $lang, self::enabled_languages(), true ) || ! self::youtube_allowed( $post_id ) ) {
             return 0;
         }
         $post   = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
@@ -514,6 +648,25 @@ class PressHub_AI_Podcast_Translations {
         }
         PressHub_Social_Logger::info( sprintf( 'Enqueued %s YouTube podcast episode job #%d for post #%d.', self::LANGUAGES[ $lang ]['name'], (int) $job_id, $post_id ) );
         return (int) $job_id;
+    }
+
+    /**
+     * Whether the post may go to YouTube at all, by the same rules as its Greek episode
+     * (PressHub_Social_Dispatcher::enqueue_for_post()): YouTube ticked on the post when
+     * the post picks its platforms, turned on under Where to post, and set up.
+     */
+    public static function youtube_allowed( int $post_id ): bool {
+        $picked = function_exists( 'get_post_meta' ) ? get_post_meta( $post_id, '_presshub_social_platforms', true ) : [];
+        if ( is_array( $picked ) && ! empty( $picked ) && ! in_array( 'youtube', array_map( 'strval', $picked ), true ) ) {
+            return false;
+        }
+        if ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_enabled' ) && ! PressHub_Social_Settings_Storage::is_platform_enabled( 'youtube' ) ) {
+            return false;
+        }
+        if ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_configured' ) && ! PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' ) ) {
+            return false;
+        }
+        return true;
     }
 
     /** Queues every voiced language of a post (when its Greek episode is queued). */
@@ -571,10 +724,22 @@ class PressHub_AI_Podcast_Translations {
 
         $duration = (float) $timeline['duration'];
         $topics   = array_values( array_filter( (array) ( $timeline['topics'] ?? [] ), 'is_array' ) );
-        $greek    = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null;
-        $g_scenes = null !== $greek
-            ? PressHub_Social_YouTube::episode_scenes( (array) ( $greek['topics'] ?? [] ), $groups, (float) $greek['duration'] )
-            : [];
+        $greek = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null;
+        if ( null !== $greek ) {
+            $g_topics   = (array) ( $greek['topics'] ?? [] );
+            $g_duration = (float) $greek['duration'];
+        } else {
+            // No Greek timeline: the Greek script's topic titles, on the translation's times,
+            // still match the topics to the shorts in Greek.
+            $hosts      = self::host_names();
+            $parsed     = class_exists( 'PressHub_AI_Podcast_Producer' ) ? ( new PressHub_AI_Podcast_Producer() )->parse_script_topics( self::greek_script( $post_id ), $hosts[0], $hosts[1], $hosts[2] ) : [];
+            $g_topics   = [];
+            foreach ( array_values( $parsed ) as $i => $topic ) {
+                $g_topics[] = [ 'title' => (string) ( $topic['title'] ?? '' ), 'start' => (float) ( $topics[ $i ]['start'] ?? 0 ) ];
+            }
+            $g_duration = $duration;
+        }
+        $g_scenes = ! empty( $g_topics ) ? PressHub_Social_YouTube::episode_scenes( $g_topics, $groups, $g_duration ) : [];
         if ( count( $g_scenes ) === count( $topics ) && ! empty( $topics ) ) {
             $scenes = [];
             foreach ( $topics as $i => $topic ) {
@@ -586,7 +751,15 @@ class PressHub_AI_Podcast_Translations {
                 ];
             }
         } else {
-            $scenes = PressHub_Social_YouTube::episode_scenes( $topics, $groups, $duration );
+            // Only a translation made before the topic check could differ: its titles do not
+            // match the Greek shorts, so the images are spread over it in order.
+            if ( class_exists( 'PressHub_Social_Logger' ) ) {
+                PressHub_Social_Logger::warning( sprintf( 'The %s episode of post #%d has %d topics and the Greek one %d: its images are not matched to topics.', self::LANGUAGES[ $lang ]['name'], $post_id, count( $topics ), count( $g_scenes ) ), [ 'post_id' => $post_id, 'language' => $lang ] );
+            }
+            $scenes = PressHub_Social_YouTube::episode_scenes( array_map( static fn( $t ) => array_merge( $t, [ 'title' => '' ] ), $topics ), $groups, $duration );
+            foreach ( $scenes as $i => $scene ) {
+                $scenes[ $i ]['title'] = trim( (string) ( $topics[ $i ]['title'] ?? $scene['title'] ?? '' ) );
+            }
         }
 
         $video['duration']  = $duration;
