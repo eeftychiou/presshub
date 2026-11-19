@@ -483,22 +483,30 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
-     * On-screen badge of an article short: the post's first category in capitals without
-     * accents (e.g. ΑΠΟΨΗ), or ΑΡΘΡΟ.
+     * The post's primary category name: its first category that is not Uncategorized,
+     * or '' when it has none. Shared by the article short prompt and its badge.
      */
-    public static function article_badge( int $post_id ): string {
-        $name = '';
-        if ( $post_id > 0 && function_exists( 'get_the_category' ) ) {
-            $cats = get_the_category( $post_id );
-            foreach ( is_array( $cats ) ? $cats : [] as $cat ) {
-                $cat_name = is_object( $cat ) ? (string) ( $cat->name ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['name'] ?? '' ) : '' );
-                $slug     = is_object( $cat ) ? (string) ( $cat->slug ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['slug'] ?? '' ) : '' );
-                if ( '' !== trim( $cat_name ) && 'uncategorized' !== $slug ) {
-                    $name = trim( $cat_name );
-                    break;
-                }
+    public static function primary_category( int $post_id ): string {
+        if ( $post_id <= 0 || ! function_exists( 'get_the_category' ) ) {
+            return '';
+        }
+        $cats = get_the_category( $post_id );
+        foreach ( is_array( $cats ) ? $cats : [] as $cat ) {
+            $cat_name = is_object( $cat ) ? (string) ( $cat->name ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['name'] ?? '' ) : '' );
+            $slug     = is_object( $cat ) ? (string) ( $cat->slug ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['slug'] ?? '' ) : '' );
+            if ( '' !== trim( $cat_name ) && 'uncategorized' !== $slug ) {
+                return trim( $cat_name );
             }
         }
+        return '';
+    }
+
+    /**
+     * On-screen badge of an article short: the post's primary category in capitals
+     * without accents (e.g. ΑΠΟΨΗ), or ΑΡΘΡΟ.
+     */
+    public static function article_badge( int $post_id ): string {
+        $name = self::primary_category( $post_id );
         if ( '' === $name ) {
             $name = 'Άρθρο';
         }
@@ -833,12 +841,7 @@ class PressHub_Social_TikTok_Shorts {
         $title     = $post ? (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) ) : '';
         $excerpt   = $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '';
         $excerpt   = trim( function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $excerpt ) : strip_tags( $excerpt ) );
-        $category  = '';
-        if ( function_exists( 'get_the_category' ) ) {
-            $cats     = get_the_category( $post_id );
-            $first    = is_array( $cats ) ? reset( $cats ) : null;
-            $category = is_object( $first ) ? (string) ( $first->name ?? '' ) : ( is_array( $first ) ? (string) ( $first['name'] ?? '' ) : '' );
-        }
+        $category  = self::primary_category( $post_id );
         $date      = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
         if ( '' === $date && function_exists( 'get_the_date' ) ) {
             $date = (string) get_the_date( 'Y-m-d', $post_id );

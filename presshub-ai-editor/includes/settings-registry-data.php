@@ -3974,7 +3974,7 @@ return [
     'group' => 'where',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Article Shorts',
-    'help' => 'Turns every article and opinion piece into one short narrated video, like the podcast shorts, on TikTok and on Instagram when Instagram Reels are on. If the short cannot be made, the article is posted the classic way. Default: on.',
+    'help' => 'Turns every article and opinion piece into one short narrated video, like the podcast shorts. Each platform\'s own switch decides where it goes: TikTok when TikTok Shorts are on, Instagram when Instagram Reels are on, YouTube when YouTube Shorts are on, each independently of the others. If the short cannot be made, the article is posted the classic way. Default: on.',
     'checkbox' => true,
     'secret' => false,
     'type' => 'boolean',

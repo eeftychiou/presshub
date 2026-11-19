@@ -2356,6 +2356,11 @@ $art_text = PressHub_Social_TikTok_Shorts::article_text( 890 );
 assert_true( str_contains( $art_text, 'κρίση εμπιστοσύνης.' ) && str_contains( $art_text, 'ομοσπονδίες & οι' ) && ! str_contains( $art_text, '<p>' ), 'The article text has no markup and decoded entities' );
 assert_equals( 'ΑΠΟΨΗ', PressHub_Social_TikTok_Shorts::article_badge( 890 ), 'The badge is the category in capitals without accents' );
 assert_equals( 'ΑΡΘΡΟ', PressHub_Social_TikTok_Shorts::article_badge( 99999 ), 'A post without a category gets the ΑΡΘΡΟ badge' );
+$GLOBALS['test_categories'][891] = [ (object) [ 'name' => 'Uncategorized', 'slug' => 'uncategorized' ], (object) [ 'name' => 'Άποψη', 'slug' => 'apopsi' ] ];
+assert_equals( 'Άποψη', PressHub_Social_TikTok_Shorts::primary_category( 891 ), 'The primary category skips Uncategorized' );
+$GLOBALS['POSTS_STORE'][891] = [ 'ID' => 891, 'post_title' => 'Τίτλος', 'post_content' => 'Κείμενο', 'post_excerpt' => '', 'post_status' => 'publish' ];
+$GLOBALS['test_posts'][891]  = new WP_Post( $GLOBALS['POSTS_STORE'][891] );
+assert_true( str_contains( PressHub_Social_TikTok_Shorts::build_prompt( 891, 'Κατηγορία: {category}', '', 1, 100, 3, 'Κείμενο' ), 'Κατηγορία: Άποψη' ), 'The article prompt gets the same primary category as the badge' );
 
 $art_ai_calls = [];
 PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$art_ai_calls, $short_json ) {
