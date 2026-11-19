@@ -287,8 +287,8 @@ class PressHub_Social_Settings {
         $image_platforms = [
             'twitter'   => [ __( 'X / Twitter Images', 'presshub-social-autopost' ), __( 'Landscape 16:9 images attached to the post (up to 4). An attached image replaces X\'s link preview card; the article link stays in the text.', 'presshub-social-autopost' ) ],
             'facebook'  => [ __( 'Facebook Images', 'presshub-social-autopost' ), __( 'Landscape 16:9 images (up to 4; more than 1 makes a multi-photo post). X and Facebook share the same images, so the second platform costs nothing extra.', 'presshub-social-autopost' ) ],
-            'instagram' => [ __( 'Instagram Image', 'presshub-social-autopost' ), __( 'One square 1:1 image used as the background of the Instagram card. Reels from podcast shorts keep their own story images.', 'presshub-social-autopost' ) ],
-            'tiktok'    => [ __( 'TikTok Image', 'presshub-social-autopost' ), __( 'One vertical 9:16 image used as the background of the TikTok video of an article. Podcast shorts keep their own story images.', 'presshub-social-autopost' ) ],
+            'instagram' => [ __( 'Instagram Image', 'presshub-social-autopost' ), __( 'One square 1:1 image used as the background of the Instagram card. Reels made from shorts keep their own story images.', 'presshub-social-autopost' ) ],
+            'tiktok'    => [ __( 'TikTok Image', 'presshub-social-autopost' ), __( 'One vertical 9:16 image used as the background of the TikTok video of an article. Shorts keep their own story images.', 'presshub-social-autopost' ) ],
         ];
         foreach ( $image_platforms as $image_platform => [ $label, $desc ] ) {
             add_settings_field(
@@ -1103,7 +1103,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_article_short',
                 'rows'   => 10,
-                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the TikTok or Instagram Caption Prompt; this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the platform\'s usual caption prompt (TikTok, Instagram or YouTube); this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way.', 'presshub-social-autopost' ),
             ]
         );
 

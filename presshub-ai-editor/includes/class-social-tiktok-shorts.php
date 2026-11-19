@@ -178,7 +178,9 @@ class PressHub_Social_TikTok_Shorts {
         $content = (string) preg_replace( '/<\/(p|h[1-6]|li|blockquote|div)>|<br\s*\/?>/iu', "\n", $content );
         $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
         $content = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-        $content = (string) preg_replace( '/[ \t]+/u', ' ', $content );
+        // &nbsp; (U+00A0) and other Unicode spaces count as spaces, so an empty spacer
+        // paragraph is no text.
+        $content = (string) preg_replace( '/[ \t\p{Zs}\x{200B}\x{FEFF}]+/u', ' ', $content );
         $content = trim( (string) preg_replace( '/\s*\n\s*/u', "\n", $content ) );
         return mb_substr( $content, 0, self::ARTICLE_TEXT_MAX_CHARS );
     }
@@ -491,12 +493,21 @@ class PressHub_Social_TikTok_Shorts {
             return '';
         }
         $cats = get_the_category( $post_id );
+        // The site's default category (Uncategorized, Χωρίς κατηγορία, or whatever it was
+        // renamed to) is not a real category.
+        $default_id = function_exists( 'get_option' ) ? (int) get_option( 'default_category', 0 ) : 0;
         foreach ( is_array( $cats ) ? $cats : [] as $cat ) {
             $cat_name = is_object( $cat ) ? (string) ( $cat->name ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['name'] ?? '' ) : '' );
             $slug     = is_object( $cat ) ? (string) ( $cat->slug ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['slug'] ?? '' ) : '' );
-            if ( '' !== trim( $cat_name ) && 'uncategorized' !== $slug ) {
-                return trim( $cat_name );
+            $term_id  = is_object( $cat ) ? (int) ( $cat->term_id ?? 0 ) : ( is_array( $cat ) ? (int) ( $cat['term_id'] ?? 0 ) : 0 );
+            $lc_name  = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $cat_name ) ) : strtolower( trim( $cat_name ) );
+            if ( '' === trim( $cat_name ) || 'uncategorized' === $slug || 'uncategorized' === $lc_name || 'χωρίς κατηγορία' === $lc_name ) {
+                continue;
             }
+            if ( $default_id > 0 && $term_id === $default_id ) {
+                continue;
+            }
+            return trim( $cat_name );
         }
         return '';
     }
@@ -762,7 +773,7 @@ class PressHub_Social_TikTok_Shorts {
             PressHub_Social_Post_Images::schedule_prepare( $post_id );
         }
         PressHub_Social_Logger::warning( sprintf(
-            '%s article short job #%d (post #%d) could not be prepared after %d runs (%s); it falls back to the classic article post.',
+            '%s article short job #%d (post #%d) could not be made after %d attempts (%s); it falls back to the classic article post.',
             self::platform_label( $platform ),
             $job_id,
             $post_id,
@@ -770,6 +781,34 @@ class PressHub_Social_TikTok_Shorts {
             $error->get_error_message()
         ), [ 'job_id' => $job_id, 'error_code' => $error->get_error_code() ] );
         return true;
+    }
+
+    /**
+     * The worker could not render an article short (it reports `short_render_failed`).
+     * Like a failed preparation, the job retries with the queue's backoff; once its last
+     * attempt fails it falls back to the classic article post instead of failing for good.
+     * Test renders and YouTube (videos only) never fall back. Returns whether it fell back,
+     * in which case the job is pending again with fresh attempts for the classic post.
+     */
+    public static function fallback_after_render_failure( array $job, string $error ): bool {
+        if ( ! self::is_article_job( $job ) || self::is_test_job( $job ) || 'youtube' === ( $job['platform'] ?? '' ) ) {
+            return false;
+        }
+        $attempts     = (int) ( $job['attempts'] ?? 0 );
+        $max_attempts = (int) ( $job['max_attempts'] ?? 3 );
+        if ( $attempts < $max_attempts ) {
+            return false;
+        }
+        $wp_error = new WP_Error( 'tiktok_short_render_failed', '' !== $error ? $error : 'the worker could not render the short' );
+        if ( ! self::fallback_to_classic( $job, $wp_error, $attempts ) ) {
+            return false;
+        }
+        $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+        return PressHub_Social_Queue::update_job( (int) $job['id'], [
+            'status'       => 'pending',
+            'attempts'     => 0,
+            'scheduled_at' => $now,
+        ] );
     }
 
     /**
@@ -798,7 +837,16 @@ class PressHub_Social_TikTok_Shorts {
         $script    = $article ? self::article_text( $post_id ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
-        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() );
+        // An article's prompt also gets its title, category and excerpt: editing those
+        // without touching the text makes a new plan too.
+        $article_key = '';
+        if ( $article ) {
+            $post        = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+            $article_key = '|' . ( $post ? (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) ) : '' )
+                . '|' . self::primary_category( $post_id )
+                . '|' . ( $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '' );
+        }
+        $hash      = hash( 'sha256', $script . $article_key . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
