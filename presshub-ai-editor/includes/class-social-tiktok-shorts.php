@@ -198,7 +198,7 @@ class PressHub_Social_TikTok_Shorts {
         // $record_cut: the text goes into the AI call, so a cut is recorded
         // with it (the source check only asks whether there is any text).
         return $record_cut && class_exists( 'PressHub_AI_Knowledge_Cuts' )
-            ? PressHub_AI_Knowledge_Cuts::clip_material( $content, self::ARTICLE_TEXT_MAX_CHARS, __( 'Article text', 'presshub-ai-editor' ) )
+            ? PressHub_AI_Knowledge_Cuts::clip_material( 'social_tiktok_shorts', $content, self::ARTICLE_TEXT_MAX_CHARS, __( 'Article text', 'presshub-ai-editor' ) )
             : mb_substr( $content, 0, self::ARTICLE_TEXT_MAX_CHARS );
     }
 
@@ -858,6 +858,10 @@ class PressHub_Social_TikTok_Shorts {
         }
 
         $count     = $article ? 1 : max( 1, $count );
+        if ( ! $article && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // The podcast script is sent whole: drop an earlier article's note.
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_tiktok_shorts' );
+        }
         $script    = $article ? self::article_text( $post_id, true ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
@@ -874,6 +878,10 @@ class PressHub_Social_TikTok_Shorts {
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
+            // No AI call: nothing was sent, so nothing was cut.
+            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::forget_material( 'social_tiktok_shorts' );
+            }
             return $stored;
         }
 

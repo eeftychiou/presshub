@@ -988,7 +988,7 @@ class PressHub_AI_API_Client {
         // URL sourcing (2026-08-16): models cannot browse URLs — fetch and
         // extract each source URL server-side so the article text actually
         // reaches the model (presshub_ai_fetch_urls option / filter).
-        $sources = PressHub_AI_URL_Fetcher::process_sources( $sources );
+        $sources = PressHub_AI_URL_Fetcher::process_sources( $sources, $this->get_action() );
 
         $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions
             . "\n\nFormat the draft as clean HTML for a WordPress post: use <h2> for section headings, <p> for paragraphs and <strong> for emphasis. Do NOT use Markdown syntax (no **, ## or *), and do NOT wrap the output in code fences.";
@@ -1235,10 +1235,11 @@ class PressHub_AI_API_Client {
 
         // Strip HTML and clamp excessively long text to protect token budgets
         $clean_content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
-        if ( mb_strlen( $clean_content ) > 8000 ) {
-            $clean_content = class_exists( 'PressHub_AI_Knowledge_Cuts' )
-                ? PressHub_AI_Knowledge_Cuts::clip_material( $clean_content, 8000, __( 'Article text', 'presshub-ai-editor' ), '...' )
-                : mb_substr( $clean_content, 0, 8000 ) . '...';
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // Always called, so a text that fits drops an earlier note.
+            $clean_content = PressHub_AI_Knowledge_Cuts::clip_material( 'generate_image_prompt', $clean_content, 8000, __( 'Article text', 'presshub-ai-editor' ), '...' );
+        } elseif ( mb_strlen( $clean_content ) > 8000 ) {
+            $clean_content = mb_substr( $clean_content, 0, 8000 ) . '...';
         }
 
         $user_prompt = PressHub_AI_Image_Prompt_Templates::render( $template, $title, $clean_content );

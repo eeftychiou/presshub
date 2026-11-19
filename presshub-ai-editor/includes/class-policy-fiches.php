@@ -1652,11 +1652,20 @@ class PressHub_AI_Policy_Fiches {
         foreach ( array_keys( self::BUDGETS ) as $action ) {
             $probe  = '_' === substr( $action, -1 ) ? $action . 'x' : $action;
             $budget = self::budget_for( $probe );
-            $row    = [ 'budget' => $budget, 'fit' => 0, 'total' => count( $published ), 'too_long' => [] ];
+            $row    = [ 'budget' => $budget, 'fit' => 0, 'total' => count( $published ), 'too_long' => [], 'empty' => [] ];
             foreach ( $published as $slug => $f ) {
                 $hit = [ (string) $slug => [ 'count' => 1, 'fiche' => $f ] ];
-                if ( $budget > 0 && '' !== self::render( $hit, $probe, $budget )['text'] ) {
+                if ( $budget <= 0 ) {
+                    $row['too_long'][] = (string) $f['title'];
+                    continue;
+                }
+                $r = self::render( $hit, $probe, $budget );
+                if ( '' !== $r['text'] ) {
                     $row['fit']++;
+                } elseif ( empty( $r['left_out'] ) ) {
+                    // Nothing of it goes to this task (e.g. no framing for the
+                    // social tasks): not cut, nothing to send.
+                    $row['empty'][] = (string) $f['title'];
                 } else {
                     $row['too_long'][] = (string) $f['title'];
                 }

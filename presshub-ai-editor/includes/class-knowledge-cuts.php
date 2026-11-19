@@ -32,13 +32,17 @@ class PressHub_AI_Knowledge_Cuts {
         'material'         => 'material_left_out',
     ];
 
-    /** Material cuts noted before the next AI call (see clip_material()). */
+    /**
+     * Material cuts noted for the AI calls of one action (see clip_material()).
+     * Keyed by "for|item": the latest note for a piece of material replaces the
+     * earlier one, and a clip that fits removes it.
+     */
     private static array $pending = [];
 
     /** Material cuts of the last call_provider(), for the recorder. */
     private static ?array $last_material = null;
 
-    /** A noted cut older than this is stale (its call never ran) and is dropped. */
+    /** A noted cut older than this is stale and is dropped. */
     const PENDING_TTL = 300;
 
     /** One log line for a call whose block lost something. Never throws. */
@@ -60,51 +64,97 @@ class PressHub_AI_Knowledge_Cuts {
     // ------------------------------------------------------------------
     // Material cuts: text and lists a caller shortens before an AI call
     // (article body, podcast script, fetched pages, URL count...).
+    //
+    // Every note names the action of the call(s) that send the text ($for:
+    // an action, or a prefix ending in "_" such as "social_copy_"). A call
+    // records only the notes for its own action, so a cut never lands on an
+    // unrelated call, and every call of that action (each platform, each
+    // retry) records it. A note stays until the same material is clipped
+    // again (replaced, or removed when it fits), forget_material() drops it,
+    // or it is PENDING_TTL old.
     // ------------------------------------------------------------------
 
     /**
-     * Cut $text to $limit characters and note the cut for the next AI call.
-     * Returns the text unchanged when it fits. $suffix is appended to a cut
-     * text, as the caller did before.
+     * Cut $text to $limit characters and note the cut for the calls of $for.
+     * Returns the text unchanged when it fits (and drops an earlier note for
+     * the same material). $suffix is appended to a cut text, as the caller
+     * did before. Call it every time the text is built, not only when long.
      */
-    public static function clip_material( string $text, int $limit, string $what, string $suffix = '' ): string {
+    public static function clip_material( string $for, string $text, int $limit, string $what, string $suffix = '' ): string {
         $len = self::len( $text );
         if ( $limit <= 0 || $len <= $limit ) {
+            self::forget_material( $for, $what );
             return $text;
         }
-        self::note_material( $what, 'clipped', $limit, $len, $limit );
+        self::note_material( $for, $what, 'clipped', $limit, $len, $limit );
         return ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, $limit ) : substr( $text, 0, $limit ) ) . $suffix;
     }
 
     /**
-     * Note a cut the caller made itself. $reason 'clipped' (text cut to
-     * $kept of $needed characters, limit $limit) or 'max_items' ($needed
-     * items, only $limit sent).
+     * Note a cut the caller made itself, for the calls of $for. $reason
+     * 'clipped' (text cut to $kept of $needed characters, limit $limit) or
+     * 'max_items' ($needed items, only $limit sent).
      */
-    public static function note_material( string $what, string $reason, int $limit, int $needed, int $kept = -1 ): void {
-        if ( count( self::$pending ) >= 50 ) {
+    public static function note_material( string $for, string $what, string $reason, int $limit, int $needed, int $kept = -1 ): void {
+        $key = $for . '|' . $what;
+        if ( ! isset( self::$pending[ $key ] ) && count( self::$pending ) >= 50 ) {
             return;
         }
-        $row = [ 'item' => $what, 'reason' => $reason, 'limit' => $limit, 'needed' => $needed, 't' => time() ];
+        $row = [ 'for' => $for, 'item' => $what, 'reason' => $reason, 'limit' => $limit, 'needed' => $needed, 't' => time() ];
         if ( $kept >= 0 ) {
             $row['kept'] = $kept;
         }
-        self::$pending[] = $row;
+        self::$pending[ $key ] = $row;
+    }
+
+    /**
+     * Drop the notes for $for: one piece of material ($what), or all of them
+     * (a builder starting over, or a path that ends without its AI call).
+     */
+    public static function forget_material( string $for, ?string $what = null ): void {
+        if ( null !== $what ) {
+            unset( self::$pending[ $for . '|' . $what ] );
+            return;
+        }
+        foreach ( self::$pending as $key => $row ) {
+            if ( ( $row['for'] ?? '' ) === $for ) {
+                unset( self::$pending[ $key ] );
+            }
+        }
+    }
+
+    /** Whether notes made for $for belong to a call of $action. */
+    private static function matches( string $for, string $action ): bool {
+        if ( '' === $for ) {
+            return false;
+        }
+        if ( '_' === substr( $for, -1 ) ) {
+            return 0 === strpos( $action, $for );
+        }
+        return $for === $action;
     }
 
     /**
      * Called by call_provider() before the provider call: the cuts noted for
-     * this call become last_material() (for the generation record) and are
-     * logged once. Stale notes from a call that never ran are dropped.
+     * this call's action become last_material() (for the generation record)
+     * and are logged. Stale notes are dropped; notes for other actions wait.
      */
     public static function start_call( string $action ): void {
-        $fresh = array_values( array_filter( self::$pending, static function ( $c ) {
-            return (int) ( $c['t'] ?? 0 ) >= time() - self::PENDING_TTL;
-        } ) );
-        self::$pending       = [];
-        self::$last_material = $fresh ? array_map( static function ( $c ) { unset( $c['t'] ); return $c; }, $fresh ) : null;
+        $now   = time();
+        $fresh = [];
+        foreach ( self::$pending as $key => $row ) {
+            if ( (int) ( $row['t'] ?? 0 ) < $now - self::PENDING_TTL ) {
+                unset( self::$pending[ $key ] );
+                continue;
+            }
+            if ( self::matches( (string) ( $row['for'] ?? '' ), $action ) ) {
+                unset( $row['t'], $row['for'] );
+                $fresh[] = $row;
+            }
+        }
+        self::$last_material = $fresh ?: null;
         if ( $fresh ) {
-            self::log( 'material', $action, self::$last_material );
+            self::log( 'material', $action, $fresh );
         }
     }
 
@@ -116,7 +166,7 @@ class PressHub_AI_Knowledge_Cuts {
         self::$last_material = null;
     }
 
-    /** Drop everything noted (tests, or a caller that aborts before its call). */
+    /** Drop everything noted (tests). */
     public static function clear_pending(): void {
         self::$pending = [];
     }

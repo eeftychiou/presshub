@@ -2989,17 +2989,33 @@ class PressHub_AI_Settings_Render {
             if ( (int) $row['budget'] <= 0 ) {
                 /* translators: %s: task name */
                 $line = sprintf( __( '%s: off (limit 0)', 'presshub-ai-editor' ), $label );
-            } elseif ( (int) $row['fit'] === (int) $row['total'] ) {
-                /* translators: 1: task name, 2: number of published fiches */
-                $line = sprintf( __( '%1$s: all %2$d published fiches fit', 'presshub-ai-editor' ), $label, (int) $row['total'] );
             } else {
-                /* translators: 1: task name, 2: fiches that fit, 3: published fiches, 4: titles that do not fit */
-                $line = sprintf( __( '%1$s: %2$d of %3$d fit; too long: %4$s', 'presshub-ai-editor' ), $label, (int) $row['fit'], (int) $row['total'], implode( ', ', (array) $row['too_long'] ) );
+                $empty    = (array) ( $row['empty'] ?? [] );
+                $too_long = (array) $row['too_long'];
+                $sendable = (int) $row['total'] - count( $empty );
+                if ( empty( $too_long ) && empty( $empty ) ) {
+                    /* translators: 1: task name, 2: number of published fiches */
+                    $line = sprintf( __( '%1$s: all %2$d published fiches fit', 'presshub-ai-editor' ), $label, (int) $row['total'] );
+                } elseif ( empty( $too_long ) ) {
+                    /* translators: 1: task name, 2: number of fiches with text for this task */
+                    $line = sprintf( __( '%1$s: all %2$d fiches with text for this task fit', 'presshub-ai-editor' ), $label, $sendable );
+                } else {
+                    /* translators: 1: task name, 2: fiches that fit, 3: fiches with text for this task, 4: titles that do not fit */
+                    $line = sprintf( __( '%1$s: %2$d of %3$d fit; too long: %4$s', 'presshub-ai-editor' ), $label, (int) $row['fit'], $sendable, implode( ', ', $too_long ) );
+                }
+                if ( ! empty( $empty ) ) {
+                    /* translators: %s: fiche titles */
+                    $line .= '; ' . sprintf( __( 'nothing to send here: %s', 'presshub-ai-editor' ), implode( ', ', $empty ) );
+                }
             }
             $items .= '<li>' . esc_html( $line ) . '</li>';
         }
         return '<p class="description"><strong>' . esc_html__( 'Do the published fiches fit?', 'presshub-ai-editor' ) . '</strong> '
-            . esc_html__( 'Each fiche alone, with the limits saved above. Several fiches in one call share the limit; at most 3 are sent.', 'presshub-ai-editor' ) . '</p>'
+            . esc_html( sprintf(
+                /* translators: %d: most fiches sent in one call */
+                __( 'Each fiche alone, with the limits saved above. Several fiches in one call share the limit; at most %d are sent.', 'presshub-ai-editor' ),
+                class_exists( 'PressHub_AI_Policy_Fiches' ) ? PressHub_AI_Policy_Fiches::MAX_INJECTED : 3
+            ) ) . '</p>'
             . '<ul class="presshub-fiche-fit">' . $items . '</ul>';
     }
 

@@ -771,7 +771,7 @@ class PressHub_AI_URL_Fetcher {
             $stripped_html = preg_replace( '#<(script|style|svg|iframe|noscript)[^>]*>.*?</\1>#is', ' ', $html );
             // Recorded with this url_extract call (design principle: cuts are never silent).
             $truncated_html = class_exists( 'PressHub_AI_Knowledge_Cuts' )
-                ? PressHub_AI_Knowledge_Cuts::clip_material( (string) $stripped_html, 25000, __( 'Page HTML', 'presshub-ai-editor' ) )
+                ? PressHub_AI_Knowledge_Cuts::clip_material( 'url_extract', (string) $stripped_html, 25000, __( 'Page HTML', 'presshub-ai-editor' ) )
                 : mb_substr( $stripped_html, 0, 25000 );
 
             $sys_prompt = 'You are an accurate news article extraction engine. Given raw HTML from a news webpage, extract the main news article headline and full body text in plain text. Exclude navigation menus, footer text, advertisements, cookie notices, and related article lists. Format your response strictly as:\nTITLE: [article headline]\nBODY:\n[full article body text]';
@@ -871,8 +871,14 @@ class PressHub_AI_URL_Fetcher {
 
     /**
      * Process a sources block: keep notes, fetch URLs, replace with article text.
+     * $for is the action of the call the sources go into; the cuts are noted
+     * for it (none when it is empty).
      */
-    public static function process_sources( $sources ): string {
+    public static function process_sources( $sources, string $for = '' ): string {
+        if ( '' !== $for && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // A new sources block replaces what an earlier one noted.
+            PressHub_AI_Knowledge_Cuts::forget_material( $for );
+        }
         $sources = (string) $sources;
         if ( ! self::is_enabled() ) {
             return $sources;
@@ -888,8 +894,8 @@ class PressHub_AI_URL_Fetcher {
             $out[] = $notes;
         }
 
-        // Cuts are noted after the loop, so a page's own extraction call
-        // (url_extract) does not carry them; they belong to the caller's call.
+        // The cuts belong to the caller's call ($for), not to a page's own
+        // extraction call (url_extract).
         $cuts = [];
         if ( count( $urls ) > self::MAX_URLS ) {
             $cuts[] = [ __( 'Source URLs', 'presshub-ai-editor' ), 'max_items', self::MAX_URLS, count( $urls ), -1 ];
@@ -909,9 +915,9 @@ class PressHub_AI_URL_Fetcher {
                     . 'paste the article text manually if the rebuttal needs its content: ' . $url;
             }
         }
-        if ( $cuts && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+        if ( $cuts && '' !== $for && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
             foreach ( $cuts as $c ) {
-                PressHub_AI_Knowledge_Cuts::note_material( $c[0], $c[1], $c[2], $c[3], $c[4] );
+                PressHub_AI_Knowledge_Cuts::note_material( $for, $c[0], $c[1], $c[2], $c[3], $c[4] );
             }
         }
 

@@ -351,6 +351,10 @@ class PressHub_Social_Post_Images {
         $hash   = hash( 'sha256', $prompt . '|' . $count . '|' . $context['title'] . '|' . $context['content'] );
         $stored = function_exists( 'get_post_meta' ) ? get_post_meta( $post_id, self::PLAN_META, true ) : null;
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['images'] ) ) {
+            // No AI call: nothing was sent, so nothing was cut.
+            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::forget_material( 'social_post_images' );
+            }
             return $stored;
         }
 
@@ -435,16 +439,21 @@ class PressHub_Social_Post_Images {
     private static function article_context( int $post_id ): array {
         $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         if ( ! $post ) {
+            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::forget_material( 'social_post_images' );
+            }
             return [ 'title' => '', 'content' => '' ];
         }
         $title   = (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) );
         $content = (string) ( is_object( $post ) ? ( $post->post_content ?? '' ) : ( $post['post_content'] ?? '' ) );
         $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
         $content = trim( (string) preg_replace( '/\s+/u', ' ', html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) );
-        if ( mb_strlen( $content ) > self::CONTENT_LIMIT ) {
-            $content = class_exists( 'PressHub_AI_Knowledge_Cuts' )
-                ? PressHub_AI_Knowledge_Cuts::clip_material( $content, self::CONTENT_LIMIT, __( 'Post text', 'presshub-ai-editor' ), '...' )
-                : mb_substr( $content, 0, self::CONTENT_LIMIT ) . '...';
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // Noted for the planning call (social_post_images); a text that
+            // fits drops an earlier post's note.
+            $content = PressHub_AI_Knowledge_Cuts::clip_material( 'social_post_images', $content, self::CONTENT_LIMIT, __( 'Post text', 'presshub-ai-editor' ), '...' );
+        } elseif ( mb_strlen( $content ) > self::CONTENT_LIMIT ) {
+            $content = mb_substr( $content, 0, self::CONTENT_LIMIT ) . '...';
         }
         return [ 'title' => trim( wp_strip_all_tags( $title ) ), 'content' => $content ];
     }
