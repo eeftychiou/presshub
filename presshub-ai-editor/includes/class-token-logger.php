@@ -27,7 +27,8 @@ class PressHub_AI_Token_Logger {
      * Get the most recent LLM request captured by log_llm_request().
      *
      * @return array|null Keys: action, provider, model, prompt_tokens, completion_tokens,
-     *                    total_tokens, duration_ms, status, error. Null if none captured.
+     *                    total_tokens, duration_ms, status, error, log_id (0 when the
+     *                    row was not stored). Null if none captured.
      */
     public static function get_last_llm_request(): ?array {
         return self::$last_llm_request;
@@ -150,7 +151,7 @@ class PressHub_AI_Token_Logger {
             'error'             => $error,
         ];
 
-        return self::insert_row( [
+        $log_id = self::insert_row( [
             'action_trigger'    => sanitize_key( $action ) ?: sanitize_text_field( $action ),
             'provider'          => sanitize_text_field( $provider ),
             'model'             => sanitize_text_field( $model ),
@@ -164,6 +165,31 @@ class PressHub_AI_Token_Logger {
             'error_message'     => $error ? sanitize_textarea_field( $error ) : null,
             'metadata'          => ! empty( $metadata ) ? wp_json_encode( $metadata ) : null,
         ] );
+        self::$last_llm_request['log_id'] = (int) $log_id;
+        return $log_id;
+    }
+
+    /**
+     * Mark a logged request as failed after the fact: the provider answered, but the
+     * caller could not use the answer (e.g. broken JSON). Tokens stay as logged.
+     *
+     * @param int    $log_id Row ID returned by log_llm_request() (also in get_last_llm_request()['log_id']).
+     * @param string $error  Why the response was not usable.
+     * @return bool True when the row was updated.
+     */
+    public static function mark_failed( int $log_id, string $error ): bool {
+        global $wpdb;
+        if ( $log_id <= 0 || ! isset( $wpdb ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'update' ) ) {
+            return false;
+        }
+        $result = $wpdb->update(
+            self::get_table_name(),
+            [ 'status' => 'error', 'error_message' => sanitize_textarea_field( $error ) ],
+            [ 'id' => $log_id ],
+            [ '%s', '%s' ],
+            [ '%d' ]
+        );
+        return false !== $result;
     }
 
     /**

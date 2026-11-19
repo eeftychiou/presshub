@@ -1600,6 +1600,7 @@ class PressHub_AI_Settings_Render {
                         <option value="podcast_script"><?php echo __( 'Podcast Script', 'presshub-ai-editor' ); ?></option>
                         <option value="podcast_audio"><?php echo __( 'Podcast Audio Synthesis', 'presshub-ai-editor' ); ?></option>
                         <option value="scrape_harvest"><?php echo __( 'News Harvester', 'presshub-ai-editor' ); ?></option>
+                        <option value="social_tiktok_shorts"><?php echo __( 'Short Script (TikTok/YouTube)', 'presshub-ai-editor' ); ?></option>
                         <option value="custom_test"><?php echo __( 'Test Connection', 'presshub-ai-editor' ); ?></option>
                     </select>
                 </div>

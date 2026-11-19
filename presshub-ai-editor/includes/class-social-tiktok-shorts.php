@@ -98,6 +98,16 @@ class PressHub_Social_TikTok_Shorts {
      */
     private static $ai_caller = null;
 
+    /** Generation record kind of the AI call that writes the shorts' scripts. */
+    const RECORD_KIND_SCRIPT = 'tiktok_short_script';
+
+    /** AI calls tried for one plan before its preparation run fails. */
+    const PLAN_ATTEMPTS = 2;
+
+    /** Generation record and Usage & logs row of the last plan call (0 when none). */
+    private static $last_record_id = 0;
+    private static $last_log_id    = 0;
+
     /**
      * Optional synthesizer override for tests.
      * Signature: fn( array $short, array $job ): array{url:string,id:int,voices?:array}|WP_Error
@@ -868,14 +878,39 @@ class PressHub_Social_TikTok_Shorts {
         PressHub_Social_Logger::info( $article
             ? sprintf( 'Generating the short of article post #%d.', $post_id )
             : sprintf( 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
-        $raw = self::call_ai( $post_id, $sys_prompt, $user_prompt );
-        if ( is_wp_error( $raw ) ) {
-            return $raw;
-        }
 
-        $shorts = self::parse_plan( (string) $raw, $count, $max_words, $images );
+        // A response the plan cannot use (broken JSON, a script over the cap) is asked
+        // for once more before the preparation fails: the model rarely repeats the slip.
+        $shorts = null;
+        for ( $attempt = 1; $attempt <= self::PLAN_ATTEMPTS; $attempt++ ) {
+            $raw = self::call_ai( $post_id, $sys_prompt, $user_prompt );
+            if ( is_wp_error( $raw ) ) {
+                return $raw;
+            }
+
+            $shorts = self::parse_plan( (string) $raw, $count, $max_words, $images );
+            if ( ! is_wp_error( $shorts ) ) {
+                break;
+            }
+            self::mark_call_unusable( $shorts );
+            $last_try = $attempt >= self::PLAN_ATTEMPTS;
+            PressHub_Social_Logger::log(
+                $last_try ? 'ERROR' : 'WARNING',
+                sprintf(
+                    'TikTok shorts plan for post #%d is invalid (attempt %d of %d): %s%s',
+                    $post_id,
+                    $attempt,
+                    self::PLAN_ATTEMPTS,
+                    $shorts->get_error_message(),
+                    $last_try ? '' : ' Asking the AI again.'
+                ),
+                [ 'record_id' => self::$last_record_id, 'response' => mb_substr( (string) $raw, 0, 500 ) ]
+            );
+        }
         if ( is_wp_error( $shorts ) ) {
-            PressHub_Social_Logger::error( sprintf( 'TikTok shorts plan for post #%d is invalid: %s', $post_id, $shorts->get_error_message() ), [ 'response' => mb_substr( (string) $raw, 0, 500 ) ] );
+            if ( self::$last_record_id > 0 ) {
+                return new WP_Error( $shorts->get_error_code(), sprintf( '%s See generation record #%d.', $shorts->get_error_message(), self::$last_record_id ) );
+            }
             return $shorts;
         }
 
@@ -940,8 +975,18 @@ class PressHub_Social_TikTok_Shorts {
         if ( false === $start || false === $end || $end <= $start ) {
             return new WP_Error( 'tiktok_short_invalid_json', 'the AI response is not JSON.' );
         }
-        $decoded = json_decode( substr( $text, $start, $end - $start + 1 ), true );
-        if ( ! is_array( $decoded ) || ! is_array( $decoded['shorts'] ?? null ) || empty( $decoded['shorts'] ) ) {
+        $json    = substr( $text, $start, $end - $start + 1 );
+        $decoded = json_decode( $json, true );
+        if ( ! is_array( $decoded ) ) {
+            $json_error = function_exists( 'json_last_error_msg' ) ? json_last_error_msg() : 'Syntax error';
+            // Models sometimes misplace a closing bracket (seen on job #224:
+            // `"caption":"…"]}]}`); a structural repair keeps every value as written.
+            $decoded = json_decode( self::repair_json( $json ), true );
+            if ( ! is_array( $decoded ) ) {
+                return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'the AI response is not valid JSON (%s).', $json_error ) );
+            }
+        }
+        if ( ! is_array( $decoded['shorts'] ?? null ) || empty( $decoded['shorts'] ) ) {
             return new WP_Error( 'tiktok_short_invalid_json', 'the AI response has no "shorts" list.' );
         }
 
@@ -991,6 +1036,58 @@ class PressHub_Social_TikTok_Shorts {
             ];
         }
         return $shorts;
+    }
+
+    /**
+     * Repair the bracket structure of almost-valid JSON from a model.
+     *
+     * Outside strings, a closing bracket that does not match the innermost open one is
+     * dropped, a comma right before a closing bracket is dropped, and brackets left open
+     * at the end are closed. Strings and values are never changed.
+     */
+    public static function repair_json( string $json ): string {
+        $out       = '';
+        $stack     = [];
+        $in_string = false;
+        $escaped   = false;
+        $length    = strlen( $json );
+        for ( $i = 0; $i < $length; $i++ ) {
+            $ch = $json[ $i ];
+            if ( $in_string ) {
+                $out .= $ch;
+                if ( $escaped ) {
+                    $escaped = false;
+                } elseif ( '\\' === $ch ) {
+                    $escaped = true;
+                } elseif ( '"' === $ch ) {
+                    $in_string = false;
+                }
+                continue;
+            }
+            if ( '"' === $ch ) {
+                $in_string = true;
+                $out      .= $ch;
+            } elseif ( '{' === $ch || '[' === $ch ) {
+                $stack[] = '{' === $ch ? '}' : ']';
+                $out    .= $ch;
+            } elseif ( '}' === $ch || ']' === $ch ) {
+                if ( empty( $stack ) || end( $stack ) !== $ch ) {
+                    continue; // A stray or misplaced closer.
+                }
+                array_pop( $stack );
+                $out = rtrim( $out );
+                if ( str_ends_with( $out, ',' ) ) {
+                    $out = substr( $out, 0, -1 );
+                }
+                $out .= $ch;
+            } else {
+                $out .= $ch;
+            }
+        }
+        if ( $in_string ) {
+            return $json; // Cut off inside a string: nothing safe to repair.
+        }
+        return $out . implode( '', array_reverse( $stack ) );
     }
 
     /**
@@ -1376,6 +1473,8 @@ class PressHub_Social_TikTok_Shorts {
      * @return string|WP_Error
      */
     private static function call_ai( int $post_id, string $sys_prompt, string $user_prompt ) {
+        self::$last_record_id = 0;
+        self::$last_log_id    = 0;
         if ( null !== self::$ai_caller ) {
             $result = call_user_func( self::$ai_caller, $sys_prompt, $user_prompt );
         } else {
@@ -1400,7 +1499,11 @@ class PressHub_Social_TikTok_Shorts {
             }
             if ( null !== $client ) {
                 $client->suppress_provider_prompt_log = false;
-                PressHub_AI_API_Client::finish_generation_record( $t0, 'generic', $client, $sys_prompt, $user_prompt, $result, [
+                $last_request = class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'get_last_llm_request' )
+                    ? PressHub_AI_Token_Logger::get_last_llm_request()
+                    : null;
+                self::$last_log_id    = (int) ( $last_request['log_id'] ?? 0 );
+                self::$last_record_id = PressHub_AI_API_Client::finish_generation_record( $t0, self::RECORD_KIND_SCRIPT, $client, $sys_prompt, $user_prompt, $result, [
                     'post_id' => $post_id,
                     'config'  => [ 'action' => 'social_tiktok_shorts', 'platform' => 'tiktok' ],
                 ] );
@@ -1415,6 +1518,21 @@ class PressHub_Social_TikTok_Shorts {
             return new WP_Error( 'empty_ai_response', 'the AI provider returned an empty response for the TikTok shorts.' );
         }
         return $result;
+    }
+
+    /**
+     * The last AI call answered, but its response could not be used: show that as an
+     * error on its generation record and on its Usage & logs row, which both said
+     * "success" because the provider call itself worked.
+     */
+    private static function mark_call_unusable( WP_Error $error ): void {
+        $message = 'Response not usable: ' . $error->get_error_message();
+        if ( self::$last_record_id > 0 && class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            PressHub_AI_Generation_Recorder::update_record( self::$last_record_id, [ 'status' => 'error', 'error_message' => $message ] );
+        }
+        if ( self::$last_log_id > 0 && class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'mark_failed' ) ) {
+            PressHub_AI_Token_Logger::mark_failed( self::$last_log_id, $message );
+        }
     }
 
     private static function fail( int $job_id, WP_Error $error ): WP_Error {

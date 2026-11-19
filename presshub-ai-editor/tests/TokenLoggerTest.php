@@ -45,6 +45,23 @@ function test_token_logger() {
     assert( 'briefing_curation' === $row1['action_trigger'], 'Action recorded' );
     echo '  [2] Log LLM request: OK' . PHP_EOL;
 
+    // 2b. The row ID is captured for the caller, which can mark the row failed later.
+    $last = PressHub_AI_Token_Logger::get_last_llm_request();
+    if ( (int) ( $last['log_id'] ?? 0 ) !== (int) $id1 ) {
+        throw new RuntimeException( 'get_last_llm_request() carries the log_id of the row' );
+    }
+    if ( ! PressHub_AI_Token_Logger::mark_failed( (int) $id1, 'Response not usable: broken JSON' ) ) {
+        throw new RuntimeException( 'mark_failed() updates the row' );
+    }
+    $row1 = $wpdb->tables['wp_presshub_ai_token_logs'][0];
+    if ( 'error' !== $row1['status'] || 'Response not usable: broken JSON' !== $row1['error_message'] || 2300 !== (int) $row1['total_tokens'] ) {
+        throw new RuntimeException( 'A row marked failed shows error and the reason, and keeps its tokens' );
+    }
+    if ( PressHub_AI_Token_Logger::mark_failed( 0, 'x' ) ) {
+        throw new RuntimeException( 'mark_failed() ignores an unknown row' );
+    }
+    echo '  [2b] Mark a logged request failed: OK' . PHP_EOL;
+
     // 3. Log TTS request
     $id2 = PressHub_AI_Token_Logger::log_tts_request(
         'podcast_audio',
