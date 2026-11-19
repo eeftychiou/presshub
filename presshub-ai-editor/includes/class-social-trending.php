@@ -51,6 +51,8 @@ class PressHub_AI_Social_Trending {
     const AI_IMAGE_META = '_presshub_trending_ai_image_queued';
     /** Post meta: the QA gate release waits for the AI image job, so social shares get the AI image. */
     const AI_RELEASE_META = '_presshub_trending_ai_release_pending';
+    /** What ai_image_texts() cut when the AI image job was queued (agents.md rule 13). */
+    const AI_IMAGE_CUTS_META = '_presshub_trending_ai_image_cuts';
     /** Longest wait for the AI image job before the roundup is released with the stand-in picture. */
     const AI_IMAGE_MAX_WAIT = 900;
     /** Post meta: the watchdog released this roundup before its AI image arrived. */
@@ -1042,6 +1044,14 @@ class PressHub_AI_Social_Trending {
             return $b['score'] <=> $a['score'];
         } );
         $picked = array_slice( $cands, 0, PressHub_AI_Settings_Storage::get_social_trending_briefing_count(), true );
+        if ( count( $cands ) > count( $picked ) ) {
+            // Design principle: a limit that leaves content out says so.
+            self::log( 'info', 'Social trending: the briefing count left out lower-scored posts.', [
+                'picked'    => count( $picked ),
+                'left_out'  => count( $cands ) - count( $picked ),
+                'limit'     => PressHub_AI_Settings_Storage::get_social_trending_briefing_count(),
+            ] );
+        }
         foreach ( array_keys( $picked ) as $key ) {
             $pool[ $key ]['used_in'] = $date . '|' . $edition;
         }
@@ -1061,12 +1071,14 @@ class PressHub_AI_Social_Trending {
         $lines   = [];
         $lines[] = 'Δημοφιλείς αναρτήσεις για την Κύπρο στα μέσα κοινωνικής δικτύωσης, με βάση τις αντιδράσεις των χρηστών. Δείχνουν τι συζητά το κοινό: είναι απόψεις και ισχυρισμοί λογαριασμών, όχι επιβεβαιωμένες ειδήσεις. Αν χρησιμοποιηθούν, να παρουσιαστούν ως σύντομη αναφορά στη δημόσια συζήτηση, με απόδοση στον λογαριασμό.';
         $keys    = [];
+        $cut     = [];
         foreach ( $items as $i => $it ) {
             $keys[] = (string) $it['key'];
             $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? $it['platform'];
             $name   = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : (string) $it['handle'];
             $text   = trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) );
             if ( ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text ) ) > self::BRIEFING_TEXT_CHARS ) {
+                $cut[] = '@' . $it['handle'] . ' (' . ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text ) ) . ')';
                 $text = ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, self::BRIEFING_TEXT_CHARS ) : substr( $text, 0, self::BRIEFING_TEXT_CHARS ) ) . '…';
             }
             $lines[] = sprintf(
@@ -1087,6 +1099,9 @@ class PressHub_AI_Social_Trending {
         $url     = $roundup_id > 0 && function_exists( 'get_permalink' ) ? (string) get_permalink( $roundup_id ) : '';
         if ( '' === $url ) {
             $url = (string) ( $items[0]['url'] ?? '' );
+        }
+        if ( $cut ) {
+            self::log( 'info', sprintf( 'Social trending: %d post text(s) cut to %d characters for the briefing.', count( $cut ), self::BRIEFING_TEXT_CHARS ), [ 'posts' => $cut ] );
         }
         return [
             'id'             => 'st_' . substr( md5( implode( ',', $keys ) ), 0, 12 ),
@@ -1401,13 +1416,27 @@ class PressHub_AI_Social_Trending {
         ] );
     }
 
-    /** The posts as the prompt lists them: rank, platform, author, numbers, text. */
+    /**
+     * The posts as the prompt lists them: rank, platform, author, numbers, text.
+     * Each post text cut to SUMMARY_POST_TEXT_CHARS is noted for the summary
+     * call (social_trending_summary).
+     */
     public static function summary_posts_text( array $items ): string {
+        $cuts = class_exists( 'PressHub_AI_Knowledge_Cuts' );
+        if ( $cuts ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_trending_summary' );
+        }
         $lines = [];
         foreach ( array_values( $items ) as $i => $it ) {
             $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? (string) $it['platform'];
             $author = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : ( '' !== (string) $it['handle'] ? '@' . $it['handle'] : $label );
+            $full   = self::strlen( trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) ) );
             $text   = self::excerpt( (string) $it['text'], self::SUMMARY_POST_TEXT_CHARS );
+            if ( $cuts && $full > self::SUMMARY_POST_TEXT_CHARS ) {
+                // Kept: the text sent, without the closing "…".
+                /* translators: 1: rank, 2: author */
+                PressHub_AI_Knowledge_Cuts::note_material( 'social_trending_summary', sprintf( __( 'Trending post %1$d (%2$s)', 'presshub-ai-editor' ), $i + 1, $author ), 'clipped', self::SUMMARY_POST_TEXT_CHARS, $full, self::strlen( $text ) - 1 );
+            }
             $lines[] = sprintf(
                 '%d. [%s] %s (%s likes/reactions, %s comments, %s shares): %s',
                 $i + 1,
@@ -1448,10 +1477,12 @@ class PressHub_AI_Social_Trending {
             $raw = call_user_func( self::$summary_caller, $sys, $user );
         } else {
             if ( ! class_exists( 'PressHub_AI_API_Client' ) || ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+                self::forget_summary_cuts();
                 return new WP_Error( 'missing_api_client', 'The AI client is not loaded.' );
             }
             $config = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
             if ( is_wp_error( $config ) ) {
+                self::forget_summary_cuts();
                 return $config;
             }
             $client = null;
@@ -1472,6 +1503,7 @@ class PressHub_AI_Social_Trending {
                 ] );
             }
         }
+        self::forget_summary_cuts();
         if ( is_wp_error( $raw ) ) {
             return $raw;
         }
@@ -1548,6 +1580,13 @@ class PressHub_AI_Social_Trending {
             $ok = true;
         }
         return self::$oembed_cache[ $url ] = $ok;
+    }
+
+    /** The summary call has run (or will not): its post cuts are dropped. */
+    private static function forget_summary_cuts(): void {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_trending_summary' );
+        }
     }
 
     private static function excerpt( string $text, int $max = 400 ): string {
@@ -1899,7 +1938,8 @@ class PressHub_AI_Social_Trending {
         if ( function_exists( 'get_post_meta' ) && '' !== (string) get_post_meta( $post_id, self::AI_IMAGE_META, true ) ) {
             return;
         }
-        $texts = self::ai_image_texts( $items );
+        $cuts  = [];
+        $texts = self::ai_image_texts( $items, $cuts );
         if ( empty( $texts ) ) {
             self::log( 'info', 'Social trending: no post text for an AI image; using the top post picture.', [ 'post_id' => $post_id ] );
             return;
@@ -1909,20 +1949,56 @@ class PressHub_AI_Social_Trending {
             return;
         }
         update_post_meta( $post_id, self::AI_IMAGE_META, (string) time() );
+        // The job runs in another request: keep the cuts with the post so the
+        // image prompt call records them (agents.md rule 13).
+        if ( ! empty( $cuts ) ) {
+            update_post_meta( $post_id, self::AI_IMAGE_CUTS_META, $cuts );
+        } elseif ( function_exists( 'delete_post_meta' ) ) {
+            delete_post_meta( $post_id, self::AI_IMAGE_CUTS_META );
+        }
         // Release (and so the social shares, which copy the featured image) waits for the AI image.
         update_post_meta( $post_id, self::AI_RELEASE_META, '1' );
     }
 
-    /** Up to 10 post texts, each cut to 300 characters. */
-    private static function ai_image_texts( array $items ): array {
+    /**
+     * Up to 10 post texts, each cut to 300 characters. $cuts gets what the
+     * two limits left out: [ 'what', 'reason', 'limit', 'needed', 'kept' ].
+     */
+    private static function ai_image_texts( array $items, ?array &$cuts = null ): array {
         $texts = [];
-        foreach ( array_slice( $items, 0, 10 ) as $it ) {
+        $cuts  = [];
+        foreach ( array_slice( $items, 0, 10 ) as $i => $it ) {
             $text = trim( (string) ( $it['text'] ?? '' ) );
-            if ( '' !== $text ) {
-                $texts[] = self::excerpt( $text, 300 );
+            if ( '' === $text ) {
+                continue;
+            }
+            $cut     = self::excerpt( $text, 300 );
+            $texts[] = $cut;
+            $full    = self::strlen( (string) preg_replace( '/\s+/u', ' ', $text ) );
+            if ( $full > 300 ) {
+                $cuts[] = [ 'what' => sprintf( 'Trending post %d', $i + 1 ), 'reason' => 'clipped', 'limit' => 300, 'needed' => $full, 'kept' => self::strlen( $cut ) - 1 ];
             }
         }
+        $with_text_after = count( array_filter( array_slice( $items, 10 ), static function ( $it ) {
+            return '' !== trim( (string) ( is_array( $it ) ? ( $it['text'] ?? '' ) : '' ) );
+        } ) );
+        if ( $with_text_after > 0 ) {
+            $cuts[] = [ 'what' => 'Trending posts', 'reason' => 'max_items', 'limit' => 10, 'needed' => count( $items ), 'kept' => min( 10, count( $items ) ) ];
+        }
         return $texts;
+    }
+
+    /** Note the cuts queue_ai_featured_image() kept with the post, for the image prompt call. */
+    private static function note_ai_image_cuts( int $post_id ): void {
+        if ( ! class_exists( 'PressHub_AI_Knowledge_Cuts' ) || ! function_exists( 'get_post_meta' ) ) {
+            return;
+        }
+        $cuts = get_post_meta( $post_id, self::AI_IMAGE_CUTS_META, true );
+        foreach ( is_array( $cuts ) ? array_slice( $cuts, 0, 20 ) : [] as $c ) {
+            if ( is_array( $c ) && isset( $c['what'], $c['reason'] ) ) {
+                PressHub_AI_Knowledge_Cuts::note_material( 'generate_image_prompt', (string) $c['what'], (string) $c['reason'], (int) ( $c['limit'] ?? 0 ), (int) ( $c['needed'] ?? 0 ), (int) ( $c['kept'] ?? -1 ) );
+            }
+        }
     }
 
     /**
@@ -1997,7 +2073,18 @@ class PressHub_AI_Social_Trending {
             }
             require_once __DIR__ . '/class-api-client.php';
             $client = new PressHub_AI_API_Client();
-            $prompt = $client->analyze_article_for_image_prompt( $content, $title, $tpl['template'], $tpl['id'] );
+            // The texts were cut when the job was queued: record those cuts with this call.
+            self::note_ai_image_cuts( $post_id );
+            try {
+                $prompt = $client->analyze_article_for_image_prompt( $content, $title, $tpl['template'], $tpl['id'] );
+            } finally {
+                if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    PressHub_AI_Knowledge_Cuts::forget_material( 'generate_image_prompt' );
+                }
+                if ( function_exists( 'delete_post_meta' ) ) {
+                    delete_post_meta( $post_id, self::AI_IMAGE_CUTS_META );
+                }
+            }
             if ( is_wp_error( $prompt ) || '' === trim( (string) $prompt ) ) {
                 self::log( 'warning', 'Social trending: AI image prompt failed; using the top post picture.', [ 'error' => is_wp_error( $prompt ) ? $prompt->get_error_message() : 'empty prompt' ] );
                 return 0;

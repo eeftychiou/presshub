@@ -250,6 +250,7 @@ class PressHub_Social_Post_Images {
 
         $style   = PressHub_Social_Settings_Storage::get_post_image_style();
         $context = self::article_context( $post_id );
+        self::forget_cuts(); // the image library makes no AI call with it
         foreach ( $pending as $job ) {
             $job_id = (int) $job['id'];
             $meta   = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ];
@@ -360,12 +361,14 @@ class PressHub_Social_Post_Images {
 
         $context = self::article_context( $post_id );
         if ( '' === trim( $context['title'] . $context['content'] ) ) {
+            self::forget_cuts();
             return new WP_Error( 'post_images_no_content', sprintf( 'post #%d has no title or text to plan images from.', $post_id ) );
         }
 
         $hash   = hash( 'sha256', $prompt . '|' . $count . '|' . $context['title'] . '|' . $context['content'] );
         $stored = function_exists( 'get_post_meta' ) ? get_post_meta( $post_id, self::PLAN_META, true ) : null;
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['images'] ) ) {
+            self::forget_cuts(); // no AI call: nothing was sent, so nothing was cut
             return $stored;
         }
 
@@ -387,32 +390,38 @@ class PressHub_Social_Post_Images {
         $images     = null;
         $record_ids = [];
         $prompt_now = $user_prompt;
-        for ( $attempt = 1; $attempt <= self::PLAN_ATTEMPTS; $attempt++ ) {
-            $raw = self::call_ai( $post_id, $sys_prompt, $prompt_now );
-            if ( self::$last_record_id > 0 ) {
-                $record_ids[] = self::$last_record_id;
-            }
-            if ( is_wp_error( $raw ) && 'empty_ai_response' !== $raw->get_error_code() ) {
-                // Provider errors are not retried here (the run is retried with backoff).
-                return ( $attempt > 1 && ! empty( $record_ids ) ) ? new WP_Error( $raw->get_error_code(), $raw->get_error_message() . PressHub_Social_AI_Json::records_suffix( $record_ids ) ) : $raw;
-            }
-
-            $images = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count );
-            if ( ! is_wp_error( $images ) ) {
-                if ( ! empty( self::$last_repairs ) ) {
-                    $note = PressHub_Social_AI_Json::note_repair( self::$last_record_id, self::$last_repairs );
-                    PressHub_Social_Logger::warning( sprintf( 'AI post image plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
+        // Every attempt records the post text cut; once the loop is over
+        // (plan, failure or provider error) it is dropped.
+        try {
+            for ( $attempt = 1; $attempt <= self::PLAN_ATTEMPTS; $attempt++ ) {
+                $raw = self::call_ai( $post_id, $sys_prompt, $prompt_now );
+                if ( self::$last_record_id > 0 ) {
+                    $record_ids[] = self::$last_record_id;
                 }
-                break;
+                if ( is_wp_error( $raw ) && 'empty_ai_response' !== $raw->get_error_code() ) {
+                    // Provider errors are not retried here (the run is retried with backoff).
+                    return ( $attempt > 1 && ! empty( $record_ids ) ) ? new WP_Error( $raw->get_error_code(), $raw->get_error_message() . PressHub_Social_AI_Json::records_suffix( $record_ids ) ) : $raw;
+                }
+
+                $images = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count );
+                if ( ! is_wp_error( $images ) ) {
+                    if ( ! empty( self::$last_repairs ) ) {
+                        $note = PressHub_Social_AI_Json::note_repair( self::$last_record_id, self::$last_repairs );
+                        PressHub_Social_Logger::warning( sprintf( 'AI post image plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
+                    }
+                    break;
+                }
+                PressHub_Social_AI_Json::mark_unusable( self::$last_record_id, self::$last_log_id, $images );
+                $last_try = $attempt >= self::PLAN_ATTEMPTS;
+                PressHub_Social_Logger::log(
+                    $last_try ? 'ERROR' : 'WARNING',
+                    sprintf( 'AI post image plan for post #%d is invalid (attempt %d of %d): %s%s', $post_id, $attempt, self::PLAN_ATTEMPTS, $images->get_error_message(), $last_try ? '' : ' Asking the AI again.' ),
+                    [ 'record_ids' => $record_ids, 'response' => is_wp_error( $raw ) ? '' : mb_substr( (string) $raw, 0, 500 ) ]
+                );
+                $prompt_now = PressHub_Social_AI_Json::retry_prompt( $user_prompt, $images );
             }
-            PressHub_Social_AI_Json::mark_unusable( self::$last_record_id, self::$last_log_id, $images );
-            $last_try = $attempt >= self::PLAN_ATTEMPTS;
-            PressHub_Social_Logger::log(
-                $last_try ? 'ERROR' : 'WARNING',
-                sprintf( 'AI post image plan for post #%d is invalid (attempt %d of %d): %s%s', $post_id, $attempt, self::PLAN_ATTEMPTS, $images->get_error_message(), $last_try ? '' : ' Asking the AI again.' ),
-                [ 'record_ids' => $record_ids, 'response' => is_wp_error( $raw ) ? '' : mb_substr( (string) $raw, 0, 500 ) ]
-            );
-            $prompt_now = PressHub_Social_AI_Json::retry_prompt( $user_prompt, $images );
+        } finally {
+            self::forget_cuts();
         }
         if ( is_wp_error( $images ) ) {
             return new WP_Error( $images->get_error_code(), $images->get_error_message() . PressHub_Social_AI_Json::records_suffix( $record_ids ) );
@@ -472,16 +481,28 @@ class PressHub_Social_Post_Images {
     private static function article_context( int $post_id ): array {
         $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         if ( ! $post ) {
+            self::forget_cuts();
             return [ 'title' => '', 'content' => '' ];
         }
         $title   = (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) );
         $content = (string) ( is_object( $post ) ? ( $post->post_content ?? '' ) : ( $post['post_content'] ?? '' ) );
         $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
         $content = trim( (string) preg_replace( '/\s+/u', ' ', html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) );
-        if ( mb_strlen( $content ) > self::CONTENT_LIMIT ) {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // Noted for the planning call (social_post_images); a text that
+            // fits drops an earlier post's note.
+            $content = PressHub_AI_Knowledge_Cuts::clip_material( 'social_post_images', $content, self::CONTENT_LIMIT, __( 'Post text', 'presshub-ai-editor' ), '...' );
+        } elseif ( mb_strlen( $content ) > self::CONTENT_LIMIT ) {
             $content = mb_substr( $content, 0, self::CONTENT_LIMIT ) . '...';
         }
         return [ 'title' => trim( wp_strip_all_tags( $title ) ), 'content' => $content ];
+    }
+
+    /** Drop the post text cut noted for the planning call (social_post_images). */
+    private static function forget_cuts(): void {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_post_images' );
+        }
     }
 
     private static function call_ai( int $post_id, string $sys_prompt, string $user_prompt ) {

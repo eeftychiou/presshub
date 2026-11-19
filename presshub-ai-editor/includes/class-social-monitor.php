@@ -306,6 +306,7 @@ class PressHub_AI_Social_Monitor {
             uasort( $posts, static function ( $a, $b ) {
                 return (int) ( $b['received_ts'] ?? 0 ) <=> (int) ( $a['received_ts'] ?? 0 );
             } );
+            self::log( 'info', 'Social monitor: the stored post limit removed the oldest posts.', [ 'removed' => count( $posts ) - self::MAX_STORED, 'limit' => self::MAX_STORED ] );
             $posts = array_slice( $posts, 0, self::MAX_STORED, true );
         }
         update_option( self::OPTION_POSTS, $posts, false );
@@ -347,6 +348,9 @@ class PressHub_AI_Social_Monitor {
         $counts     = [];
 
         // Newest first, so the per-account cap keeps the latest posts whatever order the worker sent.
+        if ( count( $posts ) > 500 ) {
+            self::log( 'info', 'Social monitor: a worker batch over 500 posts was cut to 500.', [ 'posts' => count( $posts ), 'limit' => 500 ] );
+        }
         $posts = array_values( array_filter( array_slice( $posts, 0, 500 ), 'is_array' ) );
         $ts    = static function ( array $p ): int {
             $c = $p['created_at'] ?? '';
@@ -572,6 +576,9 @@ class PressHub_AI_Social_Monitor {
             return (int) $b['created_ts'] <=> (int) $a['created_ts'];
         } );
         $picked = array_slice( $candidates, 0, $limit, true );
+        if ( count( $candidates ) > count( $picked ) ) {
+            self::log( 'info', 'Social monitor: the briefing limit left out older posts.', [ 'picked' => count( $picked ), 'left_out' => count( $candidates ) - count( $picked ), 'limit' => $limit ] );
+        }
 
         $articles = [];
         foreach ( $picked as $id => $p ) {

@@ -483,7 +483,8 @@ class PressHub_AI_Stakeholders {
                 $known[] = $f['name'] . ( '' !== $f['role'] ? ' (' . $f['role'] . ')' : '' );
             }
         }
-        $known_str     = empty( $known ) ? 'Κανένα.' : implode( '; ', array_slice( $known, 0, 80 ) );
+        $known_max     = 80;
+        $known_str     = empty( $known ) ? 'Κανένα.' : implode( '; ', array_slice( $known, 0, $known_max ) );
         $edition_label = 'noon' === $edition ? 'Μεσημβρινή Ενημέρωση' : 'Πρωινή Ενημέρωση';
         $sys           = str_replace(
             [ '{date}', '{edition}', '{known_people}' ],
@@ -500,7 +501,15 @@ class PressHub_AI_Stakeholders {
         }
 
         $t0  = class_exists( 'PressHub_AI_Generation_Recorder' ) ? PressHub_AI_Generation_Recorder::begin_call() : microtime( true );
+        $cut = count( $known ) > $known_max && class_exists( 'PressHub_AI_Knowledge_Cuts' );
+        if ( $cut ) {
+            // Only the first people seen in the last 60 days are listed: recorded with this call.
+            PressHub_AI_Knowledge_Cuts::note_material( 'memory_stakeholders', __( 'Known people', 'presshub-ai-editor' ), 'max_items', $known_max, count( $known ) );
+        }
         $raw = $api_client->call_provider( $sys, $user, true, [], null, [ 'action_trigger' => 'memory_stakeholders', 'briefing_date' => $date, 'edition' => $edition ] );
+        if ( $cut ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'memory_stakeholders' );
+        }
         $rec = 0;
         if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
             $rec = (int) PressHub_AI_Generation_Recorder::finish_call( $t0, 'memory_stakeholders', $api_client, $sys, $user, $raw, [

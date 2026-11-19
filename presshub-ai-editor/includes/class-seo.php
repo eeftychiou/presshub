@@ -109,7 +109,7 @@ class PressHub_AI_SEO {
 
         $user_prompt = strtr( $template, [
             '{title}'         => trim( $title ),
-            '{content}'       => self::excerpt( $content, 2000 ),
+            '{content}'       => self::excerpt( $content, 2000, 'generate_image_metadata' ),
             '{visual_prompt}' => trim( $visual_prompt ),
         ] );
 
@@ -211,7 +211,7 @@ class PressHub_AI_SEO {
         $max_tags    = self::max_tags();
         $user_prompt = strtr( $template, [
             '{title}'         => trim( $title ),
-            '{content}'       => self::excerpt( self::clean_text( $content ), self::CONTENT_EXCERPT_CHARS ),
+            '{content}'       => self::excerpt( self::clean_text( $content ), self::CONTENT_EXCERPT_CHARS, 'generate_post_seo' ),
             '{max_tags}'      => (string) $max_tags,
             '{existing_tags}' => self::existing_tags_list(),
         ] );
@@ -532,7 +532,7 @@ class PressHub_AI_SEO {
 
         $user_prompt = strtr( $template, [
             '{title}'         => trim( (string) ( $input['title'] ?? '' ) ),
-            '{content}'       => self::excerpt( self::clean_text( (string) ( $input['content'] ?? '' ) ), self::CONTENT_EXCERPT_CHARS ),
+            '{content}'       => self::excerpt( self::clean_text( (string) ( $input['content'] ?? '' ) ), self::CONTENT_EXCERPT_CHARS, 'seo_review' ),
             '{seo_facts}'     => self::facts_text( $input, $checks ),
             '{existing_tags}' => self::existing_tags_list(),
         ] );
@@ -764,8 +764,13 @@ class PressHub_AI_SEO {
         return $text;
     }
 
-    private static function excerpt( string $text, int $max ): string {
+    /** $for: the action of the call the excerpt goes into (its cut is noted for it). */
+    private static function excerpt( string $text, int $max, string $for ): string {
         $text = trim( $text );
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // Every excerpt here goes into an AI prompt: record the cut.
+            return PressHub_AI_Knowledge_Cuts::clip_material( $for, $text, $max, __( 'Article text', 'presshub-ai-editor' ), '...' );
+        }
         return mb_strlen( $text ) > $max ? mb_substr( $text, 0, $max ) . '...' : $text;
     }
 
@@ -819,7 +824,12 @@ class PressHub_AI_SEO {
             $client = new PressHub_AI_API_Client( $module );
             $raw    = $client->call_seo_json( $sys_prompt, $user_prompt, $action, $post_id );
         } catch ( Throwable $t ) {
-            return new WP_Error( 'seo_call_failed', $t->getMessage() );
+            $raw = new WP_Error( 'seo_call_failed', $t->getMessage() );
+        }
+        // The call took its excerpt cut; when it never ran (no API key, an
+        // error before the provider) the note goes too.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( $action );
         }
         if ( is_wp_error( $raw ) ) {
             return $raw;

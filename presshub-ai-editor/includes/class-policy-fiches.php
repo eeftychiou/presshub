@@ -1636,6 +1636,44 @@ class PressHub_AI_Policy_Fiches {
     }
 
     /**
+     * For each task with a policy fiche budget: how many published fiches fit
+     * on their own (the most a task can then get), and the titles that do
+     * not. Shown next to the budgets in Settings so an editor sees what a
+     * limit will cut before a call does.
+     *
+     * 'empty' lists the fiches with nothing for the task (not cut).
+     *
+     * @return array<string,array{budget:int,fit:int,total:int,too_long:string[],empty:string[]}>
+     */
+    public static function fit_report(): array {
+        $published = array_filter( self::all(), static function ( $f ) { return 'published' === ( $f['status'] ?? '' ); } );
+        $out       = [];
+        foreach ( array_keys( self::BUDGETS ) as $action ) {
+            $probe  = '_' === substr( $action, -1 ) ? $action . 'x' : $action;
+            $budget = self::budget_for( $probe );
+            $row    = [ 'budget' => $budget, 'fit' => 0, 'total' => count( $published ), 'too_long' => [], 'empty' => [] ];
+            foreach ( $published as $slug => $f ) {
+                $hit = [ (string) $slug => [ 'count' => 1, 'fiche' => $f ] ];
+                if ( $budget <= 0 ) {
+                    continue; // the task is off: nothing is sent, nothing is cut
+                }
+                $r = self::render( $hit, $probe, $budget );
+                if ( '' !== $r['text'] ) {
+                    $row['fit']++;
+                } elseif ( empty( $r['left_out'] ) ) {
+                    // Nothing of it goes to this task (e.g. no framing for the
+                    // social tasks): not cut, nothing to send.
+                    $row['empty'][] = (string) $f['title'];
+                } else {
+                    $row['too_long'][] = (string) $f['title'];
+                }
+            }
+            $out[ $action ] = $row;
+        }
+        return $out;
+    }
+
+    /**
      * Common mistakes in a fiche, as plain sentences ([] when none).
      */
     public static function core_warnings( array $f ): array {

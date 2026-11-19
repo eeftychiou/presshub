@@ -445,8 +445,12 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $article_content = isset( $_POST['article_content'] ) ? (string) wp_unslash( $_POST['article_content'] ) : '';
+        // Bytes, not characters: the cap protects the request size. The cut
+        // is noted right before the chat call that sends the article.
+        $article_bytes_cut = 0;
         if ( strlen( $article_content ) > 200000 ) {
-            $article_content = substr( $article_content, 0, 200000 );
+            $article_bytes_cut = strlen( $article_content );
+            $article_content   = substr( $article_content, 0, 200000 );
         }
         $article_title = isset( $_POST['article_title'] ) ? sanitize_text_field( wp_unslash( $_POST['article_title'] ) ) : '';
 
@@ -454,7 +458,8 @@ class PressHub_AI_Ajax_Handlers {
         if ( '' === trim( $article_content ) && $post_id > 0 ) {
             $existing_post = get_post( $post_id );
             if ( $existing_post ) {
-                $article_content = (string) $existing_post->post_content;
+                $article_bytes_cut = 0; // the stored post is sent, not the cut request text
+                $article_content   = (string) $existing_post->post_content;
                 if ( '' === trim( $article_title ) ) {
                     $article_title = (string) $existing_post->post_title;
                 }
@@ -533,9 +538,16 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
             $sys = apply_filters( 'presshub_ai_composed_chat_system_prompt', $sys );
             $gen_t0 = PressHub_AI_API_Client::begin_generation_record();
+            $cut_for = $api->get_action();
+            if ( $article_bytes_cut && '' !== trim( $article_content ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::note_material( $cut_for, __( 'Article text', 'presshub-ai-editor' ), 'clipped', 200000, $article_bytes_cut, 200000, 'bytes' );
+            }
             $api->suppress_provider_prompt_log = true;
             $result = $api->call_provider( $sys, $prompt, false, [] );
             $api->suppress_provider_prompt_log = false;
+            if ( $article_bytes_cut && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::forget_material( $cut_for, __( 'Article text', 'presshub-ai-editor' ) );
+            }
             // Issue #140 - copilot chat generation record. Linked to the post when there is one;
             // otherwise the user is identified by config.user_id (and inputs.user_id).
             PressHub_AI_API_Client::finish_generation_record(
