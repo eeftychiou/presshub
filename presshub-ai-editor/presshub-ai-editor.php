@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.67.0
+ * Version: 2.68.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -157,7 +157,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.67.0' );
+define( 'PRESSHUB_AI_VERSION', '2.68.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -236,6 +236,7 @@ if ( function_exists( 'add_action' ) ) {
     add_action( 'before_delete_post', [ 'PressHub_AI_Podcast_Translations', 'on_before_delete_post' ] );
 }
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-podcast-mp3.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
@@ -392,6 +393,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( PressHub_AI_Social_Trending::CRON_HOOK );
     if ( function_exists( 'wp_unschedule_hook' ) ) {
         wp_unschedule_hook( PressHub_AI_Social_Trending::AI_IMAGE_HOOK ); // Its events carry arguments.
+        wp_unschedule_hook( PressHub_AI_Podcast_Mp3::DELETE_WAV_HOOK );
     }
     PressHub_AI_Memory_Rollup_Builder::clear_cron();
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
@@ -481,6 +483,7 @@ function presshub_ai_init() {
     PressHub_Settings_Cleanup::register_hooks();
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
+    PressHub_AI_Podcast_Mp3::register_hooks();
     PressHub_AI_Social_Trending::register_hooks();
     PressHub_AI_Research_Cleanup::register();
     if ( class_exists( 'PressHub_AI_Log_Exposure_Check' ) ) {

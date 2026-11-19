@@ -154,6 +154,9 @@ npm run login -- facebook --reader
 ```
 `PRESSHUB_TRENDING_DISABLED=true` turns it off on this worker.
 
+### Podcast MP3 files
+Gemini voices come back as WAV, so WordPress saves each morning and noon episode as a WAV file (about 32 MB for 11 minutes), and the site's host has no MP3 encoder. On every poll the worker asks `POST /wp-json/presshub-social/v1/worker/audio/claim` for one waiting episode, downloads the WAV, encodes a mono MP3 with the bundled ffmpeg at the bitrate WordPress sends (PressHub → Settings → Daily Briefing → **Podcast MP3 bitrate**, default 64 kbps: about 5 MB) and sends it to `POST /worker/audio/complete`. WordPress then plays the MP3 in the post, gives it to the social jobs and deletes the WAV a day later. A failed conversion goes to `POST /worker/audio/fail` and is tried again on a later poll, three times in all. Episodes made while the worker is off are converted when it comes back. `PRESSHUB_MP3_DISABLED=true` turns it off on this worker.
+
 ---
 
 ## 📡 API Endpoints
