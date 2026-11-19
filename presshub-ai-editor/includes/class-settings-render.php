@@ -787,6 +787,18 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_audio_outro_sfx_field(); ?>
                                 </td>
                             </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_podcast_mp3_enabled"><?php echo __( 'Podcast MP3 files', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_switch_field( 'presshub_ai_podcast_mp3_enabled', __( 'Convert each podcast episode to MP3', 'presshub-ai-editor' ), __( 'The worker on your PC converts each new WAV episode to a much smaller MP3, and the post plays the MP3. The WAV is deleted a day later. Default: on.', 'presshub-ai-editor' ) ); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_podcast_mp3_bitrate"><?php echo __( 'Podcast MP3 bitrate', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_podcast_mp3_bitrate_field(); ?>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                     <details class="presshub-group-advanced" id="briefing-voices-advanced">
@@ -3840,6 +3852,21 @@ class PressHub_AI_Settings_Render {
         <input type="number" min="0" max="2000" step="50" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'Silence duration in milliseconds inserted between consecutive dialogue turns (0 to 2000 ms). Default 250 ms.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_podcast_mp3_bitrate_field() {
+        $option = 'presshub_ai_podcast_mp3_bitrate';
+        $value  = PressHub_AI_Settings_Storage::get_podcast_mp3_bitrate();
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php foreach ( PressHub_AI_Settings_Storage::PODCAST_MP3_BITRATES as $kbps ) : ?>
+                <option value="<?php echo self::esc_attr_safe( (string) $kbps ); ?>" <?php selected( $value, $kbps ); ?>><?php echo self::esc_html_safe( sprintf( /* translators: %d: bitrate in kbps */ __( '%d kbps', 'presshub-ai-editor' ), $kbps ) ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description">
+            <?php echo esc_html__( 'Quality of the MP3 podcast files, in kbps. 64 kbps is clear for speech: about 5 MB for 11 minutes. Default: 64 kbps.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }
