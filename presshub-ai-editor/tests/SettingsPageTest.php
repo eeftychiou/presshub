@@ -305,6 +305,7 @@ class SettingsPageTest
             'presshub_ai_claim_check_enabled',
             'presshub_ai_pool_cleanup_enabled',
             'presshub_ai_podcast_show_notes_enabled',
+            'presshub_ai_podcast_lead_enabled',
             'presshub_ai_pool_max_age_hours',
             'presshub_ai_pool_duplicate_similarity',
             'presshub_ai_policy_fiches_budgets',
