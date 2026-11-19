@@ -124,6 +124,7 @@ $presshub_ai_options = [
     'presshub_ai_briefing_image_template',
     'presshub_ai_briefing_podcast_image_template',
     'presshub_ai_briefing_pending_steps',
+    'presshub_ai_briefing_pending_steps_lock',
     'presshub_ai_seo_auto_enabled',
     'presshub_ai_briefing_seo_enhance_enabled',
     'presshub_ai_seo_max_tags',

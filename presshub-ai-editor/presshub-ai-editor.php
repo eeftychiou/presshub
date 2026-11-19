@@ -1085,12 +1085,17 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
     }
     $args = [ (string) $date, (string) $edition, (string) $step, (int) $part ];
     $due  = time() + max( 0, (int) $delay );
+    // Record the step before saving its event: the event can start as soon
+    // as it is saved, and starting clears the record.
+    $previous = presshub_ai_record_pending_briefing_step( $date, $edition, $step, (int) $part, $due );
     // A long request (the generation cron runs for minutes) holds a copy of
     // the cron list taken when it started; writing it back would undo what
     // other requests scheduled since. Read the current list first.
     presshub_ai_refresh_cron_cache();
     $ok   = wp_schedule_single_event( $due, 'presshub_ai_run_briefing_step', $args );
     if ( false === $ok || ( function_exists( 'is_wp_error' ) && is_wp_error( $ok ) ) ) {
+        // Put back what was there: the identical event may still be waiting.
+        presshub_ai_restore_pending_briefing_step( $date, $edition, $step, (int) $part, $previous );
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; the caller runs it now or, when the same step is already waiting, leaves it to that event.', [
                 'date'    => $date,
@@ -1108,7 +1113,6 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
             'part'    => (int) $part,
         ] );
     }
-    presshub_ai_record_pending_briefing_step( $date, $edition, $step, (int) $part, $due );
     return true;
 }
 
@@ -1135,6 +1139,14 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
     presshub_ai_clear_pending_briefing_step( $date, $edition, (string) $step, (int) $part );
 
     if ( 'audio' === $step ) {
+        // A step run twice (a lost-step re-queue racing the original) must
+        // not make a second podcast post. Continuations check this themselves.
+        if ( 0 === (int) $part && presshub_ai_find_podcast_post_id( $date, $edition ) > 0 ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Scheduled podcast audio step skipped: a podcast post already exists for this edition.', [ 'date' => $date, 'edition' => $edition ] );
+            }
+            return null;
+        }
         return presshub_ai_run_podcast_audio_step( $date, $edition, (int) $part, true );
     }
     // English and Turkish versions: translate:<lang> and voice:<lang>.
@@ -1158,6 +1170,11 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
 const PRESSHUB_AI_PENDING_STEPS_OPTION = 'presshub_ai_briefing_pending_steps';
 
 /**
+ * Lock row for changes to the pending-steps option and for the sweep.
+ */
+const PRESSHUB_AI_PENDING_STEPS_LOCK = 'presshub_ai_briefing_pending_steps_lock';
+
+/**
  * Drop this request's cached copy of the cron list so the next read comes
  * from the database.
  *
@@ -1166,7 +1183,8 @@ const PRESSHUB_AI_PENDING_STEPS_OPTION = 'presshub_ai_briefing_pending_steps';
  * writes that old copy back with its event added, and a request that started
  * earlier and finishes later can do the same to ours: an event queued in
  * between is silently lost (19/11/2026 noon edition: the script step was
- * queued at 13:18:56 and never ran).
+ * queued at 13:18:56 and never ran). This only stops the first case; the
+ * sweep below recovers from the second.
  */
 function presshub_ai_refresh_cron_cache() {
     if ( function_exists( 'wp_cache_delete' ) ) {
@@ -1180,6 +1198,76 @@ function presshub_ai_refresh_cron_cache() {
  */
 function presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part ) {
     return implode( '|', [ (string) $date, (string) $edition, (string) $step, (int) $part ] );
+}
+
+/**
+ * Take the pending-steps lock (re-entrant within a request).
+ *
+ * add_option() upserts, so the lock row is inserted with INSERT IGNORE: only
+ * the request whose insert affected a row holds it. A lock older than 30 s
+ * is taken over. Waits up to about 3 s; when it still cannot get the lock it
+ * returns false and the caller goes ahead unlocked, because a missed record
+ * or clear is worse than a rare race.
+ *
+ * @return bool True when this request now holds the lock.
+ */
+function presshub_ai_pending_steps_lock() {
+    if ( ! empty( $GLOBALS['presshub_ai_pending_steps_lock_depth'] ) ) {
+        $GLOBALS['presshub_ai_pending_steps_lock_depth']++;
+        return true;
+    }
+    global $wpdb;
+    $ttl = 30;
+    for ( $try = 0; $try < 30; $try++ ) {
+        $now = time();
+        if ( isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+            $got = 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')", PRESSHUB_AI_PENDING_STEPS_LOCK, (string) $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            if ( ! $got ) {
+                $held = (int) $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", PRESSHUB_AI_PENDING_STEPS_LOCK ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+                if ( $held > 0 && $now - $held >= $ttl ) {
+                    $got = 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", (string) $now, PRESSHUB_AI_PENDING_STEPS_LOCK, (string) $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+                }
+            }
+        } else {
+            $held = (int) get_option( PRESSHUB_AI_PENDING_STEPS_LOCK, 0 );
+            $got  = ! ( $held > 0 && $now - $held < $ttl );
+            if ( $got ) {
+                update_option( PRESSHUB_AI_PENDING_STEPS_LOCK, $now, false );
+            }
+        }
+        if ( $got ) {
+            $GLOBALS['presshub_ai_pending_steps_lock_depth'] = 1;
+            return true;
+        }
+        usleep( 100000 );
+    }
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::warning( 'Could not take the briefing pending-steps lock within 3 s; going ahead without it.' );
+    }
+    return false;
+}
+
+/**
+ * Release the pending-steps lock taken by presshub_ai_pending_steps_lock().
+ *
+ * @param bool $held What presshub_ai_pending_steps_lock() returned.
+ */
+function presshub_ai_pending_steps_unlock( $held ) {
+    if ( ! $held ) {
+        return;
+    }
+    $GLOBALS['presshub_ai_pending_steps_lock_depth'] = max( 0, (int) ( $GLOBALS['presshub_ai_pending_steps_lock_depth'] ?? 1 ) - 1 );
+    if ( 0 === $GLOBALS['presshub_ai_pending_steps_lock_depth'] ) {
+        global $wpdb;
+        if ( isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+            $wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s", PRESSHUB_AI_PENDING_STEPS_LOCK ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            if ( function_exists( 'wp_cache_delete' ) ) {
+                wp_cache_delete( PRESSHUB_AI_PENDING_STEPS_LOCK, 'options' );
+            }
+        } else {
+            delete_option( PRESSHUB_AI_PENDING_STEPS_LOCK );
+        }
+    }
 }
 
 /**
@@ -1198,6 +1286,8 @@ function presshub_ai_read_pending_briefing_steps() {
 }
 
 /**
+ * Write the pending steps. Callers hold the lock.
+ *
  * @param array<string,array> $steps Steps by key; empty deletes the option.
  */
 function presshub_ai_write_pending_briefing_steps( array $steps ) {
@@ -1216,38 +1306,72 @@ function presshub_ai_write_pending_briefing_steps( array $steps ) {
  * @param string $edition morning | noon.
  * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Continuation number.
- * @param int    $due     Timestamp the event was queued for.
+ * @param int    $due     Timestamp the event is queued for.
+ * @return array|null The entry it replaced, for presshub_ai_restore_pending_briefing_step().
  */
 function presshub_ai_record_pending_briefing_step( $date, $edition, $step, $part, $due ) {
-    $steps = presshub_ai_read_pending_briefing_steps();
-    $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
-    $old   = isset( $steps[ $key ] ) && is_array( $steps[ $key ] ) ? $steps[ $key ] : [];
-    $now   = time();
-    foreach ( $steps as $k => $entry ) {
-        if ( ! is_array( $entry ) || (int) ( $entry['due'] ?? 0 ) < $now - 2 * DAY_IN_SECONDS ) {
-            unset( $steps[ $k ] );
+    $lock = presshub_ai_pending_steps_lock();
+    try {
+        $steps = presshub_ai_read_pending_briefing_steps();
+        $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
+        $old   = isset( $steps[ $key ] ) && is_array( $steps[ $key ] ) ? $steps[ $key ] : null;
+        $now   = time();
+        foreach ( $steps as $k => $entry ) {
+            if ( ! is_array( $entry ) || (int) ( $entry['due'] ?? 0 ) < $now - 2 * DAY_IN_SECONDS ) {
+                unset( $steps[ $k ] );
+            }
         }
+        $steps[ $key ] = [
+            'date'     => (string) $date,
+            'edition'  => (string) $edition,
+            'step'     => (string) $step,
+            'part'     => (int) $part,
+            'due'      => (int) $due,
+            'attempts' => (int) ( $old['attempts'] ?? 0 ),
+        ];
+        presshub_ai_write_pending_briefing_steps( $steps );
+        return $old;
+    } finally {
+        presshub_ai_pending_steps_unlock( $lock );
     }
-    $steps[ $key ] = [
-        'date'     => (string) $date,
-        'edition'  => (string) $edition,
-        'step'     => (string) $step,
-        'part'     => (int) $part,
-        'due'      => (int) $due,
-        'attempts' => (int) ( $old['attempts'] ?? 0 ),
-    ];
-    presshub_ai_write_pending_briefing_steps( $steps );
 }
 
 /**
- * Forget a step once its event has started.
+ * Put back the entry a failed schedule replaced (or remove the new one).
+ *
+ * @param array|null $previous What presshub_ai_record_pending_briefing_step() returned.
+ */
+function presshub_ai_restore_pending_briefing_step( $date, $edition, $step, $part, $previous ) {
+    $lock = presshub_ai_pending_steps_lock();
+    try {
+        $steps = presshub_ai_read_pending_briefing_steps();
+        $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
+        if ( is_array( $previous ) ) {
+            $steps[ $key ] = $previous;
+        } else {
+            unset( $steps[ $key ] );
+        }
+        presshub_ai_write_pending_briefing_steps( $steps );
+    } finally {
+        presshub_ai_pending_steps_unlock( $lock );
+    }
+}
+
+/**
+ * Forget a step once its event has started, or once the same step was run
+ * from the Daily Briefing Hub.
  */
 function presshub_ai_clear_pending_briefing_step( $date, $edition, $step, $part ) {
-    $steps = presshub_ai_read_pending_briefing_steps();
-    $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
-    if ( isset( $steps[ $key ] ) ) {
-        unset( $steps[ $key ] );
-        presshub_ai_write_pending_briefing_steps( $steps );
+    $lock = presshub_ai_pending_steps_lock();
+    try {
+        $steps = presshub_ai_read_pending_briefing_steps();
+        $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
+        if ( isset( $steps[ $key ] ) ) {
+            unset( $steps[ $key ] );
+            presshub_ai_write_pending_briefing_steps( $steps );
+        }
+    } finally {
+        presshub_ai_pending_steps_unlock( $lock );
     }
 }
 
@@ -1306,66 +1430,89 @@ function presshub_ai_maybe_sweep_lost_briefing_steps() {
  * most presshub_ai_briefing_step_max_requeues() times; after that the sweep
  * logs an error and forgets it.
  *
+ * The whole sweep holds the pending-steps lock, so a step that starts (and
+ * clears itself) in the meantime is never written back, and two sweeps never
+ * run at once. A scheduled audio step skips when the podcast post exists, so
+ * the one remaining window (WordPress removes an event a moment before it
+ * runs it) cannot make a second post.
+ *
  * @param int|null $now Reference time (tests).
  * @return int Steps queued again.
  */
 function presshub_ai_sweep_lost_briefing_steps( $now = null ) {
-    $steps = presshub_ai_read_pending_briefing_steps();
-    if ( empty( $steps ) ) {
+    // Cheap check without the lock: usually nothing is pending.
+    if ( empty( presshub_ai_read_pending_briefing_steps() ) ) {
         return 0;
     }
-    $now       = null === $now ? time() : (int) $now;
-    $lost_sec  = presshub_ai_briefing_step_lost_after_sec();
-    $max       = presshub_ai_briefing_step_max_requeues();
-    $requeued  = 0;
-    presshub_ai_refresh_cron_cache();
+    $now      = null === $now ? time() : (int) $now;
+    $lost_sec = presshub_ai_briefing_step_lost_after_sec();
+    $max      = presshub_ai_briefing_step_max_requeues();
+    $requeued = 0;
 
-    foreach ( $steps as $key => $entry ) {
-        if ( ! is_array( $entry ) ) {
-            continue;
-        }
-        if ( (int) ( $entry['due'] ?? 0 ) + $lost_sec > $now ) {
-            continue;
-        }
-        $args = [ (string) ( $entry['date'] ?? '' ), (string) ( $entry['edition'] ?? 'morning' ), (string) ( $entry['step'] ?? '' ), (int) ( $entry['part'] ?? 0 ) ];
-        if ( '' === $args[0] || '' === $args[2] ) {
-            presshub_ai_clear_pending_briefing_step( $args[0], $args[1], $args[2], $args[3] );
-            continue;
-        }
-        if ( function_exists( 'wp_next_scheduled' ) && false !== wp_next_scheduled( 'presshub_ai_run_briefing_step', $args ) ) {
-            continue;
-        }
-        $context = [ 'date' => $args[0], 'edition' => $args[1], 'step' => $args[2], 'part' => $args[3], 'queued_for' => gmdate( 'c', (int) ( $entry['due'] ?? 0 ) ) ];
-        $attempt = (int) ( $entry['attempts'] ?? 0 ) + 1;
-        if ( $attempt > $max ) {
-            presshub_ai_clear_pending_briefing_step( $args[0], $args[1], $args[2], $args[3] );
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::error( sprintf( 'Briefing step "%s" was lost from the cron list again and has been queued the maximum %d time(s); run it from the Daily Briefing Hub.', $args[2], $max ), $context );
-            }
-            continue;
-        }
-
-        // Save the attempt first: record_pending_briefing_step() keeps it.
-        $fresh = presshub_ai_read_pending_briefing_steps();
-        if ( ! isset( $fresh[ $key ] ) ) {
-            continue; // Started in the meantime.
-        }
-        $fresh[ $key ]['attempts'] = $attempt;
-        presshub_ai_write_pending_briefing_steps( $fresh );
-
-        if ( presshub_ai_schedule_briefing_step( $args[0], $args[1], $args[2], $args[3] ) ) {
-            $requeued++;
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::warning( sprintf( 'Briefing step "%s" was queued but its cron event disappeared before it ran; queued again (attempt %d of %d).', $args[2], $attempt, $max ), $context );
-            }
-        } else {
-            presshub_ai_clear_pending_briefing_step( $args[0], $args[1], $args[2], $args[3] );
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::error( sprintf( 'Briefing step "%s" was lost from the cron list and could not be queued again; run it from the Daily Briefing Hub.', $args[2] ), $context );
-            }
-        }
+    $lock = presshub_ai_pending_steps_lock();
+    if ( ! $lock ) {
+        return 0; // Another sweep or a busy writer: try on the next round.
     }
-    return $requeued;
+    try {
+        $steps   = presshub_ai_read_pending_briefing_steps();
+        $overdue = [];
+        foreach ( $steps as $key => $entry ) {
+            if ( ! is_array( $entry ) || '' === (string) ( $entry['date'] ?? '' ) || '' === (string) ( $entry['step'] ?? '' ) ) {
+                $overdue[ $key ] = null; // Broken: drop it.
+            } elseif ( (int) ( $entry['due'] ?? 0 ) + $lost_sec <= $now ) {
+                $overdue[ $key ] = $entry;
+            }
+        }
+        if ( empty( $overdue ) ) {
+            return 0;
+        }
+        presshub_ai_refresh_cron_cache();
+
+        foreach ( $overdue as $key => $entry ) {
+            if ( null === $entry ) {
+                unset( $steps[ $key ] );
+                presshub_ai_write_pending_briefing_steps( $steps );
+                continue;
+            }
+            $args = [ (string) $entry['date'], 'noon' === ( $entry['edition'] ?? '' ) ? 'noon' : 'morning', (string) $entry['step'], (int) ( $entry['part'] ?? 0 ) ];
+            if ( function_exists( 'wp_next_scheduled' ) && false !== wp_next_scheduled( 'presshub_ai_run_briefing_step', $args ) ) {
+                continue;
+            }
+            $context = [ 'date' => $args[0], 'edition' => $args[1], 'step' => $args[2], 'part' => $args[3], 'queued_for' => gmdate( 'c', (int) ( $entry['due'] ?? 0 ) ) ];
+            $attempt = (int) ( $entry['attempts'] ?? 0 ) + 1;
+            if ( $attempt > $max ) {
+                unset( $steps[ $key ] );
+                presshub_ai_write_pending_briefing_steps( $steps );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( sprintf( 'Briefing step "%s" was lost from the cron list again and has been queued the maximum %d time(s); run it from the Daily Briefing Hub.', $args[2], $max ), $context );
+                }
+                continue;
+            }
+
+            // Save the attempt first: record_pending_briefing_step() keeps it.
+            $steps[ $key ]['attempts'] = $attempt;
+            presshub_ai_write_pending_briefing_steps( $steps );
+
+            if ( presshub_ai_schedule_briefing_step( $args[0], $args[1], $args[2], $args[3] ) ) {
+                $requeued++;
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( 'Briefing step "%s" was queued but its cron event disappeared before it ran; queued again (attempt %d of %d).', $args[2], $attempt, $max ), $context );
+                }
+            } else {
+                $steps = presshub_ai_read_pending_briefing_steps();
+                unset( $steps[ $key ] );
+                presshub_ai_write_pending_briefing_steps( $steps );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( sprintf( 'Briefing step "%s" was lost from the cron list and could not be queued again; run it from the Daily Briefing Hub.', $args[2] ), $context );
+                }
+            }
+            // presshub_ai_schedule_briefing_step() rewrote the option.
+            $steps = presshub_ai_read_pending_briefing_steps();
+        }
+        return $requeued;
+    } finally {
+        presshub_ai_pending_steps_unlock( $lock );
+    }
 }
 
 /**

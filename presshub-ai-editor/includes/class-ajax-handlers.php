@@ -1287,6 +1287,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         try {
             require_once __DIR__ . '/class-podcast-producer.php';
+            // Run from the Hub: a queued script step for this edition is no longer needed.
+            if ( function_exists( 'presshub_ai_clear_pending_briefing_step' ) ) {
+                presshub_ai_clear_pending_briefing_step( $date, $edition, 'script', 0 );
+            }
             $producer = new PressHub_AI_Podcast_Producer();
             $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration, $context_mode, $selected_articles, $edition );
 
@@ -1414,6 +1418,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         try {
             require_once __DIR__ . '/class-audio-synthesizer.php';
+            // Run from the Hub: a queued audio step for this edition is no longer needed.
+            if ( function_exists( 'presshub_ai_clear_pending_briefing_step' ) ) {
+                presshub_ai_clear_pending_briefing_step( $date, $edition, 'audio', 0 );
+            }
             $synthesizer = new PressHub_AI_Audio_Synthesizer();
             $result      = $synthesizer->synthesize_podcast( $date, $script, $edition );
 

@@ -30,6 +30,35 @@ if ( ! function_exists( 'register_deactivation_hook' ) ) {
     function register_deactivation_hook( $file, $callback ) { $GLOBALS['DEACTIVATION_HOOKS'][] = $callback; }
 }
 
+// Test doubles that the shared stubs lack or simplify: the event list is
+// matched by hook and arguments, scheduling can fail or "start" the event at
+// once, and cache deletes are counted.
+$GLOBALS['BSS_EVENTS']       = [];
+$GLOBALS['BSS_CACHE_DELETES'] = [];
+$GLOBALS['BSS_FAIL_SCHEDULE'] = false;
+$GLOBALS['BSS_ON_SCHEDULE']   = null;
+function wp_schedule_single_event( $timestamp, $hook, $args = [] ) {
+    if ( ! empty( $GLOBALS['BSS_FAIL_SCHEDULE'] ) ) {
+        return false;
+    }
+    $GLOBALS['SCHEDULED_EVENTS'][] = [ 'time' => $timestamp, 'hook' => $hook, 'args' => $args ];
+    if ( is_callable( $GLOBALS['BSS_ON_SCHEDULE'] ) ) {
+        ( $GLOBALS['BSS_ON_SCHEDULE'] )( $hook, $args );
+    }
+    return true;
+}
+function wp_next_scheduled( $hook, $args = [] ) {
+    $k = $hook . '|' . json_encode( array_values( (array) $args ) );
+    return $GLOBALS['BSS_EVENTS'][ $k ] ?? false;
+}
+function wp_cache_delete( $key, $group = '' ) {
+    $GLOBALS['BSS_CACHE_DELETES'][] = $group . ':' . $key;
+    return true;
+}
+function bss_listed( string $date, string $edition, string $step, int $part, int $when ): void {
+    $GLOBALS['BSS_EVENTS'][ 'presshub_ai_run_briefing_step|' . json_encode( [ $date, $edition, $step, $part ] ) ] = $when;
+}
+
 require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/wp-action-wrapper.php';
 defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER', true );
@@ -56,6 +85,12 @@ function bss_reset(): void {
     $GLOBALS['NEXT_SCHEDULED']     = [];
     $GLOBALS['UNSCHEDULED_EVENTS'] = [];
     $GLOBALS['WP_DOING_CRON']      = false;
+    $GLOBALS['BSS_EVENTS']         = [];
+    $GLOBALS['BSS_CACHE_DELETES']  = [];
+    $GLOBALS['BSS_FAIL_SCHEDULE']  = false;
+    $GLOBALS['BSS_ON_SCHEDULE']    = null;
+    $GLOBALS['GET_POSTS_RESULT']   = [];
+    $GLOBALS['presshub_ai_pending_steps_lock_depth'] = 0;
     file_put_contents( $GLOBALS['log_file'], '' );
 }
 
@@ -113,9 +148,16 @@ $due = bss_pending()[ $key ]['due'];
 bss_check( 'sweep: default lost-after is 300 s and 2 re-queues', 300 === presshub_ai_briefing_step_lost_after_sec() && 2 === presshub_ai_briefing_step_max_requeues() );
 bss_check( 'sweep: a step within its grace time is left alone', 0 === presshub_ai_sweep_lost_briefing_steps( $due + 299 ) && [] === bss_steps_queued() );
 
-$GLOBALS['NEXT_SCHEDULED']['presshub_ai_run_briefing_step'] = $due;
+bss_listed( '2026-11-19', 'noon', 'script', 1, $due );
+bss_listed( '2026-11-19', 'morning', 'script', 0, $due );
+bss_check( 'sweep: an event for another part or edition does not count as listed', 1 === presshub_ai_sweep_lost_briefing_steps( $due + 3600 ) );
+bss_reset();
+presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'script' );
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$due = bss_pending()[ $key ]['due'];
+bss_listed( '2026-11-19', 'noon', 'script', 0, $due );
 bss_check( 'sweep: an overdue step whose event is still listed is left to WordPress', 0 === presshub_ai_sweep_lost_briefing_steps( $due + 3600 ) && [] === bss_steps_queued() && isset( bss_pending()[ $key ] ) );
-unset( $GLOBALS['NEXT_SCHEDULED']['presshub_ai_run_briefing_step'] );
+$GLOBALS['BSS_EVENTS'] = [];
 
 // =========================================================================
 // 3. Lost: queued again, then given up
@@ -196,6 +238,63 @@ $GLOBALS['SCHEDULED_EVENTS'] = [];
 bss_check( 'entry: a second call inside the lock window does nothing', 0 === presshub_ai_maybe_sweep_lost_briefing_steps() && [] === bss_steps_queued() );
 
 // =========================================================================
+// 6b. Review round 1: order, restore, races, Hub runs, cache refresh
+// =========================================================================
+
+// The event starts the moment it is saved: the step must not stay recorded.
+bss_reset();
+$GLOBALS['BSS_ON_SCHEDULE'] = static function ( $hook, $args ) {
+    $GLOBALS['BSS_PENDING_AT_SAVE'] = isset( bss_pending()[ implode( '|', $args ) ] );
+    presshub_ai_clear_pending_briefing_step( $args[0], $args[1], $args[2], $args[3] );
+};
+presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'audio' );
+bss_check( 'order: the step is recorded before its event is saved', true === ( $GLOBALS['BSS_PENDING_AT_SAVE'] ?? null ) );
+bss_check( 'order: a step that starts at once leaves no record behind', [] === bss_pending() );
+
+// A failed schedule removes a new record, and puts back an earlier one.
+bss_reset();
+$GLOBALS['BSS_FAIL_SCHEDULE'] = true;
+bss_check( 'restore: a failed schedule returns false and leaves no record', false === presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'script' ) && [] === bss_pending() );
+$GLOBALS['BSS_FAIL_SCHEDULE'] = false;
+presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'translate:en', 0, 0 );
+$tk = '2026-11-19|noon|translate:en|0';
+$GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_OPTION ][ $tk ]['attempts'] = 1;
+$kept = bss_pending()[ $tk ];
+$GLOBALS['BSS_FAIL_SCHEDULE'] = true;
+presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'translate:en', 0, 600 );
+bss_check( 'restore: a refused duplicate keeps the waiting step\'s record unchanged', $kept === ( bss_pending()[ $tk ] ?? null ) );
+
+// The scheduled audio step never makes a second podcast post.
+bss_reset();
+$GLOBALS['GET_POSTS_RESULT'] = [ 722 ];
+$r = presshub_ai_execute_briefing_step( '2026-11-19', 'noon', 'audio', 0 );
+bss_check( 'audio: part 0 skips when the podcast post exists, nothing queued', null === $r && [] === $GLOBALS['SCHEDULED_EVENTS'] && false !== strpos( bss_log(), 'Scheduled podcast audio step skipped' ) );
+
+// A sweep does nothing while another request holds the lock.
+bss_reset();
+presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'script' );
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] = time();
+$t0 = microtime( true );
+$n  = presshub_ai_sweep_lost_briefing_steps( time() + 3600 );
+bss_check( 'lock: a held lock stops the sweep (no re-queue, entry kept)', 0 === $n && [] === bss_steps_queued() && isset( bss_pending()[ $key ] ) );
+bss_check( 'lock: the wait is bounded (about 3 s)', microtime( true ) - $t0 < 6 );
+$GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] = time() - 31;
+bss_check( 'lock: a stale lock is taken over', 1 === presshub_ai_sweep_lost_briefing_steps( time() + 3600 ) );
+bss_check( 'lock: released after the sweep', ! array_key_exists( PRESSHUB_AI_PENDING_STEPS_LOCK, $GLOBALS['OPTIONS_STORE'] ) && 0 === (int) $GLOBALS['presshub_ai_pending_steps_lock_depth'] );
+
+// The cron cache is refreshed only when something is overdue.
+bss_reset();
+presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'script' );
+$GLOBALS['BSS_CACHE_DELETES'] = [];
+presshub_ai_sweep_lost_briefing_steps( time() );
+bss_check( 'cache: no alloptions refresh while nothing is overdue', ! in_array( 'options:alloptions', $GLOBALS['BSS_CACHE_DELETES'], true ) );
+$GLOBALS['BSS_CACHE_DELETES'] = [];
+presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'audio' );
+$sched = array_search( 'options:alloptions', $GLOBALS['BSS_CACHE_DELETES'], true );
+bss_check( 'cache: scheduling a step refreshes alloptions and cron', false !== $sched && in_array( 'options:cron', $GLOBALS['BSS_CACHE_DELETES'], true ) );
+
+// =========================================================================
 // 7. Wiring
 // =========================================================================
 bss_check( 'wiring: the sweep runs on init and admin_init', false !== has_action( 'init', 'presshub_ai_maybe_sweep_lost_briefing_steps' ) && false !== has_action( 'admin_init', 'presshub_ai_maybe_sweep_lost_briefing_steps' ) );
@@ -208,7 +307,12 @@ $exec  = substr( $src, (int) strpos( $src, 'function presshub_ai_execute_briefin
 $clear = strpos( $exec, 'presshub_ai_clear_pending_briefing_step(' );
 $audio = strpos( $exec, "if ( 'audio' === \$step )" );
 bss_check( 'wiring: the cron handler clears the step before running it', false !== $clear && false !== $audio && $clear < $audio );
+$rec = strpos( $fn, 'presshub_ai_record_pending_briefing_step(' );
+bss_check( 'wiring: the step is recorded before wp_schedule_single_event', false !== $rec && $rec < $sched );
+$ajax = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-ajax-handlers.php' );
+bss_check( 'wiring: Hub script and audio runs clear the queued step', false !== strpos( $ajax, "presshub_ai_clear_pending_briefing_step( \$date, \$edition, 'script', 0 );" ) && false !== strpos( $ajax, "presshub_ai_clear_pending_briefing_step( \$date, \$edition, 'audio', 0 );" ) );
 $uninstall = (string) file_get_contents( dirname( __DIR__ ) . '/uninstall.php' );
+bss_check( 'wiring: uninstall removes the lock option', false !== strpos( $uninstall, "'presshub_ai_briefing_pending_steps_lock'" ) );
 bss_check( 'wiring: uninstall removes the pending-steps option', false !== strpos( $uninstall, "'presshub_ai_briefing_pending_steps'" ) );
 
 @unlink( $log_file );
