@@ -355,16 +355,6 @@ class PressHub_AI_News_Curator {
         self::$last_original_articles_count = $original_count;
         self::$last_kept_articles_count     = count( $articles );
 
-        // Design principle (agents.md rule 13): a cut made by a limit is
-        // recorded. The breakdown above goes into the generation record; this
-        // writes the log line.
-        if ( $truncated && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
-            PressHub_AI_Knowledge_Cuts::log_articles(
-                'briefing_curation',
-                PressHub_AI_Knowledge_Cuts::article_cuts( $breakdown_sent, self::$last_breakdown_dropped_cap, [ 'cap_articles' => $max_articles, 'cap_chars_per_article' => $max_chars ] )
-            );
-        }
-
         // Issue #61 — surface pool-vs-LLM observability. The capped metrics are
         // derived from the *rendered* prompt string (not per-article estimates
         // summed) so they reflect exactly what the LLM saw, including block
@@ -872,6 +862,21 @@ class PressHub_AI_News_Curator {
         $sources = $this->get_sources_list( $articles );
         $count   = count( $articles );
         $context = $this->format_articles_context( $articles );
+
+        // Design principle (agents.md rule 13): a cut made by a limit is
+        // recorded. The article breakdown goes into the generation record;
+        // this writes one log line per prompt (hydrate_prompt() above renders
+        // the same context, so the line is written here and not there).
+        if ( $this->was_context_truncated() && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            $breakdown = $this->last_articles_breakdown();
+            PressHub_AI_Knowledge_Cuts::log_articles(
+                'briefing_curation',
+                PressHub_AI_Knowledge_Cuts::article_cuts( $breakdown['sent'], $breakdown['dropped'], [
+                    'cap_articles'          => PressHub_AI_Settings_Storage::get_curation_max_articles(),
+                    'cap_chars_per_article' => PressHub_AI_Settings_Storage::get_curation_max_chars_per_article(),
+                ] )
+            );
+        }
 
         // Issue #135: Compute effective memory budget and build tiered memory context
         $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();

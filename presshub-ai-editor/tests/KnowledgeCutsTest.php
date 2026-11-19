@@ -150,12 +150,17 @@ $articles = [
     [ 'title' => 'Τρίτο <b>άρθρο</b>', 'source' => 'sigma', 'url' => 'https://a.test/3', 'content' => str_repeat( 'γ', 50 ) ],
 ];
 $before = strlen( (string) @file_get_contents( $log_file ) );
-$curator->format_articles_context( $articles );
+$curator->build_prompt( $articles, '__none__', '2026-11-19' );
 $bd  = $curator->last_articles_breakdown();
 $sum = $C::article_cuts( $bd['sent'], $bd['dropped'], [ 'cap_articles' => 2, 'cap_chars_per_article' => 100 ] );
 kc_check( 'articles: one shortened, 150 characters cut, one left out by the cap', 2 === $sum['sent'] && 1 === $sum['shortened'] && 150 === $sum['chars_cut'] && 1 === $sum['left_out'] );
 $alog = substr( (string) @file_get_contents( $log_file ), $before );
-kc_check( 'articles: one log line with the counts', false !== strpos( $alog, 'Article limits cut the briefing_curation prompt: 1 of 2 articles shortened to 100 characters (150 characters cut), 1 left out by the 2-article cap.' ) );
+kc_check( 'articles: exactly one log line per prompt, with the counts', 1 === substr_count( $alog, 'Article limits cut the briefing_curation prompt: 1 of 2 articles shortened to 100 characters (150 characters cut), 1 left out by the 2-article cap.' ) );
+$old = $C::article_cuts( [ [ 'title' => 'x', 'chars_sent' => 100, 'truncated' => true ] ], [], [] );
+kc_check( 'articles: an old record without the caps or the full length still counts the cut', 1 === $old['shortened'] && 100 === $old['cap_chars'] && 0 === $old['chars_cut'] );
+list( $ps, $pd ) = PressHub_AI_Generation_Inspector::split_articles( [ 'articles' => [ [ 'title' => 'p', 'chars_sent' => 10, 'truncated' => false ] ], 'not_selected' => [ [ 'title' => 'q' ] ] ] );
+kc_check( 'articles: a podcast record (not selected) is not a cut', [] === $C::describe_articles( $C::article_cuts( $ps, $pd, [] ) ) );
+kc_check( 'memory: no budget, no number', [ '2 memory entries or stories left out to fit the memory budget; listed in the Memory tab' ] === $C::describe_memory( [ 'trimmed' => [ [], [] ] ] ) );
 $alines = $C::describe_articles( $sum );
 kc_check( 'articles: describe says what was cut and points to the Articles tab', 3 === count( $alines ) && false !== strpos( $alines[0], '1 of 2 articles cut to 100 characters' ) && false !== strpos( $alines[1], '1 articles left out: only 2 are sent' ) );
 kc_check( 'articles: not selected by the editor is not a limit', 0 === $C::article_cuts( [], [ [ 'title' => 'x', 'reason' => 'not_selected' ] ], [] )['left_out'] );
@@ -163,7 +168,7 @@ kc_check( 'articles: nothing cut, nothing described', [] === $C::describe_articl
 $before = strlen( (string) @file_get_contents( $log_file ) );
 update_option( 'presshub_ai_curation_max_articles', 40 );
 update_option( 'presshub_ai_curation_max_chars_per_article', 3000 );
-$curator->format_articles_context( $articles );
+$curator->build_prompt( $articles, '__none__', '2026-11-19' );
 kc_check( 'articles: no log line when nothing was cut', strlen( (string) @file_get_contents( $log_file ) ) === $before );
 
 $art_id = PressHub_AI_Generation_Recorder::record( [
