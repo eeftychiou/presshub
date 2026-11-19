@@ -241,6 +241,12 @@ class PressHub_Social_Metabox {
                                                     <?php esc_html_e( 'Not in the podcast playlist', 'presshub-social-autopost' ); ?>
                                                 </span>
                                             <?php endif; ?>
+                                            <?php $yt_episode_note = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::episode_note( $job ) : ''; ?>
+                                            <?php if ( '' !== $yt_episode_note ) : ?>
+                                                <span class="presshub-error-preview" title="<?php echo esc_attr( $yt_episode_note ); ?>">
+                                                    <?php esc_html_e( 'Episode video incomplete', 'presshub-social-autopost' ); ?>
+                                                </span>
+                                            <?php endif; ?>
                                         <?php elseif ( ! empty( $job['last_error'] ) ) : ?>
                                             <span class="presshub-error-preview" title="<?php echo esc_attr( $job['last_error'] ); ?>">
                                                 <?php echo esc_html( wp_trim_words( $job['last_error'], 8 ) ); ?>

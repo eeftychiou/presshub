@@ -490,6 +490,9 @@ $pod_multi = $synthesizer->synthesize_podcast( '2026-08-27', $dialogue_script, n
 
 as_check( 'issue_69: synthesize_podcast succeeds with 2 speakers', is_array( $pod_multi ) && ( $pod_multi['success'] ?? false ) );
 as_check( 'issue_69: captured exactly 2 turn requests', count( $captured_requests ) === 2 );
+$pod_multi_tl = get_post_meta( (int) ( $pod_multi['post_id'] ?? 0 ), PressHub_AI_Podcast_Timeline::META_KEY, true );
+as_check( 'timeline: the podcast post stores a caption timeline with both turns', is_array( $pod_multi_tl ) && 2 === count( $pod_multi_tl['segments'] ?? [] ) );
+as_check( 'timeline: turns are in order with the second host as speaker 2', is_array( $pod_multi_tl ) && $pod_multi_tl['segments'][1]['start'] > $pod_multi_tl['segments'][0]['end'] && 2 === $pod_multi_tl['segments'][1]['speaker'] );
 
 $req0_cfg = $captured_requests[0]['body']['generationConfig']['speechConfig'] ?? [];
 $req1_cfg = $captured_requests[1]['body']['generationConfig']['speechConfig'] ?? [];

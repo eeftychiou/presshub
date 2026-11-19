@@ -525,6 +525,30 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_youtube_episode_enhanced',
+            __( 'Episodes with Story Images and Captions', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_episode_enhanced_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_episode_image_wait_minutes',
+            __( 'Wait for Story Images', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec',
+            [
+                'option'  => 'presshub_social_youtube_episode_image_wait_minutes',
+                'default' => 90,
+                'min'     => 0,
+                'max'     => 240,
+                'unit'    => __( 'minutes', 'presshub-social-autopost' ),
+                'desc'    => __( 'How long an episode waits for its shorts\' story images before it is uploaded with the images that are ready (or the podcast\'s image). 0 does not wait.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
             'presshub_social_youtube_podcast_playlist_id',
             __( 'Podcast Playlist ID', 'presshub-social-autopost' ),
             [ $render, 'render_text_field' ],
