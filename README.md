@@ -104,7 +104,7 @@ Before WordPress updates PressHub, the plugin saves its settings (`presshub_*` o
 ### 4. 🖼️ AI Featured Image Generation & Studio Engine
 - **Photojournalistic Editorial Realism**: Analyzes article content and generates visual prompts adhering to 35mm documentary photography aesthetics with natural lighting and realistic textures, strictly barring "AI plastic" looks, surreal saturation, or typography/text in the synthesized image.
 - **Configurable Provider & Models**: Powered by Google Gemini (`gemini-3.1-flash-image` via multimodal `generateContent`) or OpenAI (`dall-e-3` via `images/generations`) with configurable aspect ratios (`16:9`, `1:1`, `4:3`). The image model is determined directly by the selected AI provider's configured model in the Provider Store.
-- **Featured image settings**: Control prompt analysis templates, image generation providers, and aspect ratios under **PressHub → Settings → Writing & QA → Featured images** (`admin.php?page=presshub-ai&section=writing-qa#featured-images`).
+- **Featured image settings**: Control prompt analysis templates and aspect ratios under **PressHub → Settings → Writing & QA → Featured images** (`admin.php?page=presshub-ai&section=writing-qa#featured-images`); the image prompt and image generation providers are rows of **PressHub → Settings → AI models**.
 - **Daily Briefing Hub Selection & Resilient Pool Fallback**: Briefings and podcast production can independently select between the Featured Image Pool or Automatic AI Generation, with automatic, graceful fallback to the image pool if synthesis fails or times out.
 - **Post Editor "AI Featured Image Studio"**: Embedded inside the post editor metabox, allowing journalists to:
   - Draft photojournalistic visual prompts from current article content with one click.
@@ -134,7 +134,7 @@ Before WordPress updates PressHub, the plugin saves its settings (`presshub_*` o
 
 
 ### 7. 🔎 Generation Inspector (Issue #133)
-- **Where to find it**: open any Daily Briefing or podcast post in the editor (block or classic) and scroll to the **Generation Inspector** box, or go to **Daily Briefing Hub → Generation records** to browse records by date range, kind and status and open any of them. Editors need the `edit_others_posts` capability.
+- **Where to find it**: open any Daily Briefing or podcast post in the editor (block or classic) and scroll to the **Generation Inspector** box, or go to **PressHub → Generation records** to browse records by date range, kind and status and open any of them. Editors need the `edit_others_posts` capability.
 - **Every AI call is recorded (#140)**: besides briefing text and podcast scripts, records exist for co-author drafts, editorial scorecards, copilot chat, research reports, generated images, every other AI call (classify intent, URL summaries, titles, social copy, connection tests) and TTS tests. They appear in the same box on the post they belong to (a copilot chat without a post is listed only under **Generation records**). Chat, draft, scorecard and research records can contain unpublished work: editors see all of them, authors see only their own.
 - **What it shows** for each generation step (briefing text, podcast script and the kinds above; regenerations keep the earlier records, pick one in the selector): the settings that were really used (provider, model and where each came from, temperature, max tokens, timeout, preset, token usage and estimate, truncation), the exact **system prompt** and **user prompt** (with a copy button and character count), the **articles** sent and dropped with the reason and the caps, the **memory** that was injected (or that memory was disabled), the raw **response**, and for podcasts the **TTS** settings plus a **TTS calls** table (one row per call: model, fallback model, voice, text length and hash, HTTP status, error, duration, audio length, the request without audio or keys, and the topic and stitched summaries). **Raw JSON** downloads the whole record.
 - **Debug files are now optional**: the prompt and TTS payload debug files (Settings, both titled **Raw debug dump (developer use)**) stay off by default, because generation records already keep this information for editors. Records are pruned after `presshub_ai_generation_record_retention_days` (default 90).
@@ -146,7 +146,7 @@ Before WordPress updates PressHub, the plugin saves its settings (`presshub_*` o
 
 
 ### 8. 🧠 Memory Editor (Issue #137)
-- **Where to find it**: **Daily Briefing Hub → Memory** (editors need `edit_others_posts`). The Generation Inspector's Memory tab links straight to the entry it used.
+- **Where to find it**: **PressHub → Memory** (editors need `edit_others_posts`). The Generation Inspector's Memory tab links straight to the entry it used.
 - **Workflow**: check the preview of what the next morning briefing will receive; spot red-highlighted days that have no digest; open a digest with **Review / edit**, correct a story's title, development, status or entities, add or delete stories, or untick *Include in memory*, then **Save changes**. The entry is marked **edited**, a diff shows what changed against the generated version, and automatic regeneration never overwrites your text. Use **Reset to generated** to undo, **Exclude entry** to keep a whole day out of memory, **Regenerate digest** to refresh the generated version from the briefing post, and **View generation record** to see the prompt behind it.
 - **Weekly rollups**: you can edit a rollup's narrative. Editing a daily digest marks its rollup **stale**; a notice offers **Rebuild rollup** once weekly rollups are available.
 
@@ -159,7 +159,7 @@ PressHub AI adheres strictly to enterprise software engineering standards:
 ### ⚙️ Settings-First Principle
 > **No operational limit, threshold, cap, time budget, batch size, retry count, or rate limit that affects user-visible behavior may be hardcoded inside business logic.**
 
-Every parameter is registered in the WordPress Options API with strict sanitization bounds, exposed via `PressHub_AI_Settings_Storage`, and rendered in the admin settings UI. Module-level token limits and HTTP timeouts enforce minimum safe thresholds (e.g. `max_tokens ≥ 64`, `timeout ≥ 10s`) ensuring unrendered form submissions or empty inputs never corrupt model execution parameters.
+Every parameter is registered in the WordPress Options API with strict sanitization bounds, exposed via `PressHub_AI_Settings_Storage`, and rendered in the admin settings UI. Where a setting lives and how it is added, changed or removed is fixed by the binding [settings design principles](docs/settings-design-principles.md), checked when a change is designed and again before it is merged. Module-level token limits and HTTP timeouts enforce minimum safe thresholds (e.g. `max_tokens ≥ 64`, `timeout ≥ 10s`) ensuring unrendered form submissions or empty inputs never corrupt model execution parameters.
 
 ### 🛡️ Zero-Silent-Fallback Principle
 > **No business logic, API client, prompt resolver, or pipeline stage may silently fall back to a hardcoded model, prompt, or operational parameter when configuration is missing or failing.**
@@ -169,7 +169,7 @@ Missing keys, unconfigured models, or failed API calls halt immediately with exp
 ### 🧹 Clean-Slate Architecture
 > **The Provider Store is the sole source of truth. No legacy option shadowing or backward-compatibility baggage.**
 
-All provider parameters and default models resolve through `PressHub_AI_Provider_Store` (`wp_presshub_ai_providers`). Deprecated options are actively purged via idempotent database migrations rather than lingering in resolution cascades.
+All provider parameters, keys and default models resolve through `PressHub_AI_Provider_Store` (the `presshub_ai_configured_providers` option, edited in Settings → Connections). Settings that are no longer read are removed through the settings clean-up (`PressHub_Settings_Cleanup`: a copy of all settings first, then a report on Usage & logs), never left in resolution cascades; see the [settings design principles](docs/settings-design-principles.md) §4.3.
 
 ---
 
@@ -197,7 +197,7 @@ Only set this behind a proxy you control: otherwise clients can spoof the header
 
 ### Log storage and privacy
 
-The three diagnostic log files (application log, LLM prompts & responses, TTS payloads) are written by `PressHub_AI_Log_Paths` to `wp-content/uploads/presshub-ai/` under random file names (`presshub-debug-<suffix>.log`, `presshub-ai-prompts-<suffix>.jsonl`, `presshub-ai-tts-<suffix>.jsonl`). The plugin keeps `.htaccess` (Apache/LiteSpeed), `index.php` and `web.config` (IIS) deny files in that folder and never overwrites an existing one. **Settings → Logs** shows whether the folder can be opened from the web (re-checked every 12 hours, or on demand with **Re-check now**).
+The three diagnostic log files (application log, LLM prompts & responses, TTS payloads) are written by `PressHub_AI_Log_Paths` to `wp-content/uploads/presshub-ai/` under random file names (`presshub-debug-<suffix>.log`, `presshub-ai-prompts-<suffix>.jsonl`, `presshub-ai-tts-<suffix>.jsonl`). The plugin keeps `.htaccess` (Apache/LiteSpeed), `index.php` and `web.config` (IIS) deny files in that folder and never overwrites an existing one. **PressHub → Settings → Site & system → Logging & retention** shows whether the folder can be opened from the web (re-checked every 12 hours, or on demand with **Re-check now**).
 
 - **nginx** ignores `.htaccess`. Add a deny rule to the server block:
 
@@ -238,7 +238,7 @@ php dev-env/scripts/query-db.php "SELECT provider, model, total_tokens, duration
 
 ## ⚙️ Settings Reference Guide
 
-Open **PressHub → Settings** (`admin.php?page=presshub-ai&section=<slug>`). The page shows one section at a time, chosen from the list on the left (a drop-down on narrow screens), and each section has its own **Save**, which writes only that section. The search box above the list finds a setting by its name, help text or old name and opens the section that holds it. Every option and its section are listed in [`docs/settings-inventory.md`](docs/settings-inventory.md).
+Open **PressHub → Settings** (`admin.php?page=presshub-ai&section=<slug>`). The page shows one section at a time, chosen from the list on the left (a drop-down on narrow screens), and each section has its own **Save**, which writes only that section. The search box above the list finds a setting by its name, help text or old name and opens the section that holds it. Every option and its section are listed in [`docs/settings-inventory.md`](docs/settings-inventory.md). The rules for adding, moving or removing a setting are in [`docs/settings-design-principles.md`](docs/settings-design-principles.md).
 
 - **Connections**: every key, password and account in one place: AI providers (speech uses the provider chosen in AI models), Google Cloud, the press inbox login, social platform accounts, the automation worker (mode, secret, heartbeat, logins, Regenerate secret) and the plugin update token. Each connection shows its last test result with the time it was checked; loading the page makes no remote request, and Test refreshes only what you clicked. A setup check at the top (also on the Daily Briefing Hub) lists what blocks PressHub from working, each with a link to its fix, or says "Everything is connected". Saved keys are never shown: Replace key opens an empty field, and leaving it empty keeps the saved key.
 - **AI models**: one table of which provider and model each AI task uses (Co-author, Editorial QA, Copilot, Briefing curator, Podcast script, Memory, Image prompt, Image generation, Social copy, Speech, Music), with the default model, each task's temperature, max tokens and timeout in its row, a list of known models per provider plus "Other model ID…", and a check that refuses a model of the wrong type (for example a speech model for social copy). Each feature shows the model it uses, with a link to its row.
