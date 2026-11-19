@@ -863,6 +863,21 @@ class PressHub_AI_News_Curator {
         $count   = count( $articles );
         $context = $this->format_articles_context( $articles );
 
+        // Design principle (agents.md rule 13): a cut made by a limit is
+        // recorded. The article breakdown goes into the generation record;
+        // this writes one log line per prompt (hydrate_prompt() above renders
+        // the same context, so the line is written here and not there).
+        if ( $this->was_context_truncated() && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            $breakdown = $this->last_articles_breakdown();
+            PressHub_AI_Knowledge_Cuts::log_articles(
+                'briefing_curation',
+                PressHub_AI_Knowledge_Cuts::article_cuts( $breakdown['sent'], $breakdown['dropped'], [
+                    'cap_articles'          => PressHub_AI_Settings_Storage::get_curation_max_articles(),
+                    'cap_chars_per_article' => PressHub_AI_Settings_Storage::get_curation_max_chars_per_article(),
+                ] )
+            );
+        }
+
         // Issue #135: Compute effective memory budget and build tiered memory context
         $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
         // Issue #188: the model's input window, not the module's max output tokens.
