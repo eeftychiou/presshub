@@ -2,7 +2,7 @@
 
 Welcome to the **PressHub** repository. This document outlines the standard operating procedures, workflows, security rules, debugging tools, and verification tasks for all autonomous agents and developers contributing to the codebase.
 
-> **🛑 Design gate for settings (binding).** Any change that adds, moves, renames or removes a setting, a Settings section, a settings page or a menu item must be checked against [`docs/settings-design-principles.md`](docs/settings-design-principles.md) **twice**: when it is designed (the issue says which rules apply and how the change meets them) and before it is merged (the PR fills in the checklist from that file, also in the PR template). Breaking a rule needs the owner's agreement in the issue and an entry under "Exceptions" in that file. Reviewers request changes when the checklist is missing or a rule is broken.
+> **🛑 Design gate for settings (binding).** Any change that adds, moves, renames or removes a setting, a store, a Settings section, a settings page or a menu item must be checked against [`docs/settings-design-principles.md`](docs/settings-design-principles.md) **twice**: when it is designed (the issue says which rules apply and how the change meets them) and before it is merged (the PR fills in the checklist from that file, also in the PR template). Breaking a rule needs the owner's agreement in the issue and an entry under "Exceptions" in that file. Reviewers request changes when the checklist is missing or a rule is broken.
 
 ---
 

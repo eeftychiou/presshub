@@ -49,7 +49,7 @@ $check( false !== strpos( $doc, "\n## Exceptions\n" ), 'The principles have an E
 
 // 2. The §1.2 section table matches the code.
 $table = $slice( $doc, '**1.2 ', "\n**1.3 " );
-preg_match_all( '/^\| ([^|]+?) \| `([a-z-]+)` \|/m', $table, $rows, PREG_SET_ORDER );
+preg_match_all( '/^\| ([^|]+?) \| `([a-z0-9-]+)` \|/m', $table, $rows, PREG_SET_ORDER );
 $doc_sections = [];
 foreach ( $rows as $row ) {
     $doc_sections[ $row[2] ] = trim( $row[1] );
