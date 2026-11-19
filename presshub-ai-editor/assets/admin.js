@@ -2413,7 +2413,7 @@ jQuery(document).ready(function($) {
             $('#provider-form-temperature').val(providerData.temperature !== undefined ? providerData.temperature : 0.7);
             $('#provider-form-max-tokens').val(providerData.max_tokens !== undefined ? providerData.max_tokens : 20000);
             $('#provider-form-timeout').val(providerData.timeout !== undefined ? providerData.timeout : 300);
-            fillProviderHeaderFields(providerData.headers);
+            fillProviderHeaderFields(providerData.headers, providerData.type || 'openai');
             // Opened from the card alone (no record in memory): the headers are unknown.
             providerHeadersKnown = providerData.headers !== undefined;
             $('#provider-form-enabled').prop('checked', !!providerData.enabled);
@@ -2436,7 +2436,7 @@ jQuery(document).ready(function($) {
             $('#provider-form-max-tokens').val('20000');
             $('#provider-form-timeout').val('300');
             $('#provider-form-api-key').attr('placeholder', __('Enter API Key', 'presshub-ai-editor'));
-            fillProviderHeaderFields({});
+            fillProviderHeaderFields({}, $('#provider-form-type').val());
             providerHeadersKnown = true;
 
             var firstTmplKey = Object.keys(providerTemplates)[0] || 'openai';
@@ -2460,12 +2460,15 @@ jQuery(document).ready(function($) {
     // #309 (E1): the OpenAI organization and the Anthropic API version have
     // their own fields; they are stored in the provider's headers.
     var providerHeadersKnown = true;
+    // The type the header fields were filled for: only that type's header has
+    // its own field; the same header on any other type stays in the JSON box.
+    var providerHeaderType = '';
     var PROVIDER_HEADER_FIELDS = {
         openai: { header: 'OpenAI-Organization', field: '#provider-form-openai-org' },
         anthropic: { header: 'anthropic-version', field: '#provider-form-anthropic-version' }
     };
 
-    function fillProviderHeaderFields(headers) {
+    function fillProviderHeaderFields(headers, type) {
         var rest = {};
         if (typeof headers === 'string' && headers.trim()) {
             try { headers = JSON.parse(headers); } catch (err) { headers = {}; }
@@ -2473,18 +2476,33 @@ jQuery(document).ready(function($) {
         if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
             Object.keys(headers).forEach(function(name) { rest[name] = headers[name]; });
         }
-        Object.keys(PROVIDER_HEADER_FIELDS).forEach(function(type) {
-            var map = PROVIDER_HEADER_FIELDS[type];
+        providerHeaderType = type || '';
+        Object.keys(PROVIDER_HEADER_FIELDS).forEach(function(fieldType) {
+            var map = PROVIDER_HEADER_FIELDS[fieldType];
             var value = '';
-            Object.keys(rest).forEach(function(name) {
-                if (name.toLowerCase() === map.header.toLowerCase()) {
-                    value = String(rest[name]);
-                    delete rest[name];
-                }
-            });
+            if (fieldType === providerHeaderType) {
+                Object.keys(rest).forEach(function(name) {
+                    if (name.toLowerCase() === map.header.toLowerCase()) {
+                        value = String(rest[name]);
+                        delete rest[name];
+                    }
+                });
+            }
             $(map.field).val(value);
         });
         $('#provider-form-headers').val(Object.keys(rest).length ? JSON.stringify(rest) : '');
+    }
+
+    // The type changed: give the old type's field back to the JSON box, then
+    // take the new type's header out of it.
+    function switchProviderHeaderType(type) {
+        var headers = collectProviderHeaders();
+        if (headers !== null) {
+            fillProviderHeaderFields(headers, type);
+        } else {
+            providerHeaderType = type; // Bad JSON: left as typed; Save reports it.
+        }
+        toggleProviderHeaderFields();
     }
 
     function toggleProviderHeaderFields() {
@@ -2505,7 +2523,7 @@ jQuery(document).ready(function($) {
                 return null;
             }
         }
-        var map = PROVIDER_HEADER_FIELDS[$('#provider-form-type').val()];
+        var map = PROVIDER_HEADER_FIELDS[providerHeaderType];
         if (map) {
             Object.keys(headers).forEach(function(name) {
                 if (name.toLowerCase() === map.header.toLowerCase()) {
@@ -2601,13 +2619,13 @@ jQuery(document).ready(function($) {
         $('#provider-form-temperature').val(tmpl.temperature !== undefined ? tmpl.temperature : 0.7);
         $('#provider-form-max-tokens').val(tmpl.max_tokens !== undefined ? tmpl.max_tokens : 20000);
         $('#provider-form-timeout').val(tmpl.timeout !== undefined ? tmpl.timeout : 300);
-        toggleProviderHeaderFields();
+        switchProviderHeaderType($('#provider-form-type').val());
     });
 
     // Provider Type Change Handler
     $(document).on('change', '#provider-form-type', function() {
         var provType = $(this).val();
-        toggleProviderHeaderFields();
+        switchProviderHeaderType(provType);
         if (providerTemplates[provType]) {
             var tmpl = providerTemplates[provType];
             if (!$('#provider-form-base-url').val()) {
