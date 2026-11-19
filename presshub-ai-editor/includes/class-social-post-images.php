@@ -34,6 +34,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-social-ai-json.php';
+
 class PressHub_Social_Post_Images {
 
     /** Job metadata key holding the job's image state and images. */
@@ -72,6 +74,19 @@ class PressHub_Social_Post_Images {
      * @var callable|null
      */
     private static $ai_caller = null;
+
+    /** Generation record kind of the AI call that plans the post images. */
+    const RECORD_KIND_PLAN = 'post_images_plan';
+
+    /** AI calls tried for one plan before its preparation run fails. */
+    const PLAN_ATTEMPTS = 2;
+
+    /** Generation record and Usage & logs row of the last plan call (0 when none). */
+    private static $last_record_id = 0;
+    private static $last_log_id    = 0;
+
+    /** What parse_plan() repaired in the last response (empty when nothing). */
+    private static $last_repairs = [];
 
     public static function set_ai_caller( ?callable $caller ): void {
         self::$ai_caller = $caller;
@@ -366,15 +381,41 @@ class PressHub_Social_Post_Images {
             : 'You are a visual editor for a news publication. You output only the JSON asked for. Your images never depict identifiable people or public figures.';
 
         PressHub_Social_Logger::info( sprintf( 'Planning %d AI post image(s) for post #%d.', $count, $post_id ) );
-        $raw = self::call_ai( $post_id, $sys_prompt, $user_prompt );
-        if ( is_wp_error( $raw ) ) {
-            return $raw;
-        }
 
-        $images = self::parse_plan( (string) $raw, $count );
+        // An answer the plan cannot use (broken JSON, no descriptions, empty) is asked for
+        // once more, with the reason, before the preparation run fails.
+        $images     = null;
+        $record_ids = [];
+        $prompt_now = $user_prompt;
+        for ( $attempt = 1; $attempt <= self::PLAN_ATTEMPTS; $attempt++ ) {
+            $raw = self::call_ai( $post_id, $sys_prompt, $prompt_now );
+            if ( self::$last_record_id > 0 ) {
+                $record_ids[] = self::$last_record_id;
+            }
+            if ( is_wp_error( $raw ) && 'empty_ai_response' !== $raw->get_error_code() ) {
+                // Provider errors are not retried here (the run is retried with backoff).
+                return ( $attempt > 1 && ! empty( $record_ids ) ) ? new WP_Error( $raw->get_error_code(), $raw->get_error_message() . PressHub_Social_AI_Json::records_suffix( $record_ids ) ) : $raw;
+            }
+
+            $images = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count );
+            if ( ! is_wp_error( $images ) ) {
+                if ( ! empty( self::$last_repairs ) ) {
+                    $note = PressHub_Social_AI_Json::note_repair( self::$last_record_id, self::$last_repairs );
+                    PressHub_Social_Logger::warning( sprintf( 'AI post image plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
+                }
+                break;
+            }
+            PressHub_Social_AI_Json::mark_unusable( self::$last_record_id, self::$last_log_id, $images );
+            $last_try = $attempt >= self::PLAN_ATTEMPTS;
+            PressHub_Social_Logger::log(
+                $last_try ? 'ERROR' : 'WARNING',
+                sprintf( 'AI post image plan for post #%d is invalid (attempt %d of %d): %s%s', $post_id, $attempt, self::PLAN_ATTEMPTS, $images->get_error_message(), $last_try ? '' : ' Asking the AI again.' ),
+                [ 'record_ids' => $record_ids, 'response' => is_wp_error( $raw ) ? '' : mb_substr( (string) $raw, 0, 500 ) ]
+            );
+            $prompt_now = PressHub_Social_AI_Json::retry_prompt( $user_prompt, $images );
+        }
         if ( is_wp_error( $images ) ) {
-            PressHub_Social_Logger::error( sprintf( 'AI post image plan for post #%d is invalid: %s', $post_id, $images->get_error_message() ), [ 'response' => mb_substr( (string) $raw, 0, 500 ) ] );
-            return $images;
+            return new WP_Error( $images->get_error_code(), $images->get_error_message() . PressHub_Social_AI_Json::records_suffix( $record_ids ) );
         }
 
         $plan = [
@@ -394,18 +435,14 @@ class PressHub_Social_Post_Images {
      * @return string[]|WP_Error Up to $count non-empty descriptions.
      */
     public static function parse_plan( string $raw, int $count ) {
-        $text    = (string) preg_replace( '/^```(?:json)?\s*|\s*```$/iu', '', trim( $raw ) );
-        $decoded = json_decode( $text, true );
-        if ( ! is_array( $decoded ) ) {
-            $start = strpos( $text, '{' );
-            $end   = strrpos( $text, '}' );
-            if ( false !== $start && false !== $end && $end > $start ) {
-                $decoded = json_decode( substr( $text, $start, $end - $start + 1 ), true );
-            }
+        self::$last_repairs = [];
+        $fixes   = [];
+        $error   = null;
+        $decoded = PressHub_Social_AI_Json::decode( $raw, $fixes, $error );
+        if ( null === $decoded ) {
+            return new WP_Error( 'post_images_invalid_json', (string) $error );
         }
-        if ( ! is_array( $decoded ) ) {
-            return new WP_Error( 'post_images_invalid_json', 'the AI response is not JSON.' );
-        }
+        self::$last_repairs = $fixes;
         $list = array_key_exists( 'images', $decoded ) ? $decoded['images'] : ( array_is_list( $decoded ) ? $decoded : null );
         if ( ! is_array( $list ) ) {
             return new WP_Error( 'post_images_invalid_json', 'the AI response has no "images" list.' );
@@ -448,8 +485,10 @@ class PressHub_Social_Post_Images {
     }
 
     private static function call_ai( int $post_id, string $sys_prompt, string $user_prompt ) {
+        self::$last_record_id = 0;
+        self::$last_log_id    = 0;
         if ( null !== self::$ai_caller ) {
-            $result = call_user_func( self::$ai_caller, $sys_prompt, $user_prompt );
+            $result = PressHub_Social_AI_Json::test_result( call_user_func( self::$ai_caller, $sys_prompt, $user_prompt ), self::$last_record_id, self::$last_log_id );
         } else {
             $config = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
             if ( is_wp_error( $config ) ) {
@@ -472,7 +511,8 @@ class PressHub_Social_Post_Images {
             }
             if ( null !== $client ) {
                 $client->suppress_provider_prompt_log = false;
-                PressHub_AI_API_Client::finish_generation_record( $t0, 'generic', $client, $sys_prompt, $user_prompt, $result, [
+                self::$last_log_id    = PressHub_Social_AI_Json::last_log_id();
+                self::$last_record_id = PressHub_AI_API_Client::finish_generation_record( $t0, self::RECORD_KIND_PLAN, $client, $sys_prompt, $user_prompt, $result, [
                     'post_id' => $post_id,
                     'config'  => [ 'action' => 'social_post_images' ],
                 ] );

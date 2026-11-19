@@ -267,6 +267,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-activator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-queue.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-narrator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-image-library.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-ai-json.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-post-images.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-shorts.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-music.php';

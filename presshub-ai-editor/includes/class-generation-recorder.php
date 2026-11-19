@@ -43,6 +43,8 @@ class PressHub_AI_Generation_Recorder {
      * script is the user prompt and its TTS calls are logged on the record.
      * tiktok_short_script: the LLM call that writes the scripts of the TikTok and
      * YouTube shorts of a post; a response the plan cannot use is marked error.
+     * post_images_plan: the LLM call that describes the AI images of a social post
+     * (X, Facebook, Instagram, TikTok); same error marking.
      */
     const KINDS = [
         'briefing_text',
@@ -61,6 +63,7 @@ class PressHub_AI_Generation_Recorder {
         'tiktok_narration',
         'tiktok_short',
         'tiktok_short_script',
+        'post_images_plan',
         'seo',
     ];
 
