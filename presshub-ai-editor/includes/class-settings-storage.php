@@ -487,7 +487,11 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_image_template' ],
             'type'              => 'string',
         ] );
-        foreach ( [ 'presshub_ai_briefing_noon_image_template', 'presshub_ai_briefing_noon_podcast_image_template', 'presshub_ai_social_trending_image_template' ] as $tpl_option ) {
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_trending_image_template', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_social_trending_image_template' ],
+            'type'              => 'string',
+        ] );
+        foreach ( [ 'presshub_ai_briefing_noon_image_template', 'presshub_ai_briefing_noon_podcast_image_template' ] as $tpl_option ) {
             PressHub_Settings_Registry::register( 'presshub_ai_options', $tpl_option, [
                 'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_image_template' ],
                 'type'              => 'string',
@@ -4100,6 +4104,30 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Trending in Cyprus template: Editorial cartoon. The roundup is drawn from
+     * unverified social posts, so an illustration is not mistaken for a news photo.
+     */
+    public static function default_social_trending_image_template(): string {
+        return 'editorial_cartoon';
+    }
+
+    public static function sanitize_social_trending_image_template( $value ): string {
+        $id = sanitize_key( (string) $value );
+        if ( '' === $id ) {
+            return self::default_social_trending_image_template();
+        }
+        if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+        }
+        return null !== PressHub_AI_Image_Prompt_Templates::get( $id ) ? $id : self::default_social_trending_image_template();
+    }
+
+    /** Default template of one automatic post type. */
+    public static function default_auto_image_template( string $kind ): string {
+        return 'social_trending' === $kind ? self::default_social_trending_image_template() : self::default_briefing_image_template();
+    }
+
+    /**
      * The automatic post types that make an AI featured image, in the order
      * of the Settings table: kind => template option.
      */
@@ -4122,7 +4150,7 @@ class PressHub_AI_Settings_Storage {
         if ( ! isset( $options[ $kind ] ) ) {
             return self::default_briefing_image_template();
         }
-        return (string) get_option( $options[ $kind ], self::default_briefing_image_template() );
+        return (string) get_option( $options[ $kind ], self::default_auto_image_template( $kind ) );
     }
 
     /** Briefing or podcast template for an edition. */

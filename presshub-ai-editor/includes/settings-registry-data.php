@@ -2310,7 +2310,7 @@ return [
     'tab' => 'images',
     'section' => 'presshub_ai_images',
     'label' => 'Trending in Cyprus image template',
-    'help' => 'The Featured Image Studio prompt template the AI follows when the Trending in Cyprus roundup makes its own image (its featured image set to an AI image).',
+    'help' => 'The Featured Image Studio prompt template the AI follows when the Trending in Cyprus roundup makes its own image (its featured image set to an AI image). Default: Editorial cartoon, so a picture drawn from social posts is not mistaken for a news photo.',
     'checkbox' => false,
     'secret' => false,
     'type' => 'string',
@@ -2318,7 +2318,7 @@ return [
     'status' => 'active',
     'default_callback' => [
       0 => 'PressHub_AI_Settings_Storage',
-      1 => 'default_briefing_image_template',
+      1 => 'default_social_trending_image_template',
     ],
   ],
   'presshub_ai_image_feature_enabled' => [

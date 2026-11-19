@@ -325,7 +325,7 @@ class ImagePromptTemplatesTest {
     public function test_briefing_template_setting(): void {
         $this->reset_env();
         PressHub_AI_Image_Prompt_Templates::add( 'Night photo', 'Night {content}', 7 );
-        foreach ( [ 'briefing_morning', 'briefing_noon', 'podcast_morning', 'podcast_noon', 'social_trending' ] as $kind ) {
+        foreach ( [ 'briefing_morning', 'briefing_noon', 'podcast_morning', 'podcast_noon' ] as $kind ) {
             $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::get_auto_image_template( $kind ), "Default {$kind} template is Editorial photo" );
         }
         $this->assert( 5 === count( PressHub_AI_Settings_Storage::auto_image_template_options() ), 'Five automatic post types' );
@@ -339,6 +339,8 @@ class ImagePromptTemplatesTest {
         $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::sanitize_briefing_image_template( 'custom_nope' ), 'Unknown id becomes the default' );
         $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::sanitize_briefing_image_template( '<script>' ), 'Junk becomes the default' );
         $this->assert( 'top_post' === PressHub_AI_Settings_Storage::get_social_trending_image_source(), 'Trending keeps the top post picture by default' );
+        $this->assert( 'editorial_cartoon' === PressHub_AI_Settings_Storage::get_auto_image_template( 'social_trending' ), 'Trending draws an illustration by default' );
+        $this->assert( 'editorial_cartoon' === PressHub_AI_Settings_Storage::sanitize_social_trending_image_template( 'custom_nope' ), 'Unknown trending template becomes its default' );
         $this->assert( 'top_post' === PressHub_AI_Settings_Storage::sanitize_social_trending_image_source( 'nope' ), 'Unknown trending source becomes the default' );
         $this->assert( [ 'Noon podcast' ] === PressHub_AI_Image_Prompt_Templates::used_by( 'custom_night_photo' ), 'Noon podcast use blocks deletion' );
 
