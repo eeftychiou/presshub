@@ -46,20 +46,30 @@ function test_token_logger() {
     echo '  [2] Log LLM request: OK' . PHP_EOL;
 
     // 2b. The row ID is captured for the caller, which can mark the row failed later.
-    $last = PressHub_AI_Token_Logger::get_last_llm_request();
-    if ( (int) ( $last['log_id'] ?? 0 ) !== (int) $id1 ) {
+    // Uses its own row, removed afterwards, so the totals checked below are unchanged.
+    $id_fail = PressHub_AI_Token_Logger::log_llm_request( 'social_tiktok_shorts', 'gemini', 'gemini-2.5-flash', 100, 50, 900, 'success', null, [], 1 );
+    $last    = PressHub_AI_Token_Logger::get_last_llm_request();
+    if ( (int) ( $last['log_id'] ?? 0 ) !== (int) $id_fail || (int) $id_fail <= 0 ) {
         throw new RuntimeException( 'get_last_llm_request() carries the log_id of the row' );
     }
-    if ( ! PressHub_AI_Token_Logger::mark_failed( (int) $id1, 'Response not usable: broken JSON' ) ) {
+    if ( ! PressHub_AI_Token_Logger::mark_failed( (int) $id_fail, 'Response not usable: broken JSON' ) ) {
         throw new RuntimeException( 'mark_failed() updates the row' );
     }
-    $row1 = $wpdb->tables['wp_presshub_ai_token_logs'][0];
-    if ( 'error' !== $row1['status'] || 'Response not usable: broken JSON' !== $row1['error_message'] || 2300 !== (int) $row1['total_tokens'] ) {
+    $fail_key = null;
+    foreach ( $wpdb->tables['wp_presshub_ai_token_logs'] as $k => $r ) {
+        if ( (int) ( $r['id'] ?? 0 ) === (int) $id_fail ) {
+            $fail_key = $k;
+        }
+    }
+    $row_fail = null === $fail_key ? [] : $wpdb->tables['wp_presshub_ai_token_logs'][ $fail_key ];
+    if ( 'error' !== ( $row_fail['status'] ?? '' ) || 'Response not usable: broken JSON' !== ( $row_fail['error_message'] ?? '' ) || 150 !== (int) ( $row_fail['total_tokens'] ?? 0 ) ) {
         throw new RuntimeException( 'A row marked failed shows error and the reason, and keeps its tokens' );
     }
     if ( PressHub_AI_Token_Logger::mark_failed( 0, 'x' ) ) {
         throw new RuntimeException( 'mark_failed() ignores an unknown row' );
     }
+    unset( $wpdb->tables['wp_presshub_ai_token_logs'][ $fail_key ] );
+    $wpdb->tables['wp_presshub_ai_token_logs'] = array_values( $wpdb->tables['wp_presshub_ai_token_logs'] );
     echo '  [2b] Mark a logged request failed: OK' . PHP_EOL;
 
     // 3. Log TTS request

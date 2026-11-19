@@ -2126,8 +2126,18 @@ $misplaced = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a"
 assert_true( is_array( $misplaced ) && 'b' === ( $misplaced[0]['hook'] ?? '' ), 'parse_plan repairs a misplaced closing bracket' );
 assert_true( str_contains( $misplaced[0]['script'] ?? '', '[σημείωση]' ), 'The repair leaves brackets inside strings alone' );
 assert_equals( '{"a":[1,2]}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":[1,2,]}' ), 'repair_json drops a trailing comma' );
-assert_equals( '{"a":{"b":"}]"}}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":{"b":"}]"}' ), 'repair_json closes what is left open, ignoring brackets in strings' );
+$fixes = [];
+assert_equals( '{"a":{"b":"}]"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":{"b":"}]"}', $fixes ), 'repair_json leaves a cut-off response (brackets still open) unchanged' );
+assert_equals( [], $fixes, 'Nothing is reported as repaired in a cut-off response' );
 assert_equals( '{"a":"x\\"}"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"x\\"}"}' ), 'repair_json handles escaped quotes' );
+assert_equals( '{"a":"x\\\\"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"x\\\\"]}' ), 'An escaped backslash before the closing quote ends the string' );
+assert_equals( '{"a":"cut', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"cut' ), 'repair_json leaves a response cut off inside a string unchanged' );
+PressHub_Social_TikTok_Shorts::repair_json( '{"a":[1,2,]]}', $fixes );
+assert_equals( [ 'dropped 1 misplaced ]', 'dropped 1 trailing comma' ], $fixes, 'repair_json reports what it dropped' );
+// A 3-short answer cut off inside the third short is not turned into a 2-short plan.
+$three = json_decode( $short_json( 3 ), true );
+$cut   = substr( $short_json( 3 ), 0, (int) strpos( $short_json( 3 ), $three['shorts'][2]['caption'] ) );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( $cut, 3 ) ), 'A cut-off plan is rejected, not repaired into fewer shorts' );
 $broken = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"hook":"b" "script":"x"}]}', 1 );
 assert_true( is_wp_error( $broken ) && str_contains( $broken->get_error_message(), 'not valid JSON' ), 'Broken JSON is reported as invalid JSON, not as a missing "shorts" list' );
 
@@ -2325,14 +2335,30 @@ assert_equals( 2, (int) ( $surplus_claim['jobs'][0]['tiktok_short']['count'] ?? 
 // An unusable response is asked for once more in the same run before it fails.
 update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
 $retry_calls = 0;
-PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$retry_calls, $short_json ) {
+$retry_prompts = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$retry_calls, &$retry_prompts, $short_json ) {
     $retry_calls++;
+    $retry_prompts[] = $user;
     return 1 === $retry_calls ? '{"shorts":"oops"}' : $short_json( 3 );
 } );
 PressHub_Social_Queue::reset_memory_store();
 $retry_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
 PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 assert_equals( 2, $retry_calls, 'An invalid plan response is retried once in the same run' );
+assert_true( str_contains( $retry_prompts[1] ?? '', 'Your previous answer was unusable: the AI response has no "shorts" list.' ) && ! str_contains( $retry_prompts[0], 'previous answer' ), 'The retry tells the AI why its first answer was unusable' );
+
+// An empty answer is retried like an unusable one.
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$empty_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$empty_calls, $short_json ) {
+    $empty_calls++;
+    return 1 === $empty_calls ? '  ' : $short_json( 3 );
+} );
+PressHub_Social_Queue::reset_memory_store();
+$empty_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, $empty_calls, 'An empty plan response is retried once in the same run' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $empty_ids[0] ) ), 'The shorts are prepared after an empty first answer' );
 assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $retry_ids[0] ) ), 'The shorts are prepared from the second response' );
 
 // A failed preparation is retried in the background without moving any posting time.
