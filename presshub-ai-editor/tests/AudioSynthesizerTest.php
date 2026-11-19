@@ -770,6 +770,95 @@ $sn_post_id = $synthesizer->create_podcast_post( 'http://example.test/sn.mp3', 4
 $sn_content = get_post( (int) $sn_post_id )->post_content ?? '';
 as_check( 'issue_191: create_podcast_post adds the show notes after the player', false !== strpos( $sn_content, 'presshub-podcast-show-notes' ) && strpos( $sn_content, 'wp:audio' ) < strpos( $sn_content, 'presshub-podcast-show-notes' ) );
 
+// 2.63.0 — lead story text on morning and noon podcast posts.
+$L = 'PressHub_AI_Audio_Synthesizer';
+$L::reset_lead_cache();
+as_check( 'lead: no brief gives no lead text', '' === $synthesizer->lead_story_text( '2026-11-15', 'morning' ) && false === strpos( $sn_content, 'presshub-podcast-lead' ) );
+$lead_brief = (object) [
+    'ID'           => 5151,
+    'post_status'  => 'publish',
+    'post_title'   => 'Πρωινή Ενημέρωση 19/11',
+    'post_excerpt' => 'Περίληψη της ενημέρωσης.',
+    'post_content' => '<p>Η <a href="https://presshub.cy/tag/x/">Σύνοδος</a> Κύπρου &amp; Ελλάδας &lt;Λευκωσία&gt; ολοκληρώθηκε.</p>' . "\n" . '<p>Δεύτερη πρόταση με ' . str_repeat( 'λέξη ', 70 ) . '.</p><h2>Πολιτική</h2><p>Άλλο θέμα.</p>',
+];
+$lead_expected = 'Η Σύνοδος Κύπρου & Ελλάδας <Λευκωσία> ολοκληρώθηκε.';
+$GLOBALS['GET_POSTS_RESULT'] = [ $lead_brief ];
+$lead = $synthesizer->lead_story_text( '2026-11-19', 'morning' );
+as_check( 'lead: takes the brief lead as plain text with entities decoded', $lead_expected === $lead );
+as_check( 'lead: stops before the first section heading', false === strpos( $lead, 'Άλλο θέμα' ) );
+as_check( 'lead: the paragraph escapes the text', '<p class="presshub-podcast-lead">Η Σύνοδος Κύπρου &amp; Ελλάδας &lt;Λευκωσία&gt; ολοκληρώθηκε.</p>' === explode( "\n", $synthesizer->lead_story_html( $lead ) )[1] );
+foreach ( [ 'pending', 'draft', 'future' ] as $lead_status ) {
+    $GLOBALS['GET_POSTS_RESULT'][0]->post_status = $lead_status;
+    as_check( "lead: a {$lead_status} brief gives no lead text", '' === $synthesizer->lead_story_text( '2026-11-19', 'morning' ) );
+}
+$GLOBALS['GET_POSTS_RESULT'][0]->post_status = 'publish';
+
+// Sentence cutting.
+$cut = function ( $t, $n ) { return PressHub_AI_Audio_Synthesizer::cut_to_sentences( $t, $n ); };
+as_check( 'lead: a long first sentence is cut at a word with an ellipsis', '…' === mb_substr( $cut( str_repeat( 'λέξη ', 80 ), 10 ), -1 ) && 10 === count( explode( ' ', rtrim( $cut( str_repeat( 'λέξη ', 80 ), 10 ), '…' ) ) ) );
+as_check( 'lead: keeps whole sentences within the limit', 'Ένα δύο. Τρία τέσσερα!' === $cut( 'Ένα δύο. Τρία τέσσερα! Πέντε έξι επτά.', 4 ) );
+as_check( 'lead: ASCII ; and the Greek question mark end a sentence', 'Ένα δύο;' === $cut( 'Ένα δύο; Τρία τέσσερα πέντε.', 3 ) && "Ένα δύο\u{037E}" === $cut( "Ένα δύο\u{037E} Τρία τέσσερα πέντε.", 3 ) );
+as_check( 'lead: a closing quote stays with its sentence', 'Είπε «Ναι.»' === $cut( 'Είπε «Ναι.» Μετά έφυγε από την αίθουσα.', 3 ) );
+as_check( 'lead: abbreviations do not end a sentence', 'Ο κ.…' === $cut( 'Ο κ. Παπαδόπουλος μίλησε. Μετά έφυγε από εκεί.', 2 ) && 'Ο κ. Παπαδόπουλος μίλησε.' === $cut( 'Ο κ. Παπαδόπουλος μίλησε. Μετά έφυγε από εκεί.', 4 ) && 'Ο Δρ. Νικολάου και ο Π.Χ. Ιωάννου ήρθαν.' === $cut( 'Ο Δρ. Νικολάου και ο Π.Χ. Ιωάννου ήρθαν. Τέλος της είδησης εδώ.', 9 ) );
+as_check( 'lead: decimals and lower-case after a stop do not end a sentence', 'Κόστος 25.000 ευρώ και 3,5 εκ.' === $cut( 'Κόστος 25.000 ευρώ και 3,5 εκ. Τέλος της είδησης σήμερα.', 6 ) );
+as_check( 'lead: invalid UTF-8 gives no text instead of an error', '' === $cut( "Ένα \xC3\x28 δύο.", 5 ) );
+
+$lead_brief_no_lead = clone $lead_brief;
+$lead_brief_no_lead->post_content = '<h2>Πολιτική</h2><p>Άλλο θέμα.</p>';
+$GLOBALS['GET_POSTS_RESULT'] = [ $lead_brief_no_lead ];
+as_check( 'lead: falls back to the brief excerpt', 'Περίληψη της ενημέρωσης.' === $synthesizer->lead_story_text( '2026-11-19', 'noon' ) );
+$GLOBALS['GET_POSTS_RESULT'] = [ $lead_brief ];
+
+// The filtered text is stripped and trimmed.
+$lead_text_filter = function () { return "  <b>Νέο</b> κείμενο  "; };
+add_filter( 'presshub_ai_podcast_lead_text', $lead_text_filter );
+as_check( 'lead: the presshub_ai_podcast_lead_text result is stripped and trimmed', 'Νέο κείμενο' === $synthesizer->lead_story_text( '2026-11-19', 'morning' ) );
+remove_filter( 'presshub_ai_podcast_lead_text', $lead_text_filter );
+
+// Create: paragraph first, meta saved, post_excerpt left to SEO; the card shows the lead.
+delete_option( 'presshub_ai_briefing_podcast_include_text' );
+$lead_post_id = $synthesizer->create_podcast_post( 'http://example.test/lead.mp3', 4322, $sn_script, '2026-11-19', 'Lead', 'noon' );
+$lead_post    = get_post( (int) $lead_post_id );
+as_check( 'lead: create_podcast_post opens the body with the lead paragraph before the player', false !== strpos( $lead_post->post_content, 'class="presshub-podcast-lead"' ) && strpos( $lead_post->post_content, 'presshub-podcast-lead' ) < strpos( $lead_post->post_content, 'wp:audio' ) );
+as_check( 'lead: create_podcast_post saves the lead meta and leaves post_excerpt alone', $lead_expected === get_post_meta( (int) $lead_post_id, '_presshub_podcast_lead', true ) && $lead_expected !== $lead_post->post_excerpt );
+as_check( 'lead: the card shows the lead while the transcript is off', $lead_expected === $L::filter_podcast_excerpt( '[SPEAKER_1]: script', $lead_post ) );
+update_option( 'presshub_ai_briefing_podcast_include_text', 1 );
+as_check( 'lead: the card shows the lead while the transcript is on', $lead_expected === $L::filter_podcast_excerpt( 'SEO description', $lead_post ) );
+delete_option( 'presshub_ai_briefing_podcast_include_text' );
+
+// Older posts: read from the published brief once, then cached.
+$GLOBALS['POST_META_STORE'][ 5160 ] = [ '_presshub_briefing_type' => 'podcast', '_presshub_briefing_date' => '2026-11-18', '_presshub_briefing_edition' => 'morning' ];
+delete_transient( 'presshub_ai_podcast_lead_20261118_morning' );
+$L::reset_lead_cache();
+as_check( 'lead: an older podcast post without saved lead reads it from the brief', $lead_expected === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
+$GLOBALS['GET_POSTS_RESULT'] = [];
+as_check( 'lead: the looked-up lead is cached for the request', $lead_expected === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
+$L::reset_lead_cache();
+as_check( 'lead: and in a transient across requests', $lead_expected === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
+$GLOBALS['GET_POSTS_RESULT'] = [];
+$GLOBALS['POST_META_STORE'][ 5161 ] = [ '_presshub_briefing_type' => 'text', '_presshub_briefing_date' => '2026-11-18', '_presshub_briefing_edition' => 'morning' ];
+$L::forget_brief_lead( 5161 );
+as_check( 'lead: saving the brief drops the cached lead (request and transient)', '' === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
+$GLOBALS['GET_POSTS_RESULT'] = [ $lead_brief ];
+$L::forget_brief_lead( 5161 );
+as_check( 'lead: after the brief is saved the card reads it again', $lead_expected === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
+
+// Update: one paragraph, the saved SEO description stays the excerpt.
+update_post_meta( (int) $lead_post_id, '_presshub_ai_seo', [ 'meta_description' => 'Περιγραφή SEO.' ] );
+$synthesizer->update_podcast_post( (int) $lead_post_id, 'http://example.test/lead2.mp3', 4323, $sn_script, '2026-11-19', '', 'noon' );
+$lead_post = get_post( (int) $lead_post_id );
+as_check( 'lead: update_podcast_post keeps one lead paragraph and the SEO excerpt', 1 === substr_count( $lead_post->post_content, 'class="presshub-podcast-lead"' ) && 'Περιγραφή SEO.' === $lead_post->post_excerpt );
+
+// Off: the setting and the filter, also for posts with a saved lead.
+update_option( 'presshub_ai_podcast_lead_enabled', 0 );
+as_check( 'lead: the setting turns it off', '' === $synthesizer->lead_story_text( '2026-11-19', 'morning' ) && '' === $L::filter_podcast_excerpt( '', $lead_post ) );
+delete_option( 'presshub_ai_podcast_lead_enabled' );
+add_filter( 'presshub_ai_podcast_lead_enabled', '__return_false' );
+as_check( 'lead: the presshub_ai_podcast_lead_enabled filter turns it off, also for a saved lead', '' === $synthesizer->lead_story_text( '2026-11-19', 'morning' ) && '' === $L::filter_podcast_excerpt( '', $lead_post ) );
+remove_filter( 'presshub_ai_podcast_lead_enabled', '__return_false' );
+$L::reset_lead_cache();
+$GLOBALS['GET_POSTS_RESULT'] = [];
+
 
 // =========================================================================
 // 12. Topic SFX Stitching — Zero Transition SFX between Intro/Outro and Topics

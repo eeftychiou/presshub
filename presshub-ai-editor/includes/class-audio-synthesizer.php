@@ -144,6 +144,9 @@ class PressHub_AI_Audio_Synthesizer {
         if ( function_exists( 'add_filter' ) ) {
             add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_podcast_excerpt' ], 20, 2 );
         }
+        if ( function_exists( 'add_action' ) ) {
+            add_action( 'save_post', [ __CLASS__, 'forget_brief_lead' ], 10, 1 );
+        }
     }
 
     /**
@@ -170,6 +173,13 @@ class PressHub_AI_Audio_Synthesizer {
             return (string) $excerpt;
         }
 
+        // The lead story text, when there is one, is what the card shows
+        // (2.63.0). post_excerpt itself is left to the SEO description.
+        $lead = self::podcast_lead_excerpt( $post );
+        if ( '' !== $lead ) {
+            return $lead;
+        }
+
         $include_text = class_exists( 'PressHub_AI_Settings_Storage' )
             ? PressHub_AI_Settings_Storage::get_briefing_podcast_include_text()
             : false;
@@ -188,6 +198,178 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         return (string) $excerpt;
+    }
+
+    /** Meta key holding the lead story text shown on a podcast post (2.63.0). */
+    const META_LEAD = '_presshub_podcast_lead';
+
+    /** Most words the lead story text keeps. */
+    const LEAD_MAX_WORDS = 60;
+
+    /** How long a looked-up lead for an older podcast post is cached, in seconds. */
+    const LEAD_CACHE_TTL = 900;
+
+    /** Leads looked up in this request, by "date|edition". */
+    private static $lead_cache = [];
+
+    /** Whether lead story text is on (the setting, then the filter). */
+    public static function lead_enabled( string $date, string $edition ): bool {
+        $on = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_podcast_lead_enabled() : true;
+        return (bool) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_podcast_lead_enabled', $on, $date, $edition ) : $on );
+    }
+
+    /**
+     * The card text of a podcast post: its saved lead story text, else (an
+     * older post, or a brief published after the podcast) the lead of that
+     * day's published brief, cached per request and in a short transient.
+     * '' when the feature is off or there is no published brief.
+     */
+    public static function podcast_lead_excerpt( $post ): string {
+        $post_id = is_object( $post ) ? (int) ( $post->ID ?? 0 ) : 0;
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) ) {
+            return '';
+        }
+        $date    = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
+        $edition = 'noon' === get_post_meta( $post_id, '_presshub_briefing_edition', true ) ? 'noon' : 'morning';
+        if ( ! self::lead_enabled( $date, $edition ) ) {
+            return '';
+        }
+        $lead = trim( (string) get_post_meta( $post_id, self::META_LEAD, true ) );
+        if ( '' !== $lead || '' === $date ) {
+            return $lead;
+        }
+        $key = $date . '|' . $edition;
+        if ( ! array_key_exists( $key, self::$lead_cache ) ) {
+            $transient = 'presshub_ai_podcast_lead_' . str_replace( '-', '', $date ) . '_' . $edition;
+            $cached    = function_exists( 'get_transient' ) ? get_transient( $transient ) : false;
+            if ( is_array( $cached ) && isset( $cached['text'] ) ) {
+                self::$lead_cache[ $key ] = (string) $cached['text'];
+            } else {
+                self::$lead_cache[ $key ] = ( new self() )->lead_story_text( $date, $edition );
+                if ( function_exists( 'set_transient' ) ) {
+                    set_transient( $transient, [ 'text' => self::$lead_cache[ $key ] ], self::LEAD_CACHE_TTL );
+                }
+            }
+        }
+        return self::$lead_cache[ $key ];
+    }
+
+    /**
+     * A written brief was saved (published, edited, held): drop the cached
+     * lead of its date and edition so podcast cards pick up the change.
+     */
+    public static function forget_brief_lead( $post_id ): void {
+        $post_id = (int) $post_id;
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) || 'text' !== get_post_meta( $post_id, '_presshub_briefing_type', true ) ) {
+            return;
+        }
+        $date    = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
+        $edition = 'noon' === get_post_meta( $post_id, '_presshub_briefing_edition', true ) ? 'noon' : 'morning';
+        if ( '' === $date ) {
+            return;
+        }
+        unset( self::$lead_cache[ $date . '|' . $edition ] );
+        if ( function_exists( 'delete_transient' ) ) {
+            delete_transient( 'presshub_ai_podcast_lead_' . str_replace( '-', '', $date ) . '_' . $edition );
+        }
+    }
+
+    /** Forget the leads looked up in this request (tests). */
+    public static function reset_lead_cache(): void {
+        self::$lead_cache = [];
+    }
+
+    /**
+     * The lead story of that day's published written brief as plain text:
+     * the paragraphs before its first heading, cut to whole sentences of at
+     * most LEAD_MAX_WORDS words, else the brief's excerpt. '' when the
+     * feature is off or the brief is missing or not published (a draft,
+     * scheduled or QA-held brief never shows).
+     */
+    public function lead_story_text( string $date, string $edition ): string {
+        if ( ! self::lead_enabled( $date, $edition ) ) {
+            return '';
+        }
+        $brief = $this->find_brief_post( $date, $edition, [ 'publish' ] );
+        if ( ! $brief || 'publish' !== (string) ( $brief->post_status ?? '' ) ) {
+            return '';
+        }
+        $content = (string) ( $brief->post_content ?? '' );
+        $parts   = preg_split( '/<h[1-6][\s>]/i', $content, 2 );
+        $text    = self::plain_text( is_array( $parts ) ? (string) ( $parts[0] ?? '' ) : '' );
+        if ( '' === $text ) {
+            $text = self::plain_text( (string) ( $brief->post_excerpt ?? '' ) );
+        }
+        $text = self::cut_to_sentences( $text, self::LEAD_MAX_WORDS );
+        if ( function_exists( 'apply_filters' ) ) {
+            // A filter's own text is cleaned like the brief's (no tags, trimmed).
+            $filtered = (string) apply_filters( 'presshub_ai_podcast_lead_text', $text, $date, $edition );
+            $text     = $filtered === $text ? $text : self::plain_text( $filtered );
+        }
+        return $text;
+    }
+
+    /** The lead story paragraph for the post body, or '' for no text. */
+    public function lead_story_html( string $lead ): string {
+        if ( '' === trim( $lead ) ) {
+            return '';
+        }
+        return "<!-- wp:paragraph {\"className\":\"presshub-podcast-lead\"} -->\n"
+            . '<p class="presshub-podcast-lead">' . esc_html( $lead ) . "</p>\n"
+            . '<!-- /wp:paragraph -->';
+    }
+
+    /** HTML to one line of plain text (no tags, entities decoded, spaces collapsed). '' on invalid UTF-8. */
+    private static function plain_text( string $html ): string {
+        $html = (string) preg_replace( '/<!--.*?-->/s', ' ', $html );
+        $html = (string) preg_replace( '#</(p|div|li|blockquote|figcaption)>#i', '$0 ', $html );
+        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $html ) : strip_tags( $html );
+        $text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+        return trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+    }
+
+    /**
+     * Whole sentences from the start of $text up to $max_words words. A
+     * sentence ends at . ! ? ; ; (Greek question mark) or …, with any closing
+     * quote or bracket, before a space and a capital letter, digit or opening
+     * quote; abbreviations such as "κ.", "π.χ." or "Δρ." do not end one. A
+     * first sentence longer than the limit is cut at a word with an ellipsis.
+     */
+    public static function cut_to_sentences( string $text, int $max_words ): string {
+        $text = trim( $text );
+        if ( '' === $text || $max_words < 1 ) {
+            return '';
+        }
+        $pieces = preg_split( '/(?<=[.!?;\x{037E}…])(?:["»”’\')\]]*)\K\s+(?=["«“‘(\[]?[\p{Lu}\p{N}])/u', $text, -1, PREG_SPLIT_NO_EMPTY );
+        if ( ! is_array( $pieces ) ) {
+            return '';
+        }
+        // Join pieces that end in an abbreviation back to the next one.
+        $sentences = [];
+        foreach ( $pieces as $piece ) {
+            $last = count( $sentences ) - 1;
+            if ( $last >= 0 && preg_match( '/(?:^|[\s(«"])(?:\p{L}|\p{L}\.\p{L}|κκ|κα|Δρ|Dr|Mr|Mrs|Ms|St|Αγ|Αρχ|Καθ|Prof|σελ|αρ|βλ)\.$/u', $sentences[ $last ] ) ) {
+                $sentences[ $last ] .= ' ' . $piece;
+            } else {
+                $sentences[] = $piece;
+            }
+        }
+        $out   = [];
+        $words = 0;
+        foreach ( $sentences as $sentence ) {
+            $split = preg_split( '/\s+/u', trim( $sentence ), -1, PREG_SPLIT_NO_EMPTY );
+            $n     = is_array( $split ) ? count( $split ) : 0;
+            if ( $words + $n > $max_words ) {
+                break;
+            }
+            $out[]  = trim( $sentence );
+            $words += $n;
+        }
+        if ( empty( $out ) ) {
+            $first = preg_split( '/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY );
+            return is_array( $first ) ? implode( ' ', array_slice( $first, 0, $max_words ) ) . '…' : '';
+        }
+        return implode( ' ', $out );
     }
 
     /**
@@ -1168,13 +1350,13 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /** The written brief post for this date and edition, or null. */
-    private function find_brief_post( string $date, string $edition ) {
+    private function find_brief_post( string $date, string $edition, array $statuses = [ 'publish', 'future', 'pending', 'draft' ] ) {
         if ( '' === $date || ! function_exists( 'get_posts' ) ) {
             return null;
         }
         $posts = get_posts( [
             'post_type'        => 'post',
-            'post_status'      => [ 'publish', 'future', 'pending', 'draft' ],
+            'post_status'      => $statuses,
             'numberposts'      => 1,
             'suppress_filters' => true,
             'meta_query'       => [
@@ -1317,7 +1499,13 @@ class PressHub_AI_Audio_Synthesizer {
             ? PressHub_AI_Settings_Storage::get_briefing_podcast_include_text()
             : 0;
 
-        $post_content = "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
+        // Lead story text first, so the post opens with the day's top story;
+        // the excerpt filter shows the same text on the home page (2.63.0).
+        $lead      = $this->lead_story_text( $date, $edition );
+        $lead_html = $this->lead_story_html( $lead );
+
+        $post_content = ( '' !== $lead_html ? $lead_html . "\n\n" : '' )
+            . "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
             . "<figure class=\"wp-block-audio\"><audio controls src=\"" . esc_url_raw( $audio_url ) . "\"></audio></figure>\n"
             . "<!-- /wp:audio -->";
 
@@ -1348,6 +1536,7 @@ class PressHub_AI_Audio_Synthesizer {
                 '_presshub_audio_attachment_id' => $attachment_id,
                 '_presshub_audio_url'           => $audio_url,
                 '_presshub_podcast_script'      => $transcript,
+                self::META_LEAD                 => $lead,
             ],
         ];
 
@@ -1388,6 +1577,7 @@ class PressHub_AI_Audio_Synthesizer {
         update_post_meta( $post_id, '_presshub_audio_attachment_id', $attachment_id );
         update_post_meta( $post_id, '_presshub_audio_url', $audio_url );
         update_post_meta( $post_id, '_presshub_podcast_script', $transcript );
+        update_post_meta( $post_id, self::META_LEAD, $lead );
 
         // Assign featured image: auto-generate or from configured pool (with collision avoidance)
         $img_source     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source() : 'pool';
@@ -1458,7 +1648,13 @@ class PressHub_AI_Audio_Synthesizer {
             ? PressHub_AI_Settings_Storage::get_briefing_podcast_include_text()
             : 0;
 
-        $post_content = "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
+        // Lead story text first, so the post opens with the day's top story;
+        // the excerpt filter shows the same text on the home page (2.63.0).
+        $lead      = $this->lead_story_text( $date, $edition );
+        $lead_html = $this->lead_story_html( $lead );
+
+        $post_content = ( '' !== $lead_html ? $lead_html . "\n\n" : '' )
+            . "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
             . "<figure class=\"wp-block-audio\"><audio controls src=\"" . esc_url_raw( $audio_url ) . "\"></audio></figure>\n"
             . "<!-- /wp:audio -->";
 
@@ -1509,6 +1705,7 @@ class PressHub_AI_Audio_Synthesizer {
         update_post_meta( $post_id, '_presshub_audio_attachment_id', $attachment_id );
         update_post_meta( $post_id, '_presshub_audio_url', $audio_url );
         update_post_meta( $post_id, '_presshub_podcast_script', $script );
+        update_post_meta( $post_id, self::META_LEAD, $lead );
 
         // If post lacks a featured image, assign one (auto-generate or from pool with collision avoidance)
         if ( function_exists( 'has_post_thumbnail' ) && ! has_post_thumbnail( $post_id ) ) {

@@ -13,12 +13,12 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Connections (`connections`) | 42 | 18 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 78 | 2 | 0 |
+| Daily Briefing (`daily-briefing`) | 79 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 74 | 5 | 0 |
 | Social listening (`social-listening`) | 33 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **321** | | |
+| **Total** | **322** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -144,7 +144,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 | `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
-## Daily Briefing (`daily-briefing`, 78)
+## Daily Briefing (`daily-briefing`, 79)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -226,6 +226,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_podcast_prompt_2_conversational_news_reporting` | Briefing podcast prompt 2 conversational news reporting | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_prompt_3_conversational_news_reporting` | Briefing podcast prompt 3 conversational news reporting | string |  | ai / briefing |  |
 | `presshub_ai_podcast_show_notes_enabled` | Podcast show notes | integer |  | ai / briefing | checkbox |
+| `presshub_ai_podcast_lead_enabled` | Podcast lead story text | integer |  | ai / briefing | checkbox |
 
 ## Editorial knowledge (`editorial-knowledge`, 14)
 
@@ -423,6 +424,8 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_podcast_host1_name` | code only |
 | `presshub_ai_podcast_host2_name` | code only |
 | `presshub_ai_podcast_host3_name` | code only |
+| `presshub_ai_podcast_lead_enabled` | `presshub_ai_podcast_lead_enabled` |
+| `presshub_ai_podcast_lead_text` | code only |
 | `presshub_ai_podcast_producer_system_prompt` | code only |
 | `presshub_ai_podcast_show_notes_enabled` | `presshub_ai_podcast_show_notes_enabled` |
 | `presshub_ai_podcast_words_per_minute` | code only |
