@@ -578,7 +578,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_temperature', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_temperature' ],
             'type'              => 'number',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_max_tokens', [
@@ -586,7 +586,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_timeout', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_timeout' ],
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_max_source_chars', [
@@ -667,7 +667,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_copilot_temperature', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_temperature' ],
             'type'              => 'number',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_copilot_max_tokens', [
@@ -675,7 +675,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_copilot_timeout', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_timeout' ],
             'type'              => 'integer',
         ] );
 
@@ -2061,14 +2061,23 @@ class PressHub_AI_Settings_Storage {
         return in_array( $voice, $allowed, true ) ? $voice : $default;
     }
 
+    /** Default third presenter voice for the current speech engine (registry default, #309 E9). */
+    public static function default_voice_tertiary(): string {
+        return ( 'google_cloud' === self::get_briefing_tts_engine() ) ? 'el-GR-Wavenet-C' : 'Puck';
+    }
+
+    /** Default log level when none is chosen: as PressHub_AI_Logger, DEBUG with WP_DEBUG, else INFO (#309 E9). */
+    public static function default_log_level(): string {
+        return ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? 'DEBUG' : 'INFO';
+    }
+
     /**
      * Helper to retrieve configured tertiary voice persona (default 'Puck').
      *
      * @return string Third host voice persona.
      */
     public static function get_voice_tertiary(): string {
-        $engine = self::get_briefing_tts_engine();
-        $default = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck';
+        $default = self::default_voice_tertiary();
         $voice = (string) get_option( 'presshub_ai_briefing_voice_tertiary', $default );
         $allowed = self::voice_catalog_allow_list();
         return in_array( $voice, $allowed, true ) ? $voice : $default;

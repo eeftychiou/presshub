@@ -291,7 +291,15 @@
     // Defaults with Reset (scalar defaults only; prompts keep their own
     // "Load default" buttons).
     // ------------------------------------------------------------------
+    /** A stored 0 that a number field below its minimum shows blank ("use the provider default", #309). */
+    function zeroMeansBlank(e, el) {
+        return e.default === 0 && el && el.tagName === 'INPUT' && el.type === 'number' && el.min !== '' && Number(el.min) > 0;
+    }
+
     function displayDefault(e, el) {
+        if (zeroMeansBlank(e, el)) {
+            return t.empty_default || '(empty: uses the provider or built-in default)';
+        }
         if (e.checkbox) {
             return e.default ? (t.on || 'On') : (t.off || 'Off');
         }
@@ -364,7 +372,7 @@
                 if (e.checkbox) {
                     $el.prop('checked', !!e.default);
                 } else {
-                    $el.val(String(e.default));
+                    $el.val(zeroMeansBlank(e, el) ? '' : String(e.default));
                 }
                 $el.trigger('input').trigger('change');
                 sync();

@@ -271,6 +271,10 @@ Open **PressHub → Settings** (`admin.php?page=presshub-ai&section=<slug>`). Th
   - the Shorts music library
 
   Settings search also finds API keys, tokens and passwords by name and opens their Replace key button.
+- **Defaults, translations and uninstall (2.70.0)**:
+  - Every setting shows its default with Reset to default, except prompts, which use Load default template.
+  - Setting names and help in Settings search appear in the site's language.
+  - Deleting the plugin removes every PressHub setting, store and saved key, on every site of a network.
 
 Old links (`?tab=…` of the former AI and Social settings pages) redirect to the section that holds the tab.
 

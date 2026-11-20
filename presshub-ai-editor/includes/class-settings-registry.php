@@ -186,9 +186,22 @@ class PressHub_Settings_Registry {
     }
 
     /**
+     * A registry label, help text or old name in the site's language (#309, E10).
+     * The strings reach translators through includes/settings-registry-strings.php.
+     */
+    public static function translated( string $text ): string {
+        if ( '' === $text || ! function_exists( 'translate' ) ) {
+            return $text;
+        }
+        // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText,WordPress.WP.I18n.LowLevelTranslationFunction -- registry data; listed for translators in settings-registry-strings.php.
+        return (string) translate( $text, 'presshub-ai-editor' );
+    }
+
+    /**
      * Index for the settings search and the per-field Default / Reset links
-     * (#234): every active, rendered option of both pages; secrets by label and
-     * help only, never a value or default (#309 E3).
+     * (#234): every active, rendered option of both pages, with labels and
+     * help in the site's language (#309 E10); secrets by label and help only,
+     * never a value or default (#309 E3).
      * Defaults come from the registry, else from register_setting(); only
      * scalar defaults are passed.
      *
@@ -210,9 +223,9 @@ class PressHub_Settings_Registry {
                 'tab'      => (string) ( $e['tab'] ?? '' ),
                 'section'  => PressHub_Settings_Sections::section_of( (string) $key, $e ),
                 'group'    => (string) ( $e['group'] ?? '' ),
-                'label'    => (string) ( $e['label'] ?? $key ),
-                'help'     => (string) ( $e['help'] ?? '' ),
-                'aliases'  => array_values( array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ),
+                'label'    => self::translated( (string) ( $e['label'] ?? $key ) ),
+                'help'     => self::translated( (string) ( $e['help'] ?? '' ) ),
+                'aliases'  => array_values( array_map( [ __CLASS__, 'translated' ], array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ) ),
                 'checkbox' => ! empty( $e['checkbox'] ),
             ];
             if ( $is_secret ) {
@@ -226,7 +239,7 @@ class PressHub_Settings_Registry {
                 $labels  = [];
                 foreach ( $parents as $pk ) {
                     $parent   = self::get( $pk );
-                    $labels[] = (string) ( $parent['label'] ?? $pk );
+                    $labels[] = self::translated( (string) ( $parent['label'] ?? $pk ) );
                 }
                 $row['depends_on']    = 1 === count( $parents ) ? $parents[0] : $parents;
                 $row['depends_label'] = implode( '" or "', $labels );
@@ -235,8 +248,8 @@ class PressHub_Settings_Registry {
             if ( null === $default && isset( $registered[ $key ] ) && array_key_exists( 'default', $registered[ $key ] ) ) {
                 $default = $registered[ $key ]['default'];
             }
-            if ( is_bool( $default ) ) {
-                $default = $default ? 1 : 0;
+            if ( is_bool( $default ) || ( ! empty( $e['checkbox'] ) && is_scalar( $default ) ) ) {
+                $default = in_array( $default, [ true, 1, '1', 'on', 'yes', 'true' ], true ) ? 1 : 0;
             }
             if ( is_scalar( $default ) && ( ! is_string( $default ) || strlen( $default ) <= 200 ) ) {
                 $row['default'] = $default;
