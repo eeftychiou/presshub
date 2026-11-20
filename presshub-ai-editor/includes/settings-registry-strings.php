@@ -54,7 +54,7 @@ __( 'Speech AI timeout (s)', 'presshub-ai-editor' );
 __( 'Maximum time in seconds to wait for speech synthesis response (60 to 900 seconds). Default 300s. Increase for lengthy multi-topic podcast scripts.', 'presshub-ai-editor' );
 __( 'Speech AI Timeout (seconds)', 'presshub-ai-editor' );
 __( 'Raw debug dump: TTS payloads', 'presshub-ai-editor' );
-__( 'Raw debug dump for developers. Generation records already keep every TTS call (model, voices, request body without audio, status, duration, audio length) for editors, so leave this off unless you need the raw file. Use it only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' );
+__( 'Raw debug dump for developers. Generation records already keep every TTS call (model, voices, request body without audio, status, duration, audio length) for editors, so leave this off unless you need the raw file. Use it only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded.', 'presshub-ai-editor' );
 __( 'Generation Record Retention (days)', 'presshub-ai-editor' );
 __( 'How long to keep generation records (prompts, settings, inputs and responses for each briefing and podcast generation). 7–365 days, default 90.', 'presshub-ai-editor' );
 __( 'Log File Retention (days)', 'presshub-ai-editor' );

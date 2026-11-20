@@ -33,13 +33,13 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_gcloud_project_id` | Google Cloud Project ID (Imagen) | string |  | ai / advanced |  |
 | `presshub_ai_imagen_region` | Imagen Region | string |  | ai / advanced |  |
 | `presshub_ai_press_inbox_host` | Mail server (IMAP host) | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
-| `presshub_ai_press_inbox_port` | Mail server port | string | port | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Port |
+| `presshub_ai_press_inbox_port` | Mail server port | integer | port | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Port |
 | `presshub_ai_press_inbox_encryption` | Mail server encryption | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
 | `presshub_ai_press_inbox_verify_ssl` | Verify the mail server certificate | string |  | ai / briefing | checkbox, needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
 | `presshub_ai_press_inbox_username` | Mailbox Username | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
 | `presshub_ai_press_inbox_password` | Mailbox Password | string |  | ai / briefing | secret, masked, needs `presshub_ai_press_inbox_enabled` on |
 | `presshub_ai_remove_press_inbox_password` | Remove press inbox password | string |  | ai / briefing | not shown on screen, removes `presshub_ai_press_inbox_password` |
-| `presshub_ai_press_inbox_timeout` | Mail server timeout (s) | string | s | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
+| `presshub_ai_press_inbox_timeout` | Mail server timeout (s) | integer | s | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
 | `presshub_social_worker_mode` | Worker Connection Mode | string |  | social / worker |  |
 | `presshub_social_worker_url` | Worker Service Endpoint | string |  | social / worker |  |
 | `presshub_social_worker_secret` | Worker Secret Token | string |  | social / worker | secret, masked |
@@ -144,9 +144,9 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_press_inbox_folder` | Folders | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
 | `presshub_ai_press_inbox_processed_folder` | Move used emails to | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
 | `presshub_ai_press_inbox_allowed_senders` | Allowed Senders | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
-| `presshub_ai_press_inbox_max_messages` | Press releases per harvest | string | messages | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
-| `presshub_ai_press_inbox_max_age_hours` | Oldest press release read (h) | string | h | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
-| `presshub_ai_press_inbox_max_attachment_mb` | Largest attachment read (MB) | string | MB | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
+| `presshub_ai_press_inbox_max_messages` | Press releases per harvest | integer | messages | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
+| `presshub_ai_press_inbox_max_age_hours` | Oldest press release read (h) | integer | h | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
+| `presshub_ai_press_inbox_max_attachment_mb` | Largest attachment read (MB) | integer | MB | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
 | `presshub_ai_press_inbox_extract_attachments` | Read press release attachments | string |  | ai / briefing | checkbox, needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
 | `presshub_ai_harvest_time_budget` | Harvest time budget (s) | integer | s | ai / briefing | was: Harvest Execution Time Budget (seconds) |
 | `presshub_ai_curation_max_articles` | Articles sent to the curator | integer | articles | ai / briefing | was: Maximum Articles Sent to Curation LLM |
@@ -311,17 +311,17 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
 | `presshub_ai_social_monitor_enabled` | Monitor Social Accounts | string |  | ai / social_listening | checkbox |
-| `presshub_ai_social_monitor_interval_min` | Social scan interval (min) | string | min | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Scan Schedule |
-| `presshub_ai_social_monitor_max_age_hours` | Oldest social post read (h) | string | h | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Scan Schedule |
-| `presshub_ai_social_monitor_max_posts_per_account` | Social posts per account | string | posts | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Post Limits |
-| `presshub_ai_social_monitor_max_posts_per_harvest` | Social posts per harvest | string | posts | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Post Limits |
+| `presshub_ai_social_monitor_interval_min` | Social scan interval (min) | integer | min | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Scan Schedule |
+| `presshub_ai_social_monitor_max_age_hours` | Oldest social post read (h) | integer | h | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Scan Schedule |
+| `presshub_ai_social_monitor_max_posts_per_account` | Social posts per account | integer | posts | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Post Limits |
+| `presshub_ai_social_monitor_max_posts_per_harvest` | Social posts per harvest | integer | posts | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Post Limits |
 | `presshub_ai_social_monitor_x_list_url` | X List (optional) | string |  | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on |
 | `presshub_ai_social_monitor_transcribe_videos` | Transcribe social videos | string |  | ai / social_listening | checkbox, needs `presshub_ai_social_monitor_enabled` on, was: Videos |
-| `presshub_ai_social_monitor_max_video_seconds` | Longest video transcribed (s) | string | s | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
-| `presshub_ai_social_monitor_max_video_mb` | Largest video transcribed (MB) | string | MB | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
+| `presshub_ai_social_monitor_max_video_seconds` | Longest video transcribed (s) | integer | s | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
+| `presshub_ai_social_monitor_max_video_mb` | Largest video transcribed (MB) | integer | MB | ai / social_listening | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
 | `presshub_ai_social_trending_enabled` | Publish trending roundup | string |  | ai / social_listening | checkbox, was: Publish Trending Roundup |
 | `presshub_ai_social_trending_image_source` | Roundup featured image | string |  | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
-| `presshub_ai_social_trending_interval_hours` | Trending roundup interval (h) | string | h | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Publish Trending Roundup |
+| `presshub_ai_social_trending_interval_hours` | Trending roundup interval (h) | integer | h | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Publish Trending Roundup |
 | `presshub_ai_social_trending_platform_x` | Trending from X | string |  | ai / social_listening | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
 | `presshub_ai_social_trending_platform_tiktok` | Trending from TikTok | string |  | ai / social_listening | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
 | `presshub_ai_social_trending_platform_instagram` | Trending from Instagram | string |  | ai / social_listening | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
@@ -333,14 +333,14 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_social_trending_post_mode` | Trending roundup post mode | string |  | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
 | `presshub_ai_social_trending_post_status` | Trending roundup post status | string |  | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
 | `presshub_ai_social_trending_title` | Trending roundup title | string |  | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
-| `presshub_ai_social_trending_max_items` | Posts in the roundup | string | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Selection |
-| `presshub_ai_social_trending_max_per_platform` | Trending posts per platform | string | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Selection |
-| `presshub_ai_social_trending_max_age_hours` | Oldest trending post (h) | string | h | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Selection |
-| `presshub_ai_social_trending_min_engagement` | Minimum trending engagement | string | engagement points | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Selection |
+| `presshub_ai_social_trending_max_items` | Posts in the roundup | integer | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Selection |
+| `presshub_ai_social_trending_max_per_platform` | Trending posts per platform | integer | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Selection |
+| `presshub_ai_social_trending_max_age_hours` | Oldest trending post (h) | integer | h | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Selection |
+| `presshub_ai_social_trending_min_engagement` | Minimum trending engagement | integer | engagement points | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Selection |
 | `presshub_ai_social_trending_excluded_words` | Excluded Words | string |  | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 | `presshub_ai_social_trending_summary_enabled` | AI summary at the top of the roundup | string |  | ai / social_listening | checkbox, needs `presshub_ai_social_trending_enabled` on, was: AI summary |
 | `presshub_ai_social_trending_briefing_enabled` | Use trending posts in the briefing | string |  | ai / social_listening | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
-| `presshub_ai_social_trending_briefing_count` | Trending posts given to the briefing | string | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
+| `presshub_ai_social_trending_briefing_count` | Trending posts given to the briefing | integer | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
 | `presshub_ai_social_trending_max_per_account` | Trending posts per account | integer | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 | `presshub_ai_social_trending_share_after_hour` | Publish trending roundups from (hour) | integer | hour | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 

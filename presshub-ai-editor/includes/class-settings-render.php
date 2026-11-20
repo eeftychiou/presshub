@@ -43,6 +43,45 @@ class PressHub_AI_Settings_Render {
     }
 
     /**
+     * #309 (E2): the result of a save made without JavaScript (admin-post),
+     * shown once after the redirect back to the section.
+     */
+    private function render_section_post_result( string $section ): void {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only reads a flag set by our own redirect.
+        if ( empty( $_GET['presshub_saved'] ) || ! function_exists( 'get_current_user_id' ) ) {
+            return;
+        }
+        $key    = PressHub_Settings_Sections::post_result_key( (int) get_current_user_id() );
+        $result = get_transient( $key );
+        delete_transient( $key );
+        if ( ! is_array( $result ) || ( $result['section'] ?? '' ) !== $section ) {
+            return;
+        }
+        if ( ! empty( $result['ok'] ) ) {
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'presshub-ai-editor' ) . '</p>';
+            foreach ( (array) ( $result['model_warnings'] ?? [] ) as $warning ) {
+                echo '<p>' . esc_html( (string) $warning ) . '</p>';
+            }
+            echo '</div>';
+            return;
+        }
+        echo '<div class="notice notice-error"><p>' . esc_html( (string) ( $result['message'] ?? __( 'Not saved.', 'presshub-ai-editor' ) ) ) . '</p>';
+        if ( ! empty( $result['field_errors'] ) ) {
+            echo '<ul>';
+            foreach ( (array) $result['field_errors'] as $option => $message ) {
+                $label = class_exists( 'PressHub_Model_Tasks' ) ? (string) PressHub_Model_Tasks::label_of( (string) $option ) : '';
+                if ( '' === $label ) {
+                    $entry = PressHub_Settings_Registry::get( (string) $option );
+                    $label = (string) ( $entry['label'] ?? $option );
+                }
+                echo '<li><a href="#' . esc_attr( (string) $option ) . '">' . esc_html( $label ) . '</a>: ' . esc_html( (string) $message ) . '</li>';
+            }
+            echo '</ul>';
+        }
+        echo '</div>';
+    }
+
+    /**
      * Slug sanitizer, mirrored from the facade so render_providers_grid() can
      * call self::sanitize_slug() without depending on the facade.
      */
@@ -73,6 +112,7 @@ class PressHub_AI_Settings_Render {
         <div class="wrap presshub-ai-settings-wrap presshub-settings-page" id="presshub-settings-page" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
             <h1><?php echo esc_html__( 'PressHub — Settings', 'presshub-ai-editor' ); ?></h1>
             <hr class="wp-header-end" />
+            <?php $this->render_section_post_result( $section ); ?>
             <?php if ( $prompts_reset ) : ?>
                 <div class="notice notice-success is-dismissible"><p><?php echo esc_html__( 'All prompts and templates have been restored to their defaults.', 'presshub-ai-editor' ); ?></p></div>
             <?php endif; ?>
@@ -99,11 +139,15 @@ class PressHub_AI_Settings_Render {
                         </nav>
                     <?php endif; ?>
 
-                    <form method="post" action="options.php" id="presshub-ai-settings-form" novalidate class="presshub-settings-section-form" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="presshub-ai-settings-form" novalidate class="presshub-settings-section-form" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
                         <?php
-                        // option_page and nonce, so a no-JS submit still reaches options.php's capability check.
-                        settings_fields( 'presshub_ai_options' );
+                        // #309 (E2): without JavaScript the form saves this section only,
+                        // through the same path as the AJAX Save (never options.php, which
+                        // would save the whole option group and reset other sections).
                         ?>
+                        <input type="hidden" name="action" value="<?php echo self::esc_attr_safe( PressHub_Settings_Sections::POST_ACTION ); ?>" />
+                        <input type="hidden" name="presshub_settings_section" value="<?php echo self::esc_attr_safe( $section ); ?>" />
+                        <?php wp_nonce_field( PressHub_Settings_Sections::post_nonce( $section ), '_wpnonce', true ); ?>
                         <div id="presshub-tab-pane-<?php echo self::esc_attr_safe( $section ); ?>" class="presshub-tab-pane presshub-settings-section" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
                             <?php $this->render_section( $section ); ?>
                         </div>
@@ -1897,7 +1941,12 @@ class PressHub_AI_Settings_Render {
     }
 
     public function render_logging_section() {
-        echo '<p>' . esc_html__( 'Configure diagnostic logging verbosity, prompt/response exchange recording, speech synthesis payload captures and how long logs are kept. Logs live in a protected folder (wp-content/uploads/presshub-ai/ by default) with random file names, and can be reviewed or downloaded in the Diagnostic Inspector below. To keep them outside the web root, define PRESSHUB_AI_LOG_DIR in wp-config.php.', 'presshub-ai-editor' ) . '</p>';
+        echo '<p>' . sprintf(
+            /* translators: 1: the constant to define, 2: the file it goes in */
+            esc_html__( 'Configure diagnostic logging verbosity, prompt/response exchange recording, speech synthesis payload captures and how long logs are kept. Logs live in a protected folder (wp-content/uploads/presshub-ai/ by default) with random file names, and can be reviewed or downloaded in the Diagnostic Inspector below. To keep them outside the web root, define %1$s in %2$s.', 'presshub-ai-editor' ),
+            '<code>PRESSHUB_AI_LOG_DIR</code>',
+            '<code>wp-config.php</code>'
+        ) . '</p>';
         if ( class_exists( 'PressHub_AI_Log_Exposure_Check' ) ) {
             PressHub_AI_Log_Exposure_Check::render_panel();
         }
@@ -3479,7 +3528,7 @@ class PressHub_AI_Settings_Render {
             <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to the protected log folder (tts channel).', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
-            <?php echo esc_html__( 'Raw debug dump for developers. Generation records already keep every TTS call (model, voices, request body without audio, status, duration, audio length) for editors, so leave this off unless you need the raw file. Use it only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Raw debug dump for developers. Generation records already keep every TTS call (model, voices, request body without audio, status, duration, audio length) for editors, so leave this off unless you need the raw file. Use it only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }
@@ -5046,7 +5095,7 @@ class PressHub_AI_Settings_Render {
             </p>
 
             <div class="ph-margin-top-8px presshub-empty-prompt-warning notice notice-warning inline<?php echo empty( trim( $article_val ) ) ? '' : ' presshub-is-hidden'; ?>">
-                <p>⚠️ <strong><?php echo esc_html__( 'Note:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'When left empty, PressHub AI automatically uses the built-in default prompt asset from assets/prompts/scorecard/article_qa_user_prompt.txt.', 'presshub-ai-editor' ); ?></p>
+                <p>⚠️ <strong><?php echo esc_html__( 'Note:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'When left empty, PressHub AI uses its built-in default prompt.', 'presshub-ai-editor' ); ?></p>
             </div>
 
             <p class="ph-margin-top-8px description">

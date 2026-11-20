@@ -375,6 +375,10 @@ class PressHub_AI_Stakeholders {
         $f['updated_at'] = function_exists( 'current_time' ) ? (string) current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
         $fiches[ $slug ] = self::normalize( $f );
         self::store( $fiches );
+        // #309 (E4)
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'person_fiche_edited', 'person_fiche', $slug, [ 'locked' => $f['locked'], 'excluded' => $f['excluded'] ] );
+        }
         return $fiches[ $slug ];
     }
 
@@ -409,6 +413,10 @@ class PressHub_AI_Stakeholders {
         $fiches[ $into ] = self::normalize( $a );
         unset( $fiches[ $from ] );
         self::store( $fiches );
+        // #309 (E4)
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'person_fiches_merged', 'person_fiche', $into, [ 'merged_from' => $from ] );
+        }
         return $fiches[ $into ];
     }
 

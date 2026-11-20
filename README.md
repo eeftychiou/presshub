@@ -267,6 +267,21 @@ Open **PressHub → Settings** (`admin.php?page=presshub-ai&section=<slug>`). Th
   - Setting names and help in Settings search appear in the site's language.
   - Deleting the plugin removes every PressHub setting, store and saved key, on every site of a network.
 
+- **Saving without JavaScript (2.68.1)**: with JavaScript off, a section's Save still saves only that section, through the same checks as the normal Save, and returns to it with a notice. It no longer posts the whole option group to options.php, which ignored Social settings and reset unposted checkboxes in other sections.
+- **Settings audit and search (2.69.0)**: these now write an audit event to Usage & logs (never with a secret value):
+  - Regenerate worker secret
+  - the Social prompts reset
+  - the Presets editor (site-wide presets, taxonomy and role defaults)
+  - the editorial agenda
+  - people fiche edits and merges
+  - the Shorts music library
+
+  Settings search also finds API keys, tokens and passwords by name and opens their Replace key button.
+- **Defaults, translations and uninstall (2.70.0)**:
+  - Every setting shows its default with Reset to default, except prompts, which use Load default template.
+  - Setting names and help in Settings search appear in the site's language.
+  - Deleting the plugin removes every PressHub setting, store and saved key, on every site of a network.
+
 Old links (`?tab=…` of the former AI and Social settings pages) redirect to the section that holds the tab.
 
 ---

@@ -29,6 +29,13 @@
         if (!form) {
             return null;
         }
+        // A saved key, token or password (#309 E3): point at its Replace key button,
+        // or the field box, never at the value.
+        var secretBox = form.querySelector('.presshub-secret[data-secret-for="' + key + '"]');
+        if (secretBox) {
+            var replaceBtn = secretBox.querySelector('.presshub-secret-replace:not([hidden])');
+            return replaceBtn || secretBox;
+        }
         // AI models: the list shown in place of the model ID field (#236).
         if (typeof window.PressHubModelControl === 'function') {
             var model = window.PressHubModelControl(key);
@@ -131,6 +138,12 @@
         var hasSection = /[?&]section=/.test(window.location.search);
         if (!hasSection && data.legacy_hashes && data.legacy_hashes[hash] && !document.getElementById(hash)) {
             window.location.replace(data.legacy_hashes[hash]);
+            return;
+        }
+        // A secret (#309 E3): its password input is hidden until Replace key, so
+        // go to the button through fieldFor().
+        if (/^[a-z0-9_]+$/i.test(hash) && document.querySelector('.presshub-secret[data-secret-for="' + hash + '"]')) {
+            reveal(fieldFor(hash));
             return;
         }
         var target = (typeof window.PressHubModelControl === 'function' && window.PressHubModelControl(hash)) || document.getElementById(hash);

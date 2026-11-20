@@ -92,7 +92,7 @@ class PressHub_Social_Settings_Render {
         <div class="presshub-social-reset-box">
             <h4><?php echo esc_html__( 'Restore Prompts & Templates', 'presshub-social-autopost' ); ?></h4>
             <p class="description">
-                <?php echo esc_html__( 'Reset all prompt templates and static formats back to the official default files from assets/prompts/. Any customizations made in the fields above will be overwritten.', 'presshub-social-autopost' ); ?>
+                <?php echo esc_html__( 'Reset all prompt templates and static formats to their built-in defaults. Any customizations made in the fields above will be overwritten.', 'presshub-social-autopost' ); ?>
             </p>
             <p>
                 <a href="<?php echo esc_url( $url ); ?>" class="button button-secondary presshub-confirm-link" data-confirm="<?php echo esc_attr__( 'Are you sure you want to restore all prompts to defaults? Your customized prompt changes will be lost.', 'presshub-social-autopost' ); ?>">
@@ -596,7 +596,12 @@ class PressHub_Social_Settings_Render {
             'describedby' => 'presshub_social_worker_secret-desc',
         ] );
         ?>
-        <p class="description" id="presshub_social_worker_secret-desc"><?php echo esc_html__( 'The worker signs in with this secret. It must match PRESSHUB_WORKER_SECRET in the worker’s .env file.', 'presshub-social-autopost' ); ?></p>
+        <p class="description" id="presshub_social_worker_secret-desc"><?php echo sprintf(
+            /* translators: 1: the worker setting name, 2: the worker's settings file */
+            esc_html__( 'The worker signs in with this secret. It must match %1$s in the worker’s %2$s file.', 'presshub-social-autopost' ),
+            '<code>PRESSHUB_WORKER_SECRET</code>',
+            '<code>.env</code>'
+        ); ?></p>
         <p class="presshub-worker-regenerate">
             <button type="button" class="button" id="presshub-social-regenerate-secret"
                 data-confirm="<?php echo esc_attr__( 'Make a new worker secret? The worker stops posting until you paste the new secret into PRESSHUB_WORKER_SECRET in its .env file and restart it.', 'presshub-social-autopost' ); ?>">

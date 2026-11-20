@@ -333,8 +333,12 @@ class SettingsPageTest
             ob_end_clean();
             $failures[] = 'render_settings_page() threw with manage_options cap: ' . $e->getMessage();
         }
-        if ( empty( $GLOBALS['RENDERED_SETTINGS_FIELDS']['presshub_ai_options'] ) ) {
-            $failures[] = 'render_settings_page() should call settings_fields( presshub_ai_options ).';
+        // #309 (E2): without JavaScript the form saves one section through admin-post, never options.php.
+        if ( false === strpos( $html, 'admin-post.php' ) || false !== strpos( $html, 'action="options.php"' ) || false === strpos( $html, 'name="action" value="' . PressHub_Settings_Sections::POST_ACTION . '"' ) || false === strpos( $html, 'name="presshub_settings_section"' ) ) {
+            $failures[] = 'render_settings_page() should post the section form to admin-post.php with its action and section, not options.php.';
+        }
+        if ( ! empty( $GLOBALS['RENDERED_SETTINGS_FIELDS']['presshub_ai_options'] ) ) {
+            $failures[] = 'render_settings_page() must not print settings_fields( presshub_ai_options ): a no-JS options.php submit saves the whole option group.';
         }
         // #246: the page renders one section pane (the default, Connections).
         if ( false === strpos( $html, 'id="presshub-tab-pane-connections"' ) ) {
