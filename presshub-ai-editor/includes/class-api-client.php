@@ -2122,6 +2122,12 @@ class PressHub_AI_API_Client {
      * @param float  $pitch                     Voice pitch tuning in semitones (default 0.0).
      * @param string $payload_mode              Payload structure mode ('structured', 'hybrid_instruction', 'legacy').
      * @param string $custom_system_instruction Optional custom system instruction template.
+     * @param bool   $labelled_dialogue         2.74.0: send a two-speaker script as one text
+     *                                          with its "Name: line" labels kept (the names
+     *                                          match speakerVoiceConfigs), which is how Gemini
+     *                                          picks the voice of each line. Without it the
+     *                                          labels are stripped into separate parts, which
+     *                                          Gemini does not route by speaker.
      * @return array Complete request body array.
      */
     public static function build_gemini_tts_request_body(
@@ -2133,7 +2139,8 @@ class PressHub_AI_API_Client {
         float $speed = 1.0,
         float $pitch = 0.0,
         string $payload_mode = 'structured',
-        string $custom_system_instruction = ''
+        string $custom_system_instruction = '',
+        bool $labelled_dialogue = false
     ): array {
         $style_instructions = [
             'natural'     => 'Say naturally and clearly in Greek with warm human cadence:',
@@ -2216,7 +2223,15 @@ class PressHub_AI_API_Client {
 
         // Modern modes ('structured', 'hybrid_instruction', 'speech_metadata', 'system_instruction')
         $parts = [];
-        if ( $is_multi_speaker ) {
+        if ( $is_multi_speaker && $labelled_dialogue ) {
+            // One part holding the whole labelled dialogue: Gemini reads the labels to
+            // choose each line's voice and does not speak them.
+            $part = [ 'text' => $clean_text ];
+            if ( 'system_instruction' !== $payload_mode ) {
+                $part['speech_metadata'] = [ 'style' => $composed_style ];
+            }
+            $parts[] = $part;
+        } elseif ( $is_multi_speaker ) {
             $speaker_tags = [ 'Presenter\s*\d+', 'Speaker[_\s]*\d+', 'Host[_\s]*\d+', 'Ομιλητής\s*\d+', 'Παρουσιαστής\s*\d+' ];
             if ( ! empty( $multi_speakers ) ) {
                 foreach ( $multi_speakers as $ms ) {
@@ -2653,11 +2668,15 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'missing_tts_voice', $err_msg );
         }
 
-        $clean_text       = trim( $text );
-        $is_multi_speaker = false;
-        $multi_speakers   = [];
+        $clean_text        = trim( $text );
+        $is_multi_speaker  = false;
+        $multi_speakers    = [];
+        $labelled_dialogue = false;
         if ( ! empty( $speaker_configs ) && is_array( $speaker_configs ) && count( $speaker_configs ) >= 2 ) {
             foreach ( $speaker_configs as $sc ) {
+                if ( ! empty( $sc['labelled'] ) ) {
+                    $labelled_dialogue = true;
+                }
                 if ( ! empty( $sc['speaker'] ) && ! empty( $sc['voice'] ) ) {
                     $multi_speakers[] = [
                         'speaker'     => (string) $sc['speaker'],
@@ -2690,7 +2709,8 @@ class PressHub_AI_API_Client {
             $speed,
             $pitch,
             $payload_mode,
-            $sys_instruction
+            $sys_instruction,
+            $is_multi_speaker && $labelled_dialogue
         );
 
         // Resolve Model cascade

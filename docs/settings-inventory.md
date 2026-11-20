@@ -13,12 +13,12 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Connections (`connections`) | 27 | 3 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 79 | 0 | 0 |
+| Daily Briefing (`daily-briefing`) | 81 | 0 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 69 | 0 | 0 |
 | Social listening (`social-listening`) | 33 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **302** | | |
+| **Total** | **304** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 34 option(s); both lists are at the end.
 
@@ -129,7 +129,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 | `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
-## Daily Briefing (`daily-briefing`, 79)
+## Daily Briefing (`daily-briefing`, 81)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -179,6 +179,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_tts_turn_pause_ms` | Turn Pause Duration (ms) | integer | ms | ai / briefing |  |
 | `presshub_ai_briefing_tts_topic_pause_ms` | Topic Transition Pause (ms) | integer | ms | ai / briefing |  |
 | `presshub_ai_briefing_tts_request_delay_ms` | Inter-Turn Throttle Delay (ms) | integer | ms | ai / briefing |  |
+| `presshub_ai_briefing_tts_request_mode` | Speech requests per episode | string |  | ai / briefing | was: speech quota; TTS requests; multi-speaker |
+| `presshub_ai_briefing_tts_request_max_chars` | Longest joined speech request (characters) | integer | characters | ai / briefing |  |
 | `presshub_ai_briefing_tts_max_retries` | Speech API Max Retries (429/5xx) | integer | retries | ai / briefing |  |
 | `presshub_ai_briefing_tts_retry_backoff_ms` | Speech API Retry Backoff (ms) | integer | ms | ai / briefing |  |
 | `presshub_ai_briefing_tts_requests_per_minute` | Speech API Requests per Minute | integer | requests/min | ai / briefing |  |
