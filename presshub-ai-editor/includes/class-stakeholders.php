@@ -514,7 +514,15 @@ class PressHub_AI_Stakeholders {
             // Only the first people seen in the last 60 days are listed: recorded with this call.
             PressHub_AI_Knowledge_Cuts::note_material( 'memory_stakeholders', __( 'Known people', 'presshub-ai-editor' ), 'max_items', $known_max, count( $known ) );
         }
-        $raw = $api_client->call_provider( $sys, $user, true, [], null, [ 'action_trigger' => 'memory_stakeholders', 'briefing_date' => $date, 'edition' => $edition ] );
+        // This call writes its own generation record below, so call_provider()
+        // must not add a second, generic one.
+        $suppressed = $api_client->suppress_provider_prompt_log;
+        $api_client->suppress_provider_prompt_log = true;
+        try {
+            $raw = $api_client->call_provider( $sys, $user, true, [], null, [ 'action_trigger' => 'memory_stakeholders', 'briefing_date' => $date, 'edition' => $edition ] );
+        } finally {
+            $api_client->suppress_provider_prompt_log = $suppressed;
+        }
         if ( $cut ) {
             PressHub_AI_Knowledge_Cuts::forget_material( 'memory_stakeholders' );
         }
