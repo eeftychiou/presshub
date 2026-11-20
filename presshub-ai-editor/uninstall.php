@@ -183,6 +183,8 @@ $presshub_ai_options = array_merge( $presshub_ai_options, [
     'presshub_ai_log_paths_version',
     'presshub_ai_audit_logs_db_version',
     'presshub_ai_generation_records_db_version',
+    'presshub_ai_prompt_versions_db_version',
+    'presshub_ai_prompt_versions_baseline',
     'presshub_ai_memory_db_version',
     'presshub_ai_qa_reviews_db_version',
     'presshub_ai_token_logs_db_version',

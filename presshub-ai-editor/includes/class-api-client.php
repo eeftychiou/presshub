@@ -106,6 +106,14 @@ class PressHub_AI_API_Client {
     public $suppress_provider_prompt_log = false;
 
     /**
+     * 2.76.0: extra config keys for the `generic` generation record that
+     * call_provider() stores (for example the social copy's prompt_versions).
+     *
+     * @var array
+     */
+    public array $generation_record_config = [];
+
+    /**
      * Request-config line for the debug log: mirrors the constructor's
      * option resolution (provider, model, max_tokens) so truncation is
      * diagnosable at a glance (a saved max_tokens option overrides the
@@ -3175,7 +3183,7 @@ class PressHub_AI_API_Client {
                     array_values( $files )
                 );
             }
-            self::finish_generation_record( $generic_t0, 'generic', $this, $sys_prompt, $user_prompt, $result, [ 'inputs' => $generic_inputs ] );
+            self::finish_generation_record( $generic_t0, 'generic', $this, $sys_prompt, $user_prompt, $result, [ 'inputs' => $generic_inputs, 'config' => $this->generation_record_config ] );
         }
 
         return $result;

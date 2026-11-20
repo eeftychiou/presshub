@@ -64,6 +64,13 @@ class PressHub_AI_Podcast_Producer {
     private static int $last_memory_tokens_estimate = 0;
 
     /**
+     * @internal 2.76.0 - prompt versions the most recent build_dialogue_prompt() call used.
+     *
+     * @var array<int,array>
+     */
+    private static array $last_prompt_versions = [];
+
+    /**
      * Get duration and pacing specifications based on duration option.
      *
      * @param string $duration_option Duration option (e.g. '3_min', '5_min', '10_min').
@@ -185,6 +192,14 @@ class PressHub_AI_Podcast_Producer {
      */
     public function last_memory_manifest(): array {
         return self::$last_memory_manifest;
+    }
+
+    /**
+     * 2.76.0 - prompt versions (PressHub_AI_Prompt_Versions refs) the most
+     * recent build_dialogue_prompt() call used; goes on the podcast_script record.
+     */
+    public function last_prompt_versions(): array {
+        return self::$last_prompt_versions;
     }
 
     /**
@@ -382,6 +397,15 @@ class PressHub_AI_Podcast_Producer {
             throw new InvalidArgumentException( sprintf( __( 'No dialogue prompt configured for style "%1$s" and %2$d presenter(s). Please configure the prompt in PressHub -> Settings -> Daily Briefing Hub -> Podcast script.', 'presshub-ai-editor' ), $style, $host_count ) );
         }
 
+        // 2.76.0: the prompt studio version this script is written with.
+        self::$last_prompt_versions = [];
+        if ( class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
+            $ref = PressHub_AI_Prompt_Versions::ref(
+                PressHub_AI_Prompt_Versions::podcast_key( in_array( $host_count, [ 1, 3 ], true ) ? $host_count : 2, $style ),
+                (string) $base_prompt
+            );
+            self::$last_prompt_versions = null !== $ref ? [ $ref ] : [];
+        }
         $base_prompt = apply_filters( 'presshub_ai_podcast_producer_system_prompt', $base_prompt );
         $has_memory_in_system = ( false !== strpos( $base_prompt, '{memory_context}' ) );
         $articles_in_system   = ( false !== strpos( $base_prompt, '{articles_context}' ) );
@@ -1199,6 +1223,7 @@ class PressHub_AI_Podcast_Producer {
                         'context_mode' => $context_mode,
                         'duration'     => $record_duration,
                         'style'        => $style,
+                        'prompt_versions' => $this->last_prompt_versions(),
                     ]
                 ), $gen_injected[1] ),
                 'inputs'        => $this->last_input_breakdown() + [ 'selected_article_ids' => $selected_article_ids ],
