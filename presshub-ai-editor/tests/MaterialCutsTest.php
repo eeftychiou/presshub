@@ -309,6 +309,7 @@ $fit_html = PressHub_AI_Settings_Render::policy_fit_html( $fit, [ 'social_copy_'
 mc_check( 'fit html: says which fiches have nothing to send', false !== strpos( $fit_html, 'Social copy: 1 of 2 fit; too long: Μακρύς φάκελος; nothing to send here: Φάκελος αρχών' ) && false !== strpos( $fit_html, 'at most ' . $P::MAX_INJECTED . ' are sent' ) );
 $only = [ 'social_copy_' => [ 'budget' => 1200, 'fit' => 0, 'total' => 1, 'too_long' => [], 'empty' => [ 'Φάκελος αρχών' ] ] ];
 mc_check( 'fit html: no fiche with text for the task says so', false !== strpos( PressHub_AI_Settings_Render::policy_fit_html( $only, [ 'social_copy_' => 'Social copy' ] ), 'Social copy: no published fiche has text for this task' ) );
+mc_check( 'fit html: a fiche sent without some parts is named', false !== strpos( PressHub_AI_Settings_Render::policy_fit_html( [ 'social_copy_' => [ 'budget' => 1200, 'fit' => 1, 'total' => 1, 'too_long' => [], 'empty' => [], 'shortened' => [ 'Κυπριακό' ] ] ], [ 'social_copy_' => 'Social copy' ] ), 'Social copy: all 1 published fiches fit; sent shortened: Κυπριακό' ) );
 $esc = [ 'social_copy_' => [ 'budget' => 10, 'fit' => 0, 'total' => 1, 'too_long' => [ '<b>Τίτλος</b>' ], 'empty' => [] ] ];
 $esc_html = PressHub_AI_Settings_Render::policy_fit_html( $esc, [ 'social_copy_' => '<i>Task</i>' ] );
 mc_check( 'fit html: titles and task names are escaped', false === strpos( $esc_html, '<b>' ) && false === strpos( $esc_html, '<i>' ) && false !== strpos( $esc_html, '&lt;b&gt;Τίτλος&lt;/b&gt;' ) );

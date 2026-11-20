@@ -287,7 +287,11 @@ class PressHub_AI_Help_Admin {
         $html .= self::h3( __( 'How it is used', 'presshub-ai-editor' ) );
         $html .= self::ul( [
             __( 'A fiche is used only when it is published and its title or one of its aliases appears in the material of the task. Greek word endings are tolerated (συντάξεις also matches συντάξεων), but a single word shorter than 6 letters never matches on its own. Drafts are never sent.', 'presshub-ai-editor' ),
-            __( 'At most 3 fiches go into one task, the most mentioned first. Each task gets the parts it can use (see the table above): the briefing, co-author and co-pilot get everything; the podcast gets principles, framing and claims; the QA gate gets framing and claims and is asked to lower the score when the text breaks them; social copy and shorts get the framing plus up to 3 claims marked unchecked, contested or false, which they must not state as fact.', 'presshub-ai-editor' ),
+            sprintf(
+                /* translators: %d: most claims sent to social copy and shorts */
+                __( 'At most 3 fiches go into one task, the most mentioned first. Each task gets the parts it can use (see the table above): the briefing, co-author and co-pilot get everything; the podcast gets principles, framing and claims; the QA gate gets framing and claims and is asked to lower the score when the text breaks them; social copy and shorts get the framing plus up to %d claims marked unchecked, contested or false, which they must not state as fact.', 'presshub-ai-editor' ),
+                PressHub_AI_Policy_Fiches::SOCIAL_MAX_CLAIMS
+            ),
             __( 'When a fiche does not fit a task\'s budget, it is sent with fewer parts (open questions and facts go first), and left out if even principles and framing do not fit. The policy page warns you for each task a fiche is too long for, and every call that leaves a fiche out or shortens it says so in its generation record.', 'presshub-ai-editor' ),
             __( 'False and contested claims are sent before unchecked ones; confirmed claims are not sent as claims. The AI is told to attribute contested and unchecked claims, give the counter-point, and never repeat a false claim as true.', 'presshub-ai-editor' ),
             __( 'The Daily Briefing Hub lists the policy files in the day\'s article pool with their claims to watch, and the claims the last briefing repeated as fact.', 'presshub-ai-editor' ),
@@ -348,7 +352,11 @@ class PressHub_AI_Help_Admin {
             __( 'Add the figures as confirmed facts with their source link. The co-author and the briefing may use them as background; anything not checked stays in the claims register with who said it.', 'presshub-ai-editor' )
         );
         $html .= self::tips( [
-            __( 'Put the most important rule first. When room is short a fiche falls back to its principles and framing, and social copy and shorts get the framing plus up to 3 claims marked unchecked, contested or false, which they must not state as fact.', 'presshub-ai-editor' ),
+            sprintf(
+                /* translators: %d: most claims sent to social copy and shorts */
+                __( 'Put the most important rule first. When room is short a fiche falls back to its principles and framing; social copy and shorts get every fiche\'s framing first, then up to %d claims marked unchecked, contested or false while room remains.', 'presshub-ai-editor' ),
+                PressHub_AI_Policy_Fiches::SOCIAL_MAX_CLAIMS
+            ),
             __( 'Ask for attribution and the other side, not for a conclusion. A fiche that asks the AI to take a side makes everything PressHub writes less credible.', 'presshub-ai-editor' ),
             __( 'Keep today\'s news out of the core. A date or "yesterday" in the principles goes stale; it belongs in the timeline or the claims.', 'presshub-ai-editor' ),
             __( 'Lock a fiche when nothing should be added to it automatically.', 'presshub-ai-editor' ),
@@ -378,7 +386,7 @@ class PressHub_AI_Help_Admin {
             __( 'For a big running story, use both: an agenda theme with priority 5 and an end date to push it up, and a policy fiche for the wording. Keep the agenda note to one line and let the fiche carry the detail.', 'presshub-ai-editor' ),
             sprintf(
                 /* translators: 1: agenda characters for social copy, 2: characters of fiche text left in social copy */
-                __( 'Social copy gets only a short agenda (%1$d characters) and only the framing of a fiche plus up to 3 claims not to state as fact, with room for about %2$d characters. Rules that must reach social posts belong in the agenda\'s standing guidance or, kept short, in the fiche\'s framing. The SEO tags and meta description get neither.', 'presshub-ai-editor' ),
+                __( 'Social copy gets only a short agenda (%1$d characters) and only the framing of a fiche plus a few claims not to state as fact, with room for about %2$d characters. Rules that must reach social posts belong in the agenda\'s standing guidance or, kept short, in the fiche\'s framing. The SEO tags and meta description get neither.', 'presshub-ai-editor' ),
                 PressHub_AI_Editorial_Agenda::budget_for( 'social_copy_facebook' ),
                 self::policy_room( 'social_copy_facebook' )
             ),
@@ -501,10 +509,14 @@ class PressHub_AI_Help_Admin {
         $html .= self::ul( [
             __( 'Matching is by words, not meaning. If the material says "the 13th pension" and none of your aliases does, the pension fiche is not used. A broad alias can also bring a fiche into stories where it does not belong.', 'presshub-ai-editor' ),
             __( 'One word under 6 letters never matches on its own, so acronyms need a longer phrase.', 'presshub-ai-editor' ),
-            __( 'At most 3 fiches per task; with several busy files, the less mentioned ones are left out. The podcast never gets facts or open questions, and social copy and shorts get only the framing and up to 3 unconfirmed claims. A fiche too long for its task is sent with fewer parts (down to principles and framing), and in social copy it is left out.', 'presshub-ai-editor' ),
+            sprintf(
+                /* translators: %d: most claims sent to social copy and shorts */
+                __( 'At most 3 fiches per task; with several busy files, the less mentioned ones are left out. The podcast never gets facts or open questions, and social copy and shorts get only the framing and up to %d unconfirmed claims. A fiche too long for its task is sent with fewer parts (down to principles and framing); in social copy its claims go first, and a fiche whose framing does not fit is left out.', 'presshub-ai-editor' ),
+                PressHub_AI_Policy_Fiches::SOCIAL_MAX_CLAIMS
+            ),
             sprintf(
                 /* translators: 1: characters for social copy, 2: characters for shorts */
-                __( 'The small tasks have little room: %1$d characters for the fiches\' titles and framing in social copy and %2$d in the TikTok short plan, all fiches together (the fixed instructions around them are not counted). A fiche whose title and framing do not fit is not sent there at all; the Policies page warns you, and the call\'s generation record lists it under "Left out because of limits".', 'presshub-ai-editor' ),
+                __( 'The small tasks have little room: %1$d characters for the fiches in social copy and %2$d in the TikTok short plan, all fiches together (the fixed instructions around them are not counted). Every fiche\'s title and framing go in first, then its claims while room remains. A fiche whose title and framing do not fit is not sent there at all; the Policies page warns you, and the call\'s generation record lists it under "Left out because of limits".', 'presshub-ai-editor' ),
                 self::policy_room( 'social_copy_facebook' ),
                 self::policy_room( 'social_tiktok_shorts' )
             ),
