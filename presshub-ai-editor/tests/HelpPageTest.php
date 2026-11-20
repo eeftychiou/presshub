@@ -109,7 +109,7 @@ hp_check( 'matrix: briefing agenda budget', '3,000 chars' === ( $brief[2] ?? '' 
 hp_check( 'matrix: briefing gets memory', '—' !== ( $brief[1] ?? '—' ) );
 hp_check( 'matrix: briefing policies get every part', false !== strpos( (string) ( $brief[4] ?? '' ), 'open questions' ) );
 $social = $by['Social post copy (X, Facebook, Instagram, TikTok)'] ?? [];
-hp_check( 'matrix: social copy gets framing only', false !== strpos( (string) ( $social[4] ?? '' ), '(framing)' ) );
+hp_check( 'matrix: social copy gets framing and claims', false !== strpos( (string) ( $social[4] ?? '' ), '(framing, claims)' ) );
 hp_check( 'matrix: social copy gets no people', '—' === ( $social[3] ?? '' ) );
 hp_check( 'matrix: social copy gets no memory', '—' === ( $social[1] ?? '' ) );
 $qa = $by['QA gate: editorial and legal review'] ?? [];

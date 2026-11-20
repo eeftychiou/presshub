@@ -94,7 +94,9 @@ class PressHub_AI_Policy_Fiches {
         'full'    => [ 'principles', 'framing', 'facts', 'claims', 'questions' ],
         'podcast' => [ 'principles', 'framing', 'claims' ],
         'qa'      => [ 'framing', 'claims' ],
-        'social'  => [ 'framing' ],
+        // Social copy and Shorts: the framing, plus the claims a fiche marks
+        // as not confirmed (short form), so a post never states one as fact.
+        'social'  => [ 'framing', 'claims' ],
     ];
 
     private static ?array $last_applied = null;
@@ -691,8 +693,15 @@ class PressHub_AI_Policy_Fiches {
         return array_slice( $claims, 0, $max );
     }
 
-    /** One fiche as prompt text, with the parts listed (in that order). */
-    public static function render_fiche( array $f, array $parts ): string {
+    /** Claims sent to the short social calls (see render_fiche( $compact )). */
+    const SOCIAL_MAX_CLAIMS = 3;
+
+    /**
+     * One fiche as prompt text, with the parts listed (in that order).
+     * $compact (social copy, Shorts): at most SOCIAL_MAX_CLAIMS claims, each
+     * with its status and counter only, to fit the small budget.
+     */
+    public static function render_fiche( array $f, array $parts, bool $compact = false ): string {
         $lines = [ '## ' . $f['title'] ];
         foreach ( $parts as $part ) {
             if ( 'principles' === $part && '' !== $f['principles'] ) {
@@ -703,6 +712,18 @@ class PressHub_AI_Policy_Fiches {
                 $lines[] = 'Επιβεβαιωμένα στοιχεία:';
                 foreach ( $f['facts'] as $x ) {
                     $lines[] = '- ' . $x['text'];
+                }
+            } elseif ( 'claims' === $part && $compact ) {
+                $claims = self::claims_to_send( $f, self::SOCIAL_MAX_CLAIMS );
+                if ( ! empty( $claims ) ) {
+                    $lines[] = 'Μην τα παρουσιάζεις ως γεγονός:';
+                    foreach ( $claims as $c ) {
+                        $line = '- [' . self::claim_tag( $c['status'] ) . '] «' . $c['claim'] . '»';
+                        if ( '' !== $c['counter'] ) {
+                            $line .= '. Αντίλογος: ' . $c['counter'];
+                        }
+                        $lines[] = $line;
+                    }
                 }
             } elseif ( 'claims' === $part ) {
                 $claims = self::claims_to_send( $f );
@@ -747,10 +768,10 @@ class PressHub_AI_Policy_Fiches {
             $header = "=== ΕΛΕΓΧΟΣ ΜΕ ΒΑΣΗ ΤΟΥΣ ΦΑΚΕΛΟΥΣ ΠΟΛΙΤΙΚΩΝ ===\n"
                 . "Έλεγξε επιπλέον αν το κείμενο παρουσιάζει ως γεγονός κάποιον από τους παρακάτω αμφισβητούμενους, μη ελεγμένους ή ανακριβείς ισχυρισμούς χωρίς απόδοση και χωρίς τον αντίλογο, ή αν παραβιάζει τους κανόνες πλαισίωσης. Αν ναι, μείωσε τη βαθμολογία και γράψε στο feedback ποιον ισχυρισμό ή κανόνα αφορά.\n";
         } elseif ( self::PARTS['social'] === self::parts_for( $action ) ) {
-            // Framing only (social copy, shorts): a short header, so the small
-            // budget is left for the fiches themselves.
+            // Social copy, shorts: a short header, so the small budget is left
+            // for the fiches themselves.
             $header = "=== ΦΑΚΕΛΟΙ ΠΟΛΙΤΙΚΩΝ (συντακτική γραμμή) ===\n"
-                . "Δεσμευτικοί κανόνες πλαισίωσης του αρχισυντάκτη για τα θέματα πολιτικής του υλικού. Δεν είναι σημερινή είδηση.\n";
+                . "Δεσμευτικοί κανόνες πλαισίωσης του αρχισυντάκτη για τα θέματα πολιτικής του υλικού. Δεν είναι σημερινή είδηση. Τους ισχυρισμούς που σημειώνονται ως μη ελεγμένους, αμφισβητούμενους ή ανακριβείς μην τους παρουσιάζεις ως γεγονός, ακόμη κι αν το υλικό το κάνει· απόδωσέ τους ή παράλειψέ τους.\n";
         } else {
             $header = "=== ΦΑΚΕΛΟΙ ΠΟΛΙΤΙΚΩΝ (συντακτική γραμμή) ===\n"
                 . "Οδηγίες του αρχισυντάκτη για τα θέματα πολιτικής που εμφανίζονται στο υλικό. Οι αρχές και οι κανόνες πλαισίωσης είναι δεσμευτικοί. Τα επιβεβαιωμένα στοιχεία μπορείς να τα χρησιμοποιείς ως υπόβαθρο. Τους αμφισβητούμενους και μη ελεγμένους ισχυρισμούς απόδωσέ τους σε όποιον τους διατυπώνει και δώσε τον αντίλογο. Τους ανακριβείς ισχυρισμούς μην τους αναπαράγεις ως αληθινούς. Τίποτα από τους φακέλους δεν είναι σημερινή είδηση αν δεν υπάρχει στο σημερινό υλικό.\n";
@@ -775,7 +796,7 @@ class PressHub_AI_Policy_Fiches {
             $added = false;
             $need  = 0;
             foreach ( $tries as $try ) {
-                $block = '' !== implode( '', $try ) ? self::render_fiche( $hit['fiche'], $try ) : '';
+                $block = '' !== implode( '', $try ) ? self::render_fiche( $hit['fiche'], $try, self::PARTS['social'] === $parts ) : '';
                 if ( '' === $block ) {
                     continue;
                 }
@@ -1609,7 +1630,7 @@ class PressHub_AI_Policy_Fiches {
             __( 'Open questions: what coverage has not answered yet. The AI may raise them, and the system marks them answered when a brief answers them.', 'presshub-ai-editor' ),
         ] );
         $html .= '<h4 style="margin: 10px 0 4px;">' . esc_html__( 'Do', 'presshub-ai-editor' ) . '</h4>' . $li( [
-            __( 'Put the most important rule first: when there is little room (podcast, social copy) the AI gets the principles and framing first, and social copy gets the framing only.', 'presshub-ai-editor' ),
+            __( 'Put the most important rule first: when there is little room (podcast, social copy) the AI gets the principles and framing first, and social copy gets the framing and up to 3 claims not to state as fact.', 'presshub-ai-editor' ),
             __( 'Ask for attribution and the other side, not for a conclusion: «αποδίδεται στην κυβέρνηση και δίνεται η απάντηση της αντιπολίτευσης».', 'presshub-ai-editor' ),
             __( 'Give numbers with their limits: «έως 100 ευρώ, για όσους…», «σύμφωνα με το υπουργείο».', 'presshub-ai-editor' ),
             __( 'Use phrases for acronyms: «Ταμείο Κοινωνικών Ασφαλίσεων» rather than «ΤΚΑ»; one word under 6 letters never matches on its own.', 'presshub-ai-editor' ),
