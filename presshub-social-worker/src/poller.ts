@@ -701,6 +701,11 @@ export class PressHubPoller {
             for (const file of downloadedImages) {
               try { fs.unlinkSync(file); } catch {}
             }
+            // A rendered short is made for this one post: remove it once posted (or failed),
+            // as the YouTube upload does, so each platform's copy does not pile up in output/.
+            if (job.tiktok_short && mediaPath) {
+              try { fs.unlinkSync(mediaPath); } catch {}
+            }
           }
 
           if (result && result.success) {
