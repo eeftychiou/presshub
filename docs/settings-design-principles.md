@@ -158,7 +158,6 @@ These tests and checks guard the rules. A change that has to edit one of them to
 
 ## Exceptions
 
-Each row: the rule, what deviates, why it is allowed for now, the tracking issue, and when it ends. Delete a row in the PR that fixes it.
+Each row: the rule, what deviates, why it is allowed for now, the tracking issue, and when it ends. Delete a row in the PR that fixes it. When a new exception is agreed, add a table with the columns `#`, Rule, What deviates, Why, Tracking and Ends.
 
-| # | Rule | What deviates | Why | Tracking | Ends |
-|---|---|---|---|---|---|
+None. #309 closed E1 to E10 (2.68.1 to 2.71.0).
