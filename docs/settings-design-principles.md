@@ -87,11 +87,11 @@ Never write a separate `presshub_ai_migrate_*` routine or `delete_option()` call
 
 **5.1 Plain words first.** Every setting has a label and one sentence of help saying what it does for the editor, in plain language; numbers state their unit; labels are unique within a section. Option names, filters, hooks and class names never appear on screen except under a "Details" disclosure. An environment variable or constant the editor must set by hand (such as `PRESSHUB_WORKER_SECRET` or `PRESSHUB_AI_LOG_DIR`) may be named; new ones are shown in code formatting.
 
-**5.2 Accessible.** Every field has a visible label; groups have headings; status uses text, not colour alone; errors are linked from a summary; focus stays visible and clear of the sticky save bar; leaving with unsaved changes asks first; the page works at 375px wide (the section `<select>`). The section links work without JavaScript. Saving needs JavaScript (exception E2).
+**5.2 Accessible.** Every field has a visible label; groups have headings; status uses text, not colour alone; errors are linked from a summary; focus stays visible and clear of the sticky save bar; leaving with unsaved changes asks first; the page works at 375px wide (the section `<select>`). The section links work without JavaScript, and so does Save: the form posts the one section on screen to admin-post.php (`PressHub_Settings_Sections::POST_ACTION`), through the same save as the AJAX Save, never to options.php.
 
 **5.3 No inline styles.** Settings markup uses classes from `assets/css/settings.css`, never `style=`.
 
-**5.4 Searchable.** Every setting is found by Settings search (label, help or old name) and jumps to its field. Secrets are searchable by label only, never by value (exception E3).
+**5.4 Searchable.** Every setting is found by Settings search (label, help or old name) and jumps to its field. Secrets are found by their label and help, never by value, and the result points at their Replace key button.
 
 ## 6. AI models and Connections, in short
 
@@ -120,19 +120,21 @@ These tests and checks guard the rules. A change that has to edit one of them to
 | Rule | Guard |
 |---|---|
 | 1.1, 3.3, 4.2, 7.4 | `AdminMenuCapabilitiesTest` (one menu, no raw `manage_options`, option-page capability per group, old URLs redirect) |
-| 1.2, 1.3, 3.1, 5.3 | `SettingsSectionsTest` (every setting in exactly one section, each section renders only its own settings, section save isolation, no inline styles in the two renderers) |
+| 1.2, 1.3, 3.1, 5.3 | `SettingsSectionsTest` (every setting in exactly one section, each section renders only its own settings, section save isolation, no inline styles in any settings renderer) |
 | 1.4, 1.6 | `ConnectionsTest` (no remote request on load, Replace key, status cache) |
 | 1.5, 3.2, 6 | `ModelsTableTest` |
 | 2.1 | `SettingsRegistryTest`, `SettingsInventoryTest` (regenerate `docs/settings-inventory.md` with `php presshub-ai-editor/scripts/settings-inventory.php`) |
 | 2.5 | `SettingsDefaultsTest` (registry default against literal `get_option()` defaults), `SettingsRegistryDefaultsCoverageTest` (every scalar setting declares one), `SettingsSelectDefaultsTest` |
 | 2.6 | `SettingsHiddenSurfacedTest` (every AI setting marked rendered has a field; exception E1) |
-| 3.1 | `SettingsSaveIsolationTest`, `SettingsPerTabAjaxSaveTest` (the per-tab save path) |
+| 3.1 | `SettingsSaveIsolationTest`, `SettingsPerTabAjaxSaveTest` (the per-tab save path), `SettingsNoJsSaveTest` (the form without JavaScript) |
+| 3.4 | `SettingsAuditCoverageTest` (every writer outside the section Save writes its audit event; the worker secret only masked) |
 | 4.3 | `SettingsCleanupTest`, `SettingsUpgradeTest` |
-| 5.1 | `SettingsHelpTextLintTest` (help text, units, unique labels per old page; exception E8) |
-| 5.3 | CI step "No inline style= in the settings renderers" (two renderers; exception E6) |
+| 5.1 | `SettingsHelpTextLintTest` (help text, units for numeric settings, labels unique within a section) |
+| 5.4 | `SettingsSearchSecretsTest` (secrets in search by label only) |
+| 5.3 | CI step "No inline style= in the settings renderers" (every settings renderer) |
 | 7.1 | the claim-payload contract test at the end of `presshub-ai-editor/tests/run-social-tests.php` |
 | 7.2 | `SettingsTransferTest` |
-| 7.5 | `SettingsTranslationSafetyTest` (block-level HTML in translatable strings of the AI renderer, inline `code`/`strong`/`em`/`br`/`a` allowed; exception E8), `SettingsRegistryStringsTest` (registry strings listed for translators and translated in search) |
+| 7.5 | `SettingsTranslationSafetyTest` (block-level HTML in translatable strings of every settings renderer, inline `code`/`strong`/`em`/`br`/`a` allowed), `SettingsRegistryStringsTest` (registry strings listed for translators and translated in search) |
 | 7.6 | `UninstallTest` (registry settings, Social settings, stores and multisite) |
 | This document | `SettingsPrinciplesDocTest` (section table, guards, links, PR checklist) |
 
@@ -161,9 +163,3 @@ Each row: the rule, what deviates, why it is allowed for now, the tracking issue
 | # | Rule | What deviates | Why | Tracking | Ends |
 |---|---|---|---|---|---|
 | E1 | 2.6, 4.4 | 21 active, unrendered options (`presshub_ai_provider`, the per-provider model/temperature/max tokens/timeout options, `presshub_ai_openai_org`, `presshub_ai_anthropic_version`, `presshub_ai_briefing_morning_podcast_title_prefix`, `presshub_ai_briefing_featured_image_ids`, `presshub_social_enabled_<platform>`), some still read as fallbacks | Predate the overhaul; removing them needs the clean-up lifecycle | #309 | When migrated or removed |
-| E2 | 3.1, 3.4, 5.2 | Without JavaScript the section form posts the whole `presshub_ai_options` group to options.php | The section Save is AJAX-only today | #309 | When the no-JS submit is section-scoped or disabled |
-| E3 | 5.4 | Secrets are left out of Settings search | The index skips secret entries | #309 | When labels of secrets are indexed |
-| E4 | 3.4 | No audit event from: Regenerate worker secret, the Social prompts reset, the Presets editor (`presshub_ai_save_preset`, `presshub_ai_delete_preset`, `presshub_ai_save_org_default`), the editorial agenda, people fiches and the Shorts music library editors | Written before this rule | #309 | When each writes an audit event |
-| E5 | 5.1 | Developer names outside Details: the `presshub_ai_tts_payload_log` action, and `assets/prompts/` file paths in the QA and Social prompt help | Written before this rule | #309 | When moved under Details |
-| E6 | 5.3 | `class-social-settings.php` has an inline `style=`; CI greps only two renderers | The CI step predates the newer renderers | #309 | When the grep covers every settings renderer |
-| E8 | 5.1, 7.5 | `SettingsHelpTextLintTest` checks unique labels per old page and units only for settings typed as numbers (17 numeric settings are typed `string`); `SettingsTranslationSafetyTest` scans one renderer | Tests predate the one Settings page | #309 | When both cover every settings renderer and the types are fixed |

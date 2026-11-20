@@ -199,6 +199,10 @@ class PressHub_AI_Editorial_Agenda {
             update_option( self::HISTORY_OPTION, array_slice( $history, 0, self::HISTORY_MAX ), false );
         }
         update_option( self::OPTION, $agenda, false );
+        // #309 (E4)
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'editorial_agenda_saved', 'editorial_agenda', (string) $agenda['version'], [ 'themes' => count( $agenda['themes'] ), 'note' => $agenda['note'] ] );
+        }
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info( 'Editorial agenda saved', [
