@@ -91,7 +91,7 @@ pf_check( 'apply: draft fiche left out', false === strpos( $out, 'Στεγαστ
 $last = $P::last_applied();
 pf_check( 'apply: last_applied with version', is_array( $last ) && [ $slug . '@v1' ] === $last['fiches'] && $out === $last['prompt'] && md5( 'SYS' ) === $last['original_hash'] );
 $social = $P::apply( 'SYS', $material, 'social_copy_x' );
-pf_check( 'apply: social copy gets framing only', false !== strpos( $social, 'Πλαισίωση: ' ) && false === strpos( $social, 'Αρχές: ' ) && false === strpos( $social, 'Επιβεβαιωμένα' ) );
+pf_check( 'apply: social copy gets framing, not principles or facts', false !== strpos( $social, 'Πλαισίωση: ' ) && false === strpos( $social, 'Αρχές: ' ) && false === strpos( $social, 'Επιβεβαιωμένα' ) );
 $qa = $P::apply( 'SYS', $material, 'coauthor_scorecard' );
 pf_check( 'apply: QA gate header', false !== strpos( $qa, 'ΕΛΕΓΧΟΣ ΜΕ ΒΑΣΗ ΤΟΥΣ ΦΑΚΕΛΟΥΣ' ) && false === strpos( $qa, 'Αρχές: ' ) );
 pf_check( 'apply: nothing in the material sends nothing', 'SYS' === $P::apply( 'SYS', 'Καιρός.', 'briefing_curation' ) );
@@ -228,6 +228,41 @@ pf_check( 'suggestion: accepted into the core as a new version', 3 === count( $a
 pf_check( 'suggestion: unknown id', is_wp_error( $P::resolve_suggestion( $slug, 'nope', true ) ) );
 $rec_f = $P::save_record( $slug, [ 'claims' => [ $new_claim['id'] => [ 'status' => 'false', 'counter' => 'Οι εταίροι δεν έχουν λάβει πρόταση.' ], $old_claim['id'] => [ 'remove' => true ] ] ], 3 );
 pf_check( 'record: editor marks a claim false and removes one', 1 === count( $rec_f['claims'] ) && 'false' === $rec_f['claims'][0]['status'] && 'editor' === $rec_f['claims'][0]['origin'] );
+$soc_f = [ 'title' => 'Τελωνειακή Ένωση', 'principles' => 'Αρχή.', 'framing' => 'Οι θέσεις αποδίδονται.', 'facts' => [], 'questions' => [], 'claims' => [
+    [ 'claim' => 'Η ΕΕ συνδέει την Τελωνειακή Ένωση με τις συνομιλίες', 'by' => 'Κυβερνητική πλευρά', 'date' => '2026-11-19', 'status' => 'unchecked', 'counter' => '' ],
+    [ 'claim' => 'Β', 'by' => 'Χ', 'date' => '2026-11-18', 'status' => 'false', 'counter' => 'Η ΕΕ δεν το επιβεβαίωσε.' ],
+    [ 'claim' => 'Γ', 'by' => '', 'date' => '2026-11-17', 'status' => 'contested', 'counter' => '' ],
+    [ 'claim' => 'Δ', 'by' => '', 'date' => '2026-11-16', 'status' => 'unchecked', 'counter' => '' ],
+    [ 'claim' => 'Ε', 'by' => '', 'date' => '2026-11-15', 'status' => 'confirmed', 'counter' => '' ],
+] ];
+$soc = $P::render_fiche( $soc_f, $P::parts_for( 'social_tiktok_shorts' ), true );
+pf_check( 'social: Shorts and social copy get the claims not to state as fact, short form', false !== strpos( $soc, 'Πλαισίωση: ' ) && false !== strpos( $soc, 'Μην τα παρουσιάζεις ως γεγονός:' ) && false !== strpos( $soc, '[ανακριβής] «Β» — Χ. Αντίλογος: Η ΕΕ δεν το επιβεβαίωσε.' ) && false === strpos( $soc, 'Αρχές: ' ) && false !== strpos( $soc, '«Η ΕΕ συνδέει την Τελωνειακή Ένωση με τις συνομιλίες» — Κυβερνητική πλευρά' ) && false === strpos( $soc, '2026-11-19' ) && false === strpos( $soc, '«Ε»' ) );
+pf_check( 'social: at most SOCIAL_MAX_CLAIMS claims, false and contested first', $P::SOCIAL_MAX_CLAIMS === substr_count( $soc, "\n- [" ) && false !== strpos( $soc, '«Γ»' ) && false === strpos( $soc, '«Δ»' ) );
+pf_check( 'social: the parts list includes claims', [ 'framing', 'claims' ] === $P::parts_for( 'social_copy_x' ) );
+// QA keeps its full claims (same parts as social, not the short form).
+$qa_block = $P::render( [ 'q' => [ 'count' => 1, 'fiche' => $soc_f ] ], 'coauthor_scorecard', 3000 );
+pf_check( 'qa: the QA gate still gets every claim with source and date', false !== strpos( $qa_block['text'], 'Ισχυρισμοί προς έλεγχο:' ) && false !== strpos( $qa_block['text'], '2026-11-19' ) && false !== strpos( $qa_block['text'], '«Δ»' ) && false === strpos( $qa_block['text'], 'Μην τα παρουσιάζεις' ) );
+// Social render: every framing first, then claims while room remains.
+$mk = static function ( string $t, string $framing, int $n ) {
+    $claims = [];
+    for ( $i = 0; $i < $n; $i++ ) {
+        $claims[] = [ 'claim' => $t . ' ισχυρισμός ' . $i . ' ' . str_repeat( 'λ', 60 ), 'by' => 'Πηγή', 'date' => '2026-11-1' . $i, 'status' => 'unchecked', 'counter' => '' ];
+    }
+    return [ 'title' => $t, 'principles' => '', 'framing' => $framing, 'facts' => [], 'questions' => [], 'claims' => $claims ];
+};
+$hits3 = [ 'a' => [ 'count' => 3, 'fiche' => $mk( 'Άλφα', str_repeat( 'α', 150 ), 5 ) ], 'b' => [ 'count' => 2, 'fiche' => $mk( 'Βήτα', str_repeat( 'β', 150 ), 0 ) ], 'c' => [ 'count' => 1, 'fiche' => $mk( 'Γάμμα', str_repeat( 'γ', 150 ), 0 ) ] ];
+$framings = 0;
+foreach ( $hits3 as $h ) {
+    $framings += mb_strlen( $P::render_fiche( $h['fiche'], [ 'framing' ], true ) );
+}
+$r3 = $P::render( $hits3, 'social_tiktok_shorts', $framings + 20 );
+pf_check( 'social render: one fiche\'s claims never push out another\'s framing', [ 'a', 'b', 'c' ] === $r3['slugs'] && false === strpos( $r3['text'], 'ισχυρισμός' ) );
+$short = array_values( array_filter( $r3['left_out'], static function ( $c ) { return 'shortened' === $c['reason']; } ) );
+pf_check( 'social render: claims that do not fit are recorded as shortened', 1 === count( $short ) && 'a' === $short[0]['item'] && [ 'claims' ] === $short[0]['parts'] );
+$r4 = $P::render( $hits3, 'social_copy_x', 5000 );
+$cap = array_values( array_filter( $r4['left_out'], static function ( $c ) { return 'max_items' === $c['reason']; } ) );
+pf_check( 'social render: claims over the cap are sent up to it and recorded', $P::SOCIAL_MAX_CLAIMS === substr_count( $r4['text'], 'ισχυρισμός' ) && 1 === count( $cap ) && 5 === $cap[0]['needed'] && $P::SOCIAL_MAX_CLAIMS === $cap[0]['limit'] && false !== strpos( $cap[0]['item'], 'a' ) );
+pf_check( 'social render: framing is listed before claims (order of fiches kept)', strpos( $r4['text'], '## Άλφα' ) < strpos( $r4['text'], '## Βήτα' ) && strpos( $r4['text'], '## Βήτα' ) < strpos( $r4['text'], '## Γάμμα' ) );
 $rendered = $P::render_fiche( $rec_f, $P::parts_for( 'briefing_curation' ) );
 pf_check( 'render: false claim tagged with its counter-point', false !== strpos( $rendered, '[ανακριβής] «Οι κοινωνικοί εταίροι' ) && false !== strpos( $rendered, 'Αντίλογος: Οι εταίροι δεν έχουν λάβει πρόταση.' ) );
 

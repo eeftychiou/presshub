@@ -3080,6 +3080,10 @@ class PressHub_AI_Settings_Render {
                     /* translators: %s: fiche titles */
                     $line .= '; ' . sprintf( __( 'nothing to send here: %s', 'presshub-ai-editor' ), implode( ', ', $empty ) );
                 }
+                if ( ! empty( $row['shortened'] ) ) {
+                    /* translators: %s: fiche titles */
+                    $line .= '; ' . sprintf( __( 'sent shortened: %s', 'presshub-ai-editor' ), implode( ', ', (array) $row['shortened'] ) );
+                }
             }
             $items .= '<li>' . esc_html( $line ) . '</li>';
         }
