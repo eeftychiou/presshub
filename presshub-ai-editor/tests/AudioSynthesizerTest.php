@@ -407,6 +407,16 @@ as_check( 'tts_module: synthesize_turn with null api_client targets gemini-2.5-f
 $last_token_log = end( $GLOBALS['wpdb']->tables['wp_presshub_ai_token_logs'] );
 as_check( 'tts_module: audio turn token logging uses action podcast_audio', is_array( $last_token_log ) && ( $last_token_log['action_trigger'] ?? '' ) === 'podcast_audio' );
 
+// One Gemini turn writes one Usage & logs row: synthesize_speech_via_gemini()
+// logs it, the synthesizer does not log it again under the voice name.
+$rows_before = count( $GLOBALS['wpdb']->tables['wp_presshub_ai_token_logs'] ?? [] );
+$synthesizer->synthesize_turn( '[Μαρία]: Μία γραμμή, ένα αίτημα, μία εγγραφή.', 'Kore', 1.0, 0.0, null, 'formal' );
+$new_rows = array_slice( $GLOBALS['wpdb']->tables['wp_presshub_ai_token_logs'] ?? [], $rows_before );
+$audio_rows = array_values( array_filter( $new_rows, static function ( $r ) { return 'podcast_audio' === ( $r['action_trigger'] ?? '' ); } ) );
+as_check( 'tts_log: one Gemini turn is one Usage & logs row', 1 === count( $audio_rows ) );
+as_check( 'tts_log: the row names the model, not the voice', 1 === count( $audio_rows ) && 'Kore' !== ( $audio_rows[0]['model'] ?? '' ) );
+as_check( 'tts_log: early Gemini errors (no request sent) are still logged by the synthesizer', [ 'no_gemini_key', 'missing_tts_voice', 'missing_tts_model', 'decode_failed' ] === PressHub_AI_Audio_Synthesizer::GEMINI_UNLOGGED_ERRORS );
+
 // Test 8b: synthesize_podcast with null api_client resolves tts model (gemini-2.5-flash-preview-tts)
 $captured_models = [];
 $podcast_res = $synthesizer->synthesize_podcast( '2026-08-26', "[Μαρία]: Γεια σας!\n[Νίκος]: Καλημέρα!", null );

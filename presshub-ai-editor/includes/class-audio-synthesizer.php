@@ -23,6 +23,12 @@ require_once __DIR__ . '/class-token-logger.php';
 
 class PressHub_AI_Audio_Synthesizer {
 
+    /**
+     * Errors synthesize_speech_via_gemini() returns before it writes its own
+     * Usage & logs row; every other Gemini result is already logged there.
+     */
+    const GEMINI_UNLOGGED_ERRORS = [ 'no_gemini_key', 'missing_tts_voice', 'missing_tts_model', 'decode_failed' ];
+
     /** Option key for audio synthesis engine ('gemini' or 'google_cloud'). */
     const OPTION_ENGINE = 'presshub_ai_briefing_tts_engine';
 
@@ -1077,7 +1083,13 @@ class PressHub_AI_Audio_Synthesizer {
         $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         $char_count  = mb_strlen( $text );
 
-        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+        // synthesize_speech_via_gemini() logs every request it sends (with the
+        // model it used), so a Gemini turn is logged here only when it stopped
+        // before that log line: a missing key, voice or model, or audio that
+        // could not be decoded. Google Cloud TTS does not log itself.
+        $logged_by_client = 'google_cloud' !== $engine
+            && ! ( is_wp_error( $result ) && in_array( $result->get_error_code(), self::GEMINI_UNLOGGED_ERRORS, true ) );
+        if ( ! $logged_by_client && class_exists( 'PressHub_AI_Token_Logger' ) ) {
             if ( is_wp_error( $result ) ) {
                 PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', $engine, $voice_model, $char_count, $duration_ms, 'error', $result->get_error_message() );
             } else {

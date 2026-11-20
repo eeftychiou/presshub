@@ -153,6 +153,7 @@ class MockMemoryAPIClient extends PressHub_AI_API_Client {
             'user_prompt' => $user_prompt,
             'json_mode'   => $json_mode,
             'metadata'    => $metadata,
+            'suppressed'  => $this->suppress_provider_prompt_log,
         ];
         $idx = $this->call_index++;
         if ( isset( $this->responses[ $idx ] ) ) {
@@ -796,6 +797,43 @@ $parsed_turns = $producer_test->parse_script_turns( $script_with_directions );
 mdb_check( 'podcast_turns: parsed turns count is 3', count( $parsed_turns ) === 3 );
 mdb_check( 'podcast_turns: first turn text', 'Καλώς ήρθατε στο podcast.' === $parsed_turns[0]['text'] );
 mdb_check( 'podcast_turns: last turn text', 'Αυτά ήταν τα νέα. Καλό απόγευμα!' === $parsed_turns[2]['text'] );
+
+// One generation record per digest call: call_provider() adds no generic one.
+mdb_check( 'records: the digest call suppresses call_provider()\'s generic record', true === ( $mock_client->call_log[0]['suppressed'] ?? null ) );
+mdb_check( 'records: the client is restored after the call', false === $mock_client->suppress_provider_prompt_log );
+foreach ( [ 'class-memory-rollup-builder.php', 'class-stakeholders.php' ] as $mdb_file ) {
+    $mdb_src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/' . $mdb_file );
+    mdb_check( "records: {$mdb_file} suppresses the generic record around its own call", 1 === preg_match( '/\$api_client->suppress_provider_prompt_log = true;\s*try \{\s*\$raw\s*=\s*\$api_client->call_provider\(.*?\} finally \{\s*\$api_client->suppress_provider_prompt_log = \$suppressed;/s', $mdb_src ) );
+}
+
+// The "Διαβάστε επίσης" list added after the post is created does not build the digest again.
+$rel_html = "<p>Κείμενο.</p>\n<h2 class=\"presshub-briefing-related\">Διαβάστε επίσης</h2><ul class=\"presshub-briefing-related\"><li><a href=\"https://x.test/1\">Παλιό άρθρο</a></li></ul>";
+mdb_check( 'related list: left out of the digest source', '<p>Κείμενο.</p>' === PressHub_AI_Memory_Digest_Builder::without_related_list( $rel_html ) );
+mdb_check( 'related list: other headings stay', false !== strpos( PressHub_AI_Memory_Digest_Builder::without_related_list( '<h2 class="presshub-briefing-sources">Πηγές</h2><ul><li>a</li></ul>' ), 'Πηγές' ) );
+$post_id_rel = 777;
+$GLOBALS['POSTS_STORE'][ $post_id_rel ] = (object) [
+    'ID'           => $post_id_rel,
+    'post_title'   => 'Μεσημβρινή Ενημέρωση 9 Νοεμβρίου 2026',
+    'post_content' => "<h2>Ενέργεια</h2><p>Νέα συμφωνία για τις τιμές ενέργειας.</p>",
+    'post_status'  => 'publish',
+    'post_date'    => '2026-11-09 13:00:00',
+];
+$GLOBALS['POST_META_STORE'][ $post_id_rel ] = [
+    '_presshub_briefing_type'    => 'text',
+    '_presshub_briefing_date'    => '2026-11-09',
+    '_presshub_briefing_edition' => 'noon',
+];
+$rel_first = new MockMemoryAPIClient( [ $valid_json_response ] );
+$rel_res1  = PressHub_AI_Memory_Digest_Builder::build_for_post( $post_id_rel, $rel_first );
+$GLOBALS['POSTS_STORE'][ $post_id_rel ]->post_content .= "\n<h2 class=\"presshub-briefing-related\">Διαβάστε επίσης</h2><ul class=\"presshub-briefing-related\"><li><a href=\"https://x.test/2\">Πρωινή Ενημέρωση</a></li></ul>";
+$rel_second = new MockMemoryAPIClient( [ $valid_json_response ] );
+$rel_res2   = PressHub_AI_Memory_Digest_Builder::build_for_post( $post_id_rel, $rel_second );
+mdb_check( 'related list: first build calls the AI', is_array( $rel_res1 ) && 1 === count( $rel_first->call_log ) );
+mdb_check( 'related list: adding the list is "already built", no second AI call', is_array( $rel_res2 ) && 'already_built' === ( $rel_res2['reason'] ?? '' ) && 0 === count( $rel_second->call_log ) );
+$GLOBALS['POSTS_STORE'][ $post_id_rel ]->post_content .= "\n<p>Νέα παράγραφος με εξέλιξη.</p>";
+$rel_third = new MockMemoryAPIClient( [ $valid_json_response ] );
+PressHub_AI_Memory_Digest_Builder::build_for_post( $post_id_rel, $rel_third );
+mdb_check( 'related list: a real change to the briefing still rebuilds', 1 === count( $rel_third->call_log ) );
 
 // Summary
 if ( $failures > 0 ) {
