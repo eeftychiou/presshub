@@ -796,6 +796,18 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_request_mode"><?php echo esc_html__( 'Speech requests per episode', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_request_mode_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_request_max_chars"><?php echo esc_html__( 'Longest joined speech request (characters)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_request_max_chars_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_tts_turn_pause_ms"><?php echo __( 'Turn Pause Duration (ms)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_turn_pause_ms_field(); ?>
@@ -3895,6 +3907,43 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="number" min="-4.0" max="4.0" step="0.5" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <p class="description"><?php echo __( 'Voice pitch adjustment (-4.0 to 4.0 semitones). Default 0.0.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_tts_request_mode_field() {
+        $option  = 'presshub_ai_briefing_tts_request_mode';
+        $value   = PressHub_AI_Settings_Storage::get_briefing_tts_request_mode();
+        $choices = [
+            'per_turn'   => __( 'One request per turn (best quality)', 'presshub-ai-editor' ),
+            'same_voice' => __( 'Join back-to-back lines by the same voice', 'presshub-ai-editor' ),
+            'two_voices' => __( 'Two voices per request (fewest requests)', 'presshub-ai-editor' ),
+        ];
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php foreach ( $choices as $key => $label ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php selected( $value, $key ); ?>><?php echo self::esc_html_safe( $label ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description">
+            <?php echo esc_html__( 'A temporary way to stay under a low daily Gemini speech limit. One request per turn sends each line on its own (about 40 requests for an episode). Joining back-to-back lines by the same voice saves a few, and is the big saving with one host. Two voices per request sends a few turns of both hosts at once, with the host names kept in the text so Gemini gives each line the right voice: about 8 to 10 requests for an episode, for the Greek podcast and its translations. It needs two hosts with two different voices; otherwise lines by the same voice are joined. A joined request that fails or comes back cut short is voiced again turn by turn. Listen to an episode before you rely on it, and go back to one request per turn once your Google limit is raised. Google Cloud TTS always uses one request per turn. Default: one request per turn.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_briefing_tts_request_max_chars_field() {
+        $option = 'presshub_ai_briefing_tts_request_max_chars';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_tts_request_max_chars();
+        ?>
+        <input type="number" min="<?php echo self::esc_attr_safe( (string) PressHub_AI_Settings_Storage::TTS_REQUEST_MAX_CHARS_MIN ); ?>" max="<?php echo self::esc_attr_safe( (string) PressHub_AI_Settings_Storage::TTS_REQUEST_MAX_CHARS_MAX ); ?>" step="100" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description">
+            <?php echo esc_html( sprintf(
+                /* translators: 1: smallest value, 2: largest value, 3: default */
+                __( 'Most characters of script in one joined request (%1$d to %2$d). Shorter requests keep the voices steadier; longer ones save more requests. Only used when lines are joined. Default: %3$d.', 'presshub-ai-editor' ),
+                PressHub_AI_Settings_Storage::TTS_REQUEST_MAX_CHARS_MIN,
+                PressHub_AI_Settings_Storage::TTS_REQUEST_MAX_CHARS_MAX,
+                PressHub_AI_Settings_Storage::TTS_REQUEST_MAX_CHARS_DEFAULT
+            ) ); ?>
+        </p>
         <?php
     }
 

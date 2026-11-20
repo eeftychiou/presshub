@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.74.0
+ * Version: 2.75.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -158,7 +158,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.74.0' );
+define( 'PRESSHUB_AI_VERSION', '2.75.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -1588,6 +1588,15 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
         return null;
     }
 
+    // 2.74.0 - one audio job per edition: a job that finds another one voicing
+    // this edition stops before touching its watchdog or scheduling a retry.
+    if ( ! PressHub_AI_Audio_Synthesizer::acquire_run_lock( (string) $date, (string) $edition ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Podcast audio step skipped: another audio job is already voicing this edition.', [ 'date' => $date, 'edition' => $edition, 'part' => $part ] );
+        }
+        return null;
+    }
+
     presshub_ai_arm_synthesis_watchdog( $date, $edition );
     $budget = $budgeted ? presshub_ai_briefing_step_time_budget_sec() : 0;
     try {
@@ -1619,6 +1628,7 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
     // The watchdog only covers a process that never returns: a returned
     // result replaces it (success: nothing to retry; error: the regular retry).
     presshub_ai_disarm_synthesis_watchdog( $date, $edition );
+    PressHub_AI_Audio_Synthesizer::release_run_lock( (string) $date, (string) $edition );
 
     if ( is_wp_error( $result ) && 'synthesis_time_budget' === $result->get_error_code() ) {
         if ( $part < presshub_ai_briefing_step_max_continuations()
@@ -1834,6 +1844,14 @@ function presshub_ai_execute_synthesis_retry( $date = '', $edition = 'morning' )
         $result      = $synthesizer->synthesize_podcast( $date, '', $edition );
     } catch ( \Throwable $t ) {
         $result = new WP_Error( 'synthesis_exception', $t->getMessage() );
+    }
+
+    // 2.74.0 - another job is voicing this edition right now; it finishes the episode.
+    if ( is_wp_error( $result ) && 'synthesis_in_progress' === $result->get_error_code() ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Scheduled podcast synthesis retry skipped: another audio job is voicing this edition.', [ 'date' => $date, 'edition' => $edition ] );
+        }
+        return null;
     }
 
     if ( is_wp_error( $result ) ) {

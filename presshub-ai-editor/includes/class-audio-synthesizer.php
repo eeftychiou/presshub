@@ -992,9 +992,12 @@ class PressHub_AI_Audio_Synthesizer {
      * @param PressHub_AI_API_Client|null $api_client  Optional API client.
      * @param string                       $style       Delivery style instruction or preset.
      * @param string                       $date        Optional briefing date (YYYY-MM-DD) for disk caching.
+     * @param array|null                   $speakers    2.74.0: two speakers for a labelled two-voice request
+     *                                                  ([ [ 'speaker' => label, 'voice' => name ], x2 ]). $text then
+     *                                                  holds "label: line" lines and $voice_model is only logged.
      * @return string|WP_Error Binary audio string or WP_Error on failure.
      */
-    public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null, string $style = 'formal', string $date = '' ) {
+    public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null, string $style = 'formal', string $date = '', ?array $speakers = null ) {
         if ( null === $api_client ) {
             $api_client = new PressHub_AI_API_Client( 'tts' );
         }
@@ -1021,8 +1024,16 @@ class PressHub_AI_Audio_Synthesizer {
         $model_id = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : '';
         $payload_mode = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured';
 
-        // Deterministic cache key
-        $cache_key = hash( 'sha256', implode( '|', [ $engine, $model_id, trim( $voice_model ), $style, number_format( $speed, 2 ), number_format( $pitch, 1 ), $payload_mode, trim( $text ) ] ) );
+        $two_voices = 'google_cloud' !== $engine && is_array( $speakers ) && 2 === count( $speakers );
+        $voice_key  = trim( $voice_model );
+        if ( $two_voices ) {
+            $voice_key = 'two_voices:' . implode( ',', array_map( static function ( $sp ) {
+                return (string) ( $sp['speaker'] ?? '' ) . '=' . (string) ( $sp['voice'] ?? '' );
+            }, $speakers ) );
+        }
+
+        // Deterministic cache key (a single-voice turn keeps the key it always had).
+        $cache_key = hash( 'sha256', implode( '|', [ $engine, $model_id, $voice_key, $style, number_format( $speed, 2 ), number_format( $pitch, 1 ), $payload_mode, trim( $text ) ] ) );
 
         $cache_file = '';
         if ( '' !== $date ) {
@@ -1077,7 +1088,14 @@ class PressHub_AI_Audio_Synthesizer {
         if ( 'google_cloud' === $engine ) {
             $result = $api_client->synthesize_speech_with_options( $text, $voice_model, $speed, $pitch );
         } else {
-            $result = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style, null, $speed, $pitch );
+            $speaker_configs = null;
+            if ( $two_voices ) {
+                $speaker_configs = [];
+                foreach ( $speakers as $sp ) {
+                    $speaker_configs[] = [ 'speaker' => (string) ( $sp['speaker'] ?? '' ), 'voice' => (string) ( $sp['voice'] ?? '' ), 'labelled' => true ];
+                }
+            }
+            $result = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style, $speaker_configs, $speed, $pitch );
         }
 
         $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
@@ -1106,6 +1124,385 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         return $result;
+    }
+
+    /**
+     * Errors after which a joined request is not tried again turn by turn: they would
+     * fail the same way (or, for the time budget, the next step resumes).
+     */
+    const NO_PER_TURN_FALLBACK = [ 'synthesis_time_budget', 'tts_daily_quota_exceeded', 'no_gemini_key', 'missing_tts_model', 'missing_tts_voice' ];
+
+    /**
+     * A joined request whose audio is shorter than its text at this many characters per
+     * second was cut short (speech runs at about 14); its turns are voiced one by one.
+     */
+    const JOINED_MAX_CHARS_PER_SECOND = 40;
+
+    /**
+     * Label of a host in a two-voice request: the host's name when it is a plain name
+     * (letters, digits, spaces, dots, hyphens; up to 40 characters), else SpeakerN.
+     *
+     * @param string[] $names Host names, presenter 1 first.
+     * @return string[] Two distinct labels.
+     */
+    public static function two_voice_labels( array $names ): array {
+        $labels = [];
+        foreach ( [ 0, 1 ] as $i ) {
+            $name = trim( (string) preg_replace( '/\s+/u', ' ', (string) ( $names[ $i ] ?? '' ) ) );
+            $labels[ $i ] = ( '' !== $name && preg_match( '/^\p{L}[\p{L}\p{N} .\-]{0,39}$/u', $name ) ) ? $name : 'Speaker' . ( $i + 1 );
+        }
+        if ( mb_strtolower( $labels[0] ) === mb_strtolower( $labels[1] ) ) {
+            $labels = [ 'Speaker1', 'Speaker2' ];
+        }
+        return $labels;
+    }
+
+    /**
+     * Plans the speech requests for a list of turns (2.74.0).
+     *
+     * per_turn: one request per turn, as before. same_voice: back-to-back turns with
+     * the same voice share a request. two_voices: back-to-back turns share a request
+     * whatever the voice, the lines labelled with the host's name so Gemini picks the
+     * voice of each line; only with two hosts and two different voices on Gemini,
+     * otherwise it plans like same_voice. A request holds at most $max_chars characters
+     * of text; a longer turn is a request of its own. Google Cloud TTS is always per turn.
+     *
+     * @param array    $turns      [ [ 'speaker' => string, 'text' => string ], ... ]
+     * @param string   $mode       per_turn | same_voice | two_voices.
+     * @param int      $max_chars  Most characters of text in a joined request.
+     * @param callable $voice_of   fn( string $speaker ): string voice name.
+     * @param int      $host_count 1, 2 or 3.
+     * @param string   $engine     gemini | google_cloud.
+     * @param string[] $labels     Two-voice labels for presenter 1 and 2 (two_voice_labels()).
+     * @param string[] $two_voices The voices of presenter 1 and 2.
+     * @return array [ [ 'turns' => int[], 'text' => string, 'voice' => string, 'speakers' => array|null ], ... ]
+     */
+    public static function plan_speech_requests( array $turns, string $mode, int $max_chars, callable $voice_of, int $host_count, string $engine, array $labels = [], array $two_voices = [] ): array {
+        $turns  = array_values( $turns );
+        $voices = [];
+        foreach ( $turns as $i => $t ) {
+            $voices[ $i ] = (string) $voice_of( (string) ( $t['speaker'] ?? '' ) );
+        }
+        if ( 'google_cloud' === $engine || ! in_array( $mode, [ 'same_voice', 'two_voices' ], true ) ) {
+            $mode = 'per_turn';
+        }
+        $v1 = trim( (string) ( $two_voices[0] ?? '' ) );
+        $v2 = trim( (string) ( $two_voices[1] ?? '' ) );
+        if ( 'two_voices' === $mode && ( 2 !== $host_count || '' === $v1 || '' === $v2 || $v1 === $v2 ) ) {
+            $mode = 'same_voice';
+        }
+        $labels   = array_values( $labels );
+        $label_of = [ $v1 => (string) ( $labels[0] ?? 'Speaker1' ), $v2 => (string) ( $labels[1] ?? 'Speaker2' ) ];
+        $flat     = static function ( string $text ): string {
+            return trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+        };
+
+        $groups  = [];
+        $current = [];
+        $flush   = static function () use ( &$groups, &$current ) {
+            if ( ! empty( $current ) ) {
+                $groups[] = $current;
+                $current  = [];
+            }
+        };
+        foreach ( $turns as $i => $t ) {
+            if ( 'per_turn' === $mode || empty( $current ) ) {
+                $flush();
+                $current = [ $i ];
+                continue;
+            }
+            $prev_voice = $voices[ end( $current ) ];
+            $fits_voice = 'two_voices' === $mode
+                ? ( isset( $label_of[ $voices[ $i ] ] ) && isset( $label_of[ $prev_voice ] ) )
+                : ( $voices[ $i ] === $prev_voice );
+            $chars = 0;
+            foreach ( array_merge( $current, [ $i ] ) as $j ) {
+                $chars += mb_strlen( $flat( (string) ( $turns[ $j ]['text'] ?? '' ) ) ) + 2;
+            }
+            if ( $fits_voice && $chars <= $max_chars ) {
+                $current[] = $i;
+            } else {
+                $flush();
+                $current = [ $i ];
+            }
+        }
+        $flush();
+
+        $plan = [];
+        foreach ( $groups as $g ) {
+            $group_voices = array_values( array_unique( array_map( static function ( $j ) use ( $voices ) {
+                return $voices[ $j ];
+            }, $g ) ) );
+            if ( 1 === count( $g ) ) {
+                $plan[] = [ 'turns' => $g, 'text' => (string) ( $turns[ $g[0] ]['text'] ?? '' ), 'voice' => $voices[ $g[0] ], 'speakers' => null ];
+            } elseif ( 1 === count( $group_voices ) ) {
+                $plan[] = [
+                    'turns'    => $g,
+                    'text'     => implode( "\n\n", array_map( static function ( $j ) use ( $turns, $flat ) {
+                        return $flat( (string) ( $turns[ $j ]['text'] ?? '' ) );
+                    }, $g ) ),
+                    'voice'    => $group_voices[0],
+                    'speakers' => null,
+                ];
+            } else {
+                $plan[] = [
+                    'turns'    => $g,
+                    'text'     => implode( "\n", array_map( static function ( $j ) use ( $turns, $flat, $voices, $label_of ) {
+                        return $label_of[ $voices[ $j ] ] . ': ' . $flat( (string) ( $turns[ $j ]['text'] ?? '' ) );
+                    }, $g ) ),
+                    'voice'    => $v1,
+                    'speakers' => [
+                        [ 'speaker' => $label_of[ $v1 ], 'voice' => $v1 ],
+                        [ 'speaker' => $label_of[ $v2 ], 'voice' => $v2 ],
+                    ],
+                ];
+            }
+        }
+        return $plan;
+    }
+
+    /**
+     * Splits the length of a joined request between its turns, by text length, so
+     * that the turns plus the turn pauses the timeline adds between them last as
+     * long as the request's audio.
+     *
+     * @param float    $seconds       Length of the request's audio.
+     * @param string[] $texts         The turns' texts.
+     * @param int      $turn_pause_ms Pause the timeline puts between turns.
+     * @return float[]
+     */
+    public static function split_request_seconds( float $seconds, array $texts, int $turn_pause_ms ): array {
+        $n = count( $texts );
+        if ( $n <= 1 ) {
+            return [ $seconds ];
+        }
+        $available = max( 0.0, $seconds - ( $n - 1 ) * max( 0, $turn_pause_ms ) / 1000 );
+        $lengths   = array_map( static function ( $t ) {
+            return max( 1, mb_strlen( trim( (string) $t ) ) );
+        }, array_values( $texts ) );
+        $total = array_sum( $lengths );
+        return array_map( static function ( $len ) use ( $available, $total ) {
+            return $available * $len / $total;
+        }, $lengths );
+    }
+
+    /**
+     * Voices a list of turns with the planned requests (plan_speech_requests()) and
+     * returns the audio chunks to stitch with the turn pause and each turn's timeline
+     * entry. A joined request that fails (other than NO_PER_TURN_FALLBACK) or comes
+     * back too short is voiced again turn by turn.
+     *
+     * @param array $turns Parsed turns.
+     * @param array $ctx   voice_of (callable), mode, max_chars, host_count, engine, labels,
+     *                     two_voices, speed, pitch, style, date, api_client, turn_pause_ms,
+     *                     request_delay_ms, is_test_env, timeline_mp3.
+     * @return array|WP_Error [ 'chunks' => string[], 'turns' => timeline turns, 'requests' => int ]
+     */
+    private function synthesize_turn_list( array $turns, array $ctx ) {
+        $turns    = array_values( $turns );
+        $plan     = self::plan_speech_requests( $turns, (string) $ctx['mode'], (int) $ctx['max_chars'], $ctx['voice_of'], (int) $ctx['host_count'], (string) $ctx['engine'], (array) $ctx['labels'], (array) $ctx['two_voices'] );
+        $chunks   = [];
+        $tl_turns = [];
+        $mp3      = ! empty( $ctx['timeline_mp3'] );
+        $live     = 0;
+        $delay    = function ( bool $more ) use ( $ctx ) {
+            if ( ! $this->last_turn_was_cache_hit && (int) $ctx['request_delay_ms'] > 0 && empty( $ctx['is_test_env'] ) && $more ) {
+                usleep( (int) $ctx['request_delay_ms'] * 1000 );
+            }
+        };
+        $one_turn = function ( int $j, bool $more ) use ( $turns, $ctx, $mp3, &$chunks, &$tl_turns, &$live, $delay ) {
+            $t     = $turns[ $j ];
+            $voice = (string) ( $ctx['voice_of'] )( (string) ( $t['speaker'] ?? '' ) );
+            $audio = $this->synthesize_turn( (string) ( $t['text'] ?? '' ), $voice, (float) $ctx['speed'], (float) $ctx['pitch'], $ctx['api_client'], (string) $ctx['style'], (string) $ctx['date'] );
+            if ( is_wp_error( $audio ) ) {
+                return $audio;
+            }
+            $live      += $this->last_turn_was_cache_hit ? 0 : 1;
+            $chunks[]   = $audio;
+            $tl_turns[] = [
+                'speaker' => (string) ( $t['speaker'] ?? '' ),
+                'text'    => (string) ( $t['text'] ?? '' ),
+                'seconds' => PressHub_AI_Podcast_Timeline::turn_seconds( (string) $audio, (string) ( $t['text'] ?? '' ), $mp3 ),
+            ];
+            self::touch_run_locks();
+            $delay( $more );
+            return true;
+        };
+
+        foreach ( $plan as $k => $request ) {
+            $more = $k + 1 < count( $plan );
+            if ( 1 === count( $request['turns'] ) ) {
+                $ok = $one_turn( (int) $request['turns'][0], $more );
+                if ( is_wp_error( $ok ) ) {
+                    return $ok;
+                }
+                continue;
+            }
+
+            $audio = $this->synthesize_turn( (string) $request['text'], (string) $request['voice'], (float) $ctx['speed'], (float) $ctx['pitch'], $ctx['api_client'], (string) $ctx['style'], (string) $ctx['date'], $request['speakers'] );
+            $why   = '';
+            if ( is_wp_error( $audio ) ) {
+                if ( in_array( $audio->get_error_code(), self::NO_PER_TURN_FALLBACK, true ) ) {
+                    return $audio;
+                }
+                $why = $audio->get_error_message();
+            } else {
+                $live    += $this->last_turn_was_cache_hit ? 0 : 1;
+                $seconds = PressHub_AI_Podcast_Timeline::turn_seconds( (string) $audio, (string) $request['text'], $mp3 );
+                if ( ! $mp3 && $seconds * self::JOINED_MAX_CHARS_PER_SECOND < mb_strlen( (string) $request['text'] ) ) {
+                    $why = sprintf( 'audio too short (%.1f s for %d characters)', $seconds, mb_strlen( (string) $request['text'] ) );
+                }
+            }
+            if ( '' !== $why ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( '[LogosAI Synthesizer] Joined speech request (%d turns) not usable: %s. Voicing its turns one by one.', count( $request['turns'] ), $why ) );
+                }
+                foreach ( $request['turns'] as $n => $j ) {
+                    $ok = $one_turn( (int) $j, $more || $n + 1 < count( $request['turns'] ) );
+                    if ( is_wp_error( $ok ) ) {
+                        return $ok;
+                    }
+                }
+                continue;
+            }
+
+            $texts  = array_map( static function ( $j ) use ( $turns ) {
+                return (string) ( $turns[ $j ]['text'] ?? '' );
+            }, $request['turns'] );
+            $shares = self::split_request_seconds( $seconds, $texts, (int) $ctx['turn_pause_ms'] );
+            foreach ( $request['turns'] as $n => $j ) {
+                $tl_turns[] = [
+                    'speaker' => (string) ( $turns[ $j ]['speaker'] ?? '' ),
+                    'text'    => (string) ( $turns[ $j ]['text'] ?? '' ),
+                    'seconds' => (float) $shares[ $n ],
+                ];
+            }
+            $chunks[] = $audio;
+            self::touch_run_locks();
+            $delay( $more );
+        }
+        return [ 'chunks' => $chunks, 'turns' => $tl_turns, 'requests' => $live ];
+    }
+
+    /** Seconds after its last sign of life that an audio run's lock is taken as left by a dead process. */
+    const RUN_LOCK_TTL = 600;
+
+    /** Locks this process holds: option name => token. */
+    private static $held_run_locks = [];
+
+    /** Option holding the audio run lock of one edition. */
+    public static function run_lock_name( string $date, string $edition ): string {
+        return 'presshub_ai_audio_run_lock_' . preg_replace( '/[^0-9A-Za-z_\-]/', '', $date ) . '_' . ( 'noon' === $edition ? 'noon' : 'morning' );
+    }
+
+    /**
+     * Takes the audio lock of one edition, so only one audio job voices it at a time
+     * (19/11/2026: two jobs started together and sent the same turns twice). True when
+     * this process holds it (also when it already did), false when another live job
+     * does. A lock untouched for RUN_LOCK_TTL seconds is taken over.
+     */
+    public static function acquire_run_lock( string $date, string $edition ): bool {
+        $name = self::run_lock_name( $date, $edition );
+        if ( isset( self::$held_run_locks[ $name ] ) ) {
+            return true;
+        }
+        $token = time() . '.' . bin2hex( random_bytes( 4 ) );
+        for ( $try = 0; $try < 2; $try++ ) {
+            if ( self::insert_lock( $name, $token ) ) {
+                self::$held_run_locks[ $name ] = $token;
+                return true;
+            }
+            $current = self::read_lock( $name );
+            if ( null !== $current && time() - (int) $current < self::RUN_LOCK_TTL ) {
+                return false;
+            }
+            self::delete_lock( $name, $current );
+        }
+        return false;
+    }
+
+    /** Releases a lock taken by acquire_run_lock(). */
+    public static function release_run_lock( string $date, string $edition ): void {
+        $name = self::run_lock_name( $date, $edition );
+        if ( isset( self::$held_run_locks[ $name ] ) ) {
+            self::delete_lock( $name, self::$held_run_locks[ $name ] );
+            unset( self::$held_run_locks[ $name ] );
+        }
+    }
+
+    /** Whether this process holds the lock of one edition. */
+    public static function holds_run_lock( string $date, string $edition ): bool {
+        return isset( self::$held_run_locks[ self::run_lock_name( $date, $edition ) ] );
+    }
+
+    /** Renews the locks this process holds (called after every speech request). */
+    public static function touch_run_locks(): void {
+        foreach ( self::$held_run_locks as $name => $token ) {
+            $new = time() . '.' . substr( (string) $token, (int) strpos( (string) $token, '.' ) + 1 );
+            if ( self::update_lock( $name, (string) $token, $new ) ) {
+                self::$held_run_locks[ $name ] = $new;
+            }
+        }
+    }
+
+    /** The database, when it can run the atomic lock queries. */
+    private static function lock_db() {
+        global $wpdb;
+        return ( is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) && method_exists( $wpdb, 'get_var' ) ) ? $wpdb : null;
+    }
+
+    /** Lock rows when there is no database (unit tests without WordPress options). */
+    private static $memory_locks = [];
+
+    private static function insert_lock( string $name, string $token ): bool {
+        $db = self::lock_db();
+        if ( $db ) {
+            return 1 === (int) $db->query( $db->prepare( "INSERT IGNORE INTO {$db->options} (option_name, option_value, autoload) VALUES (%s, %s, 'off')", $name, $token ) );
+        }
+        if ( isset( self::$memory_locks[ $name ] ) ) {
+            return false;
+        }
+        self::$memory_locks[ $name ] = $token;
+        return true;
+    }
+
+    private static function read_lock( string $name ): ?string {
+        $db = self::lock_db();
+        if ( $db ) {
+            $val = $db->get_var( $db->prepare( "SELECT option_value FROM {$db->options} WHERE option_name = %s", $name ) );
+            return null === $val ? null : (string) $val;
+        }
+        return self::$memory_locks[ $name ] ?? null;
+    }
+
+    private static function update_lock( string $name, string $old, string $new ): bool {
+        $db = self::lock_db();
+        if ( $db ) {
+            return 1 === (int) $db->query( $db->prepare( "UPDATE {$db->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $new, $name, $old ) );
+        }
+        if ( ( self::$memory_locks[ $name ] ?? null ) !== $old ) {
+            return false;
+        }
+        self::$memory_locks[ $name ] = $new;
+        return true;
+    }
+
+    private static function delete_lock( string $name, ?string $token ): void {
+        $db = self::lock_db();
+        if ( $db ) {
+            if ( null === $token ) {
+                $db->query( $db->prepare( "DELETE FROM {$db->options} WHERE option_name = %s", $name ) );
+            } else {
+                $db->query( $db->prepare( "DELETE FROM {$db->options} WHERE option_name = %s AND option_value = %s", $name, $token ) );
+            }
+            if ( function_exists( 'wp_cache_delete' ) ) {
+                wp_cache_delete( $name, 'options' );
+            }
+            return;
+        }
+        if ( null === $token || ( self::$memory_locks[ $name ] ?? null ) === $token ) {
+            unset( self::$memory_locks[ $name ] );
+        }
     }
 
     /**
@@ -1883,6 +2280,18 @@ class PressHub_AI_Audio_Synthesizer {
         // Issue #154: one run-level row per synthesis (start, end, status, edition,
         // turns), so the Briefing Hub audio card shows the whole run rather than
         // the last TTS turn. The per-turn podcast_audio rows still feed TTS stats.
+        // 2.74.0 - one audio job per edition at a time. A second job stops here,
+        // before any speech request and without a run row on the audio card.
+        $lock_date    = '' !== $date ? $date : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
+        $lock_edition = self::resolve_run_edition( $custom_script, $edition_or_client );
+        $had_lock     = self::holds_run_lock( $lock_date, $lock_edition );
+        if ( ! self::acquire_run_lock( $lock_date, $lock_edition ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Podcast audio not started: another audio job is already voicing this edition.', [ 'date' => $lock_date, 'edition' => $lock_edition ] );
+            }
+            return new WP_Error( 'synthesis_in_progress', __( 'The audio of this edition is already being made by another job. Try again when it has finished.', 'presshub-ai-editor' ) );
+        }
+
         $run_started    = microtime( true );
         $run_started_at = function_exists( 'current_time' ) ? (string) current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
         $result         = null;
@@ -1901,6 +2310,9 @@ class PressHub_AI_Audio_Synthesizer {
                 PressHub_AI_TTS_Call_Recorder::end_session();
             }
             self::log_audio_run( $result, $date, $custom_script, $edition_or_client, $run_started, $run_started_at );
+            if ( ! $had_lock ) {
+                self::release_run_lock( $lock_date, $lock_edition );
+            }
         }
     }
 
@@ -2123,6 +2535,26 @@ class PressHub_AI_Audio_Synthesizer {
         $timeline_opts   = [];
         $timeline_mp3    = ( 'google_cloud' === $engine );
 
+        // 2.74.0 - how turns become speech requests (temporary quota saver).
+        $speech_ctx = [
+            'voice_of'         => $resolve_turn_voice,
+            'mode'             => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_request_mode() : 'per_turn',
+            'max_chars'        => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_request_max_chars() : 1500,
+            'host_count'       => (int) $host_count,
+            'engine'           => (string) $engine,
+            'labels'           => self::two_voice_labels( [ $female_host, $male_host ] ),
+            'two_voices'       => [ (string) $presenter_1_voice, (string) $presenter_2_voice ],
+            'speed'            => $speed,
+            'pitch'            => $pitch,
+            'style'            => $used_style,
+            'date'             => $date,
+            'api_client'       => $api_client,
+            'turn_pause_ms'    => $turn_pause_ms,
+            'request_delay_ms' => $request_delay_ms,
+            'is_test_env'      => $is_test_env,
+            'timeline_mp3'     => $timeline_mp3,
+        ];
+
         if ( $split_by_topic ) {
             $topics = $producer->parse_script_topics( $script, $female_host, $male_host, $tertiary_host );
 
@@ -2193,27 +2625,14 @@ class PressHub_AI_Audio_Synthesizer {
                         }
                     }
 
-                    // Unified Turn-by-Turn Synthesis for ALL host counts (1, 2, and 3 hosts)
-                    $chunk_wavs = [];
-                    $tl_turns   = [];
-                    foreach ( $topic_turns as $turn_idx => $t ) {
-                        $t_voice  = $resolve_turn_voice( (string) ( $t['speaker'] ?? '' ) );
-                        $turn_res = $this->synthesize_turn( $t['text'], $t_voice, $speed, $pitch, $api_client, $used_style, $date );
-                        if ( is_wp_error( $turn_res ) ) {
-                            return $turn_res;
-                        }
-                        $chunk_wavs[] = $turn_res;
-                        $tl_turns[]   = [
-                            'speaker' => (string) ( $t['speaker'] ?? '' ),
-                            'text'    => (string) ( $t['text'] ?? '' ),
-                            'seconds' => PressHub_AI_Podcast_Timeline::turn_seconds( (string) $turn_res, (string) ( $t['text'] ?? '' ), $timeline_mp3 ),
-                        ];
-
-                        // Throttle between turns if live call was made and not in unit tests
-                        if ( ! $this->last_turn_was_cache_hit && $request_delay_ms > 0 && ! $is_test_env && ( $turn_idx + 1 < count( $topic_turns ) ) ) {
-                            usleep( $request_delay_ms * 1000 );
-                        }
+                    // Turn-by-turn synthesis for all host counts; 2.74.0 can join
+                    // turns into fewer requests (presshub_ai_briefing_tts_request_mode).
+                    $voiced = $this->synthesize_turn_list( $topic_turns, $speech_ctx );
+                    if ( is_wp_error( $voiced ) ) {
+                        return $voiced;
                     }
+                    $chunk_wavs = $voiced['chunks'];
+                    $tl_turns   = $voiced['turns'];
 
                     if ( 'google_cloud' === $engine ) {
                         $topic_audio = $this->stitch_audio_chunks( $chunk_wavs, $turn_pause_ms );
@@ -2329,25 +2748,15 @@ class PressHub_AI_Audio_Synthesizer {
             $char_count  = 0;
             $tl_turns    = [];
 
-            foreach ( $turns as $turn_idx => $turn ) {
-                $turn_voice  = $resolve_turn_voice( (string) ( $turn['speaker'] ?? '' ) );
+            foreach ( $turns as $turn ) {
                 $char_count += mb_strlen( (string) ( $turn['text'] ?? '' ) );
-                $turn_res    = $this->synthesize_turn( $turn['text'], $turn_voice, $speed, $pitch, $api_client, $used_style, $date );
-                if ( is_wp_error( $turn_res ) ) {
-                    return $turn_res;
-                }
-                $turn_wavs[] = $turn_res;
-                $tl_turns[]  = [
-                    'speaker' => (string) ( $turn['speaker'] ?? '' ),
-                    'text'    => (string) ( $turn['text'] ?? '' ),
-                    'seconds' => PressHub_AI_Podcast_Timeline::turn_seconds( (string) $turn_res, (string) ( $turn['text'] ?? '' ), $timeline_mp3 ),
-                ];
-
-                // Throttle between turns if live call was made and not in unit tests
-                if ( ! $this->last_turn_was_cache_hit && $request_delay_ms > 0 && ! $is_test_env && ( $turn_idx + 1 < count( $turns ) ) ) {
-                    usleep( $request_delay_ms * 1000 );
-                }
             }
+            $voiced = $this->synthesize_turn_list( $turns, $speech_ctx );
+            if ( is_wp_error( $voiced ) ) {
+                return $voiced;
+            }
+            $turn_wavs = $voiced['chunks'];
+            $tl_turns  = $voiced['turns'];
 
             $duration_ms     = (int) round( ( microtime( true ) - $start_time ) * 1000 );
             $timeline_topics = [ [ 'title' => '', 'turns' => $tl_turns ] ];
