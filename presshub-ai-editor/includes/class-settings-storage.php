@@ -378,6 +378,17 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_request_delay_ms' ],
             'type'              => 'integer',
         ] );
+        // 2.74.0 - fewer Gemini speech requests per episode (temporary, while the daily quota is low).
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_request_mode', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_request_mode' ],
+            'type'              => 'string',
+            'default'           => self::TTS_REQUEST_MODE_DEFAULT,
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_request_max_chars', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_request_max_chars' ],
+            'type'              => 'integer',
+            'default'           => self::TTS_REQUEST_MAX_CHARS_DEFAULT,
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_max_retries', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_max_retries' ],
             'type'              => 'integer',
@@ -1901,6 +1912,21 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_briefing_tts_request_delay_ms(): int {
         return self::sanitize_briefing_tts_request_delay_ms( get_option( 'presshub_ai_briefing_tts_request_delay_ms', self::default_briefing_tts_request_delay_ms() ) );
+    }
+
+    /**
+     * How podcast turns become Gemini speech requests (2.74.0):
+     * per_turn (one request per turn, the default), same_voice (back-to-back
+     * turns by the same voice in one request) or two_voices (two hosts in one
+     * request, names kept in the text, plus same_voice joining).
+     */
+    public static function get_briefing_tts_request_mode(): string {
+        return self::sanitize_briefing_tts_request_mode( get_option( 'presshub_ai_briefing_tts_request_mode', self::TTS_REQUEST_MODE_DEFAULT ) );
+    }
+
+    /** Most characters of script text in one joined speech request. */
+    public static function get_briefing_tts_request_max_chars(): int {
+        return self::sanitize_briefing_tts_request_max_chars( get_option( 'presshub_ai_briefing_tts_request_max_chars', self::TTS_REQUEST_MAX_CHARS_DEFAULT ) );
     }
 
     public static function get_briefing_tts_max_retries(): int {
@@ -3614,6 +3640,16 @@ class PressHub_AI_Settings_Storage {
         return max( 0, min( 5000, $val ) );
     }
 
+    public static function sanitize_briefing_tts_request_mode( $value ): string {
+        $value = is_string( $value ) ? trim( $value ) : '';
+        return in_array( $value, self::TTS_REQUEST_MODES, true ) ? $value : self::TTS_REQUEST_MODE_DEFAULT;
+    }
+
+    public static function sanitize_briefing_tts_request_max_chars( $value ): int {
+        $val = is_numeric( $value ) ? (int) $value : self::TTS_REQUEST_MAX_CHARS_DEFAULT;
+        return max( self::TTS_REQUEST_MAX_CHARS_MIN, min( self::TTS_REQUEST_MAX_CHARS_MAX, $val ) );
+    }
+
     public static function sanitize_briefing_tts_max_retries( $value ): int {
         $val = is_numeric( $value ) ? (int) $value : self::default_briefing_tts_max_retries();
         return max( 0, min( 5, $val ) );
@@ -4585,6 +4621,15 @@ class PressHub_AI_Settings_Storage {
     public const PODCAST_MP3_BITRATES = [ 48, 64, 96, 128 ];
 
     public const PODCAST_MP3_BITRATE_DEFAULT = 64;
+
+    /** Speech request modes (2.74.0): see get_briefing_tts_request_mode(). */
+    public const TTS_REQUEST_MODES        = [ 'per_turn', 'same_voice', 'two_voices' ];
+    public const TTS_REQUEST_MODE_DEFAULT = 'per_turn';
+
+    /** Characters of script text in one joined speech request: default and range. */
+    public const TTS_REQUEST_MAX_CHARS_DEFAULT = 1500;
+    public const TTS_REQUEST_MAX_CHARS_MIN     = 300;
+    public const TTS_REQUEST_MAX_CHARS_MAX     = 4000;
 
     /** Whether the worker converts WAV podcast episodes to MP3. Default: on. */
     public static function get_podcast_mp3_enabled(): bool {
