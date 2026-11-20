@@ -112,6 +112,13 @@ update_option( $pod_key, '   ' );
 pv_check( 'emptied podcast prompt (off): no version for empty', 1 === count( PressHub_AI_Prompt_Versions::versions( $pod_key ) ) );
 pv_check( 'emptied podcast prompt: current_text empty', '' === PressHub_AI_Prompt_Versions::current_text( $pod_key ) );
 
+$before_tables = count( $wpdb->tables[ $vt ] );
+$saved_db_version = get_option( PressHub_AI_Prompt_Versions::DB_VERSION_OPTION );
+unset( $GLOBALS['OPTIONS_STORE'][ PressHub_AI_Prompt_Versions::DB_VERSION_OPTION ] );
+update_option( 'presshub_social_prompt_facebook', 'Seeded before the tables exist' );
+pv_check( 'before the tables exist: no insert (baseline keeps it later)', count( $wpdb->tables[ $vt ] ) === $before_tables );
+update_option( PressHub_AI_Prompt_Versions::DB_VERSION_OPTION, $saved_db_version );
+
 // -------------------------------------------------------------------------
 // 3. Baseline, once
 // -------------------------------------------------------------------------

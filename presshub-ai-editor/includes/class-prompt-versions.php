@@ -346,6 +346,11 @@ class PressHub_AI_Prompt_Versions {
             if ( ! self::is_tracked( $key ) ) {
                 return null;
             }
+            // Before maybe_upgrade() has made the tables (a prompt seeded on
+            // plugins_loaded, before init), the baseline keeps it instead.
+            if ( get_option( self::DB_VERSION_OPTION ) !== self::DB_VERSION ) {
+                return null;
+            }
             $text = self::effective_text( $key, $raw );
             if ( '' === $text ) {
                 return self::latest( $key );
