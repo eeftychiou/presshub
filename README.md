@@ -262,6 +262,15 @@ Open **PressHub → Settings** (`admin.php?page=presshub-ai&section=<slug>`). Th
 - **Old API keys (2.46.0)**: PressHub reads keys only from the providers in Connections. The old single API key, the old Gemini key and the separate speech key are copied into a matching provider if none has them, then removed; the Speech key field is gone from Connections. Each clean-up run has its own report and copy on Usage & logs.
 
 - **Saving without JavaScript (2.68.1)**: with JavaScript off, a section's Save still saves only that section, through the same checks as the normal Save, and returns to it with a notice. It no longer posts the whole option group to options.php, which ignored Social settings and reset unposted checkboxes in other sections.
+- **Settings audit and search (2.69.0)**: these now write an audit event to Usage & logs (never with a secret value):
+  - Regenerate worker secret
+  - the Social prompts reset
+  - the Presets editor (site-wide presets, taxonomy and role defaults)
+  - the editorial agenda
+  - people fiche edits and merges
+  - the Shorts music library
+
+  Settings search also finds API keys, tokens and passwords by name and opens their Replace key button.
 
 Old links (`?tab=…` of the former AI and Social settings pages) redirect to the section that holds the tab.
 

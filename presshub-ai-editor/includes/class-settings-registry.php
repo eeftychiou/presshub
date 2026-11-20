@@ -187,7 +187,8 @@ class PressHub_Settings_Registry {
 
     /**
      * Index for the settings search and the per-field Default / Reset links
-     * (#234): every active, rendered, non-secret option of both pages.
+     * (#234): every active, rendered option of both pages; secrets by label and
+     * help only, never a value or default (#309 E3).
      * Defaults come from the registry, else from register_setting(); only
      * scalar defaults are passed.
      *
@@ -197,9 +198,12 @@ class PressHub_Settings_Registry {
         $registered = function_exists( 'get_registered_settings' ) ? get_registered_settings() : [];
         $index      = [];
         foreach ( self::all() as $key => $e ) {
-            if ( empty( $e['rendered'] ) || ! empty( $e['secret'] ) || ! empty( $e['removes'] ) || self::is_unused( $key ) ) {
+            if ( empty( $e['rendered'] ) || ! empty( $e['removes'] ) || self::is_unused( $key ) ) {
                 continue;
             }
+            // #309 (E3): secrets are found by their label and help; their value and
+            // default are never put in the index.
+            $is_secret = ! empty( $e['secret'] );
             $row = [
                 'key'      => $key,
                 'page'     => (string) ( $e['page'] ?? 'ai' ),
@@ -211,6 +215,11 @@ class PressHub_Settings_Registry {
                 'aliases'  => array_values( array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ),
                 'checkbox' => ! empty( $e['checkbox'] ),
             ];
+            if ( $is_secret ) {
+                $row['secret'] = true;
+                $index[]       = $row;
+                continue;
+            }
             if ( ! empty( $e['depends_on'] ) && ( is_string( $e['depends_on'] ) || is_array( $e['depends_on'] ) ) ) {
                 // One switch, or a list of switches of which any one turns the field on.
                 $parents = array_values( array_filter( array_map( 'strval', (array) $e['depends_on'] ) ) );
