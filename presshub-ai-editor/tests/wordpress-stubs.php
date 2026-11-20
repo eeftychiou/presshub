@@ -869,6 +869,10 @@ if ( ! function_exists( 'add_query_arg' ) ) {
 
 if ( ! function_exists( 'wp_unslash' ) ) {
     function wp_unslash( $value ) {
+        // As WordPress (stripslashes_deep): strings, and every string inside arrays.
+        if ( is_array( $value ) ) {
+            return array_map( 'wp_unslash', $value );
+        }
         return is_string( $value ) ? stripslashes( $value ) : $value;
     }
 }

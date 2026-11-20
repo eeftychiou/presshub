@@ -31,6 +31,19 @@ require_once __DIR__ . '/class-capabilities.php';
 
 class PressHub_Settings_Sections {
 
+    /** admin-post action of the Settings form when JavaScript is off (#309, E2). */
+    const POST_ACTION = 'presshub_save_settings_section';
+
+    /** Nonce action for one section's no-JS form. */
+    public static function post_nonce( string $section ): string {
+        return 'presshub_save_settings_section_' . $section;
+    }
+
+    /** Transient holding the result of a no-JS save until the redirect shows it. */
+    public static function post_result_key( int $user_id ): string {
+        return 'presshub_settings_post_result_' . $user_id;
+    }
+
     /** Admin page slug of the one Settings page (unchanged from 3a). */
     const PAGE_SLUG = 'presshub-ai';
 

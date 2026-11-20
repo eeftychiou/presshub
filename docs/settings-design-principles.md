@@ -87,7 +87,7 @@ Never write a separate `presshub_ai_migrate_*` routine or `delete_option()` call
 
 **5.1 Plain words first.** Every setting has a label and one sentence of help saying what it does for the editor, in plain language; numbers state their unit; labels are unique within a section. Option names, filters, hooks and class names never appear on screen except under a "Details" disclosure. An environment variable or constant the editor must set by hand (such as `PRESSHUB_WORKER_SECRET` or `PRESSHUB_AI_LOG_DIR`) may be named; new ones are shown in code formatting.
 
-**5.2 Accessible.** Every field has a visible label; groups have headings; status uses text, not colour alone; errors are linked from a summary; focus stays visible and clear of the sticky save bar; leaving with unsaved changes asks first; the page works at 375px wide (the section `<select>`). The section links work without JavaScript. Saving needs JavaScript (exception E2).
+**5.2 Accessible.** Every field has a visible label; groups have headings; status uses text, not colour alone; errors are linked from a summary; focus stays visible and clear of the sticky save bar; leaving with unsaved changes asks first; the page works at 375px wide (the section `<select>`). The section links work without JavaScript, and so does Save: the form posts the one section on screen to admin-post.php (`PressHub_Settings_Sections::POST_ACTION`), through the same save as the AJAX Save, never to options.php.
 
 **5.3 No inline styles.** Settings markup uses classes from `assets/css/settings.css`, never `style=`.
 
@@ -126,7 +126,7 @@ These tests and checks guard the rules. A change that has to edit one of them to
 | 2.1 | `SettingsRegistryTest`, `SettingsInventoryTest` (regenerate `docs/settings-inventory.md` with `php presshub-ai-editor/scripts/settings-inventory.php`) |
 | 2.5 | `SettingsDefaultsTest` (registry default against literal `get_option()` defaults; skips settings without a registry default, exception E9), `SettingsSelectDefaultsTest` |
 | 2.6 | `SettingsHiddenSurfacedTest` (every AI setting marked rendered has a field; exception E1) |
-| 3.1 | `SettingsSaveIsolationTest`, `SettingsPerTabAjaxSaveTest` (the per-tab save path) |
+| 3.1 | `SettingsSaveIsolationTest`, `SettingsPerTabAjaxSaveTest` (the per-tab save path), `SettingsNoJsSaveTest` (the form without JavaScript) |
 | 3.4 | `SettingsAuditCoverageTest` (every writer outside the section Save writes its audit event; the worker secret only masked) |
 | 4.3 | `SettingsCleanupTest`, `SettingsUpgradeTest` |
 | 5.1 | `SettingsHelpTextLintTest` (help text, units for numeric settings, labels unique within a section) |
@@ -162,7 +162,6 @@ Each row: the rule, what deviates, why it is allowed for now, the tracking issue
 | # | Rule | What deviates | Why | Tracking | Ends |
 |---|---|---|---|---|---|
 | E1 | 2.6, 4.4 | 21 active, unrendered options (`presshub_ai_provider`, the per-provider model/temperature/max tokens/timeout options, `presshub_ai_openai_org`, `presshub_ai_anthropic_version`, `presshub_ai_briefing_morning_podcast_title_prefix`, `presshub_ai_briefing_featured_image_ids`, `presshub_social_enabled_<platform>`), some still read as fallbacks | Predate the overhaul; removing them needs the clean-up lifecycle | #309 | When migrated or removed |
-| E2 | 3.1, 3.4, 5.2 | Without JavaScript the section form posts the whole `presshub_ai_options` group to options.php | The section Save is AJAX-only today | #309 | When the no-JS submit is section-scoped or disabled |
 | E7 | 7.6 | `uninstall.php` misses most registry options (about 136 of the `presshub_ai_*` settings, all `presshub_social_*` settings), the provider store, the presets `presshub_ai_taxonomy_presets` and `presshub_ai_role_presets`, the Shorts music library and multisite | Hand-maintained list | #309 | When derived from the registry and stores |
 | E9 | 2.1, 2.5 | About 126 scalar settings have no registry default, so they show no "Default: …" or Reset and `SettingsDefaultsTest` skips them | Defaults were added only where #233 needed them | #309 | When every scalar setting declares its default |
 | E10 | 7.5 | `settings-registry-data.php` labels and help are plain English, shown untranslated in Settings search and Reset labels | The registry is data, loaded before translations | #309 | When search and reset use translated strings |
