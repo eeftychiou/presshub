@@ -64,22 +64,7 @@ class SettingsPageTest
         // --- Case 3: every registered option has a callable sanitize callback ---
         $registered = $GLOBALS['REGISTERED_SETTINGS'] ?? [];
         $expected_options = [
-            'presshub_ai_provider',
-            'presshub_ai_openai_org',
-            'presshub_ai_anthropic_version',
             'presshub_ai_github_token',
-            'presshub_ai_model_openai',
-            'presshub_ai_model_anthropic',
-            'presshub_ai_model_gemini',
-            'presshub_ai_temperature_openai',
-            'presshub_ai_temperature_anthropic',
-            'presshub_ai_temperature_gemini',
-            'presshub_ai_max_tokens_openai',
-            'presshub_ai_max_tokens_anthropic',
-            'presshub_ai_max_tokens_gemini',
-            'presshub_ai_timeout_openai',
-            'presshub_ai_timeout_anthropic',
-            'presshub_ai_timeout_gemini',
             'presshub_ai_google_cloud_api_key',
             'presshub_ai_gcloud_project_id',
             'presshub_ai_imagen_region',
@@ -197,11 +182,9 @@ class SettingsPageTest
             'presshub_ai_briefing_noon_generation_time',
             'presshub_ai_briefing_noon_text_title_prefix',
             'presshub_ai_briefing_podcast_title_prefix',
-            'presshub_ai_briefing_morning_podcast_title_prefix',
             'presshub_ai_briefing_noon_podcast_title_prefix',
             'presshub_ai_briefing_featured_image_ids_morning',
             'presshub_ai_briefing_featured_image_ids_noon',
-            'presshub_ai_briefing_featured_image_ids',
             'presshub_ai_briefing_featured_image_source',
             'presshub_ai_briefing_podcast_featured_image_source',
             'presshub_ai_briefing_image_template',
@@ -558,8 +541,9 @@ class SettingsPageTest
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $_POST = [
             'nonce'                 => 'valid_nonce',
-            'presshub_ai_provider'  => 'gemini',
             'presshub_ai_fetch_urls'=> '1',
+            // #309 (E1): removed options are not registered, so they are not saved.
+            'presshub_ai_provider'  => 'gemini',
             'presshub_ai_model_gemini' => 'gemini-2.0-flash',
             'presshub_ai_max_tokens_gemini' => '12000',
         ];
@@ -572,14 +556,13 @@ class SettingsPageTest
             $thrown = true;
         }
 
-        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] ?? '' ) !== 'gemini' ) {
-            $failures[] = 'save_settings AJAX should update presshub_ai_provider to gemini; got: ' . var_export( $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] ?? null, true );
+        if ( empty( $GLOBALS['OPTIONS_STORE']['presshub_ai_fetch_urls'] ) ) {
+            $failures[] = 'save_settings AJAX should save presshub_ai_fetch_urls.';
         }
-        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini'] ?? '' ) !== 'gemini-2.0-flash' ) {
-            $failures[] = 'save_settings AJAX should update presshub_ai_model_gemini; got: ' . var_export( $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini'] ?? null, true );
-        }
-        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_gemini'] ?? 0 ) !== 12000 ) {
-            $failures[] = 'save_settings AJAX should update presshub_ai_max_tokens_gemini; got: ' . var_export( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_gemini'] ?? null, true );
+        foreach ( [ 'presshub_ai_provider', 'presshub_ai_model_gemini', 'presshub_ai_max_tokens_gemini' ] as $gone ) {
+            if ( array_key_exists( $gone, $GLOBALS['OPTIONS_STORE'] ) ) {
+                $failures[] = "save_settings AJAX must not save the removed option {$gone}.";
+            }
         }
 
         if ( $failures ) {

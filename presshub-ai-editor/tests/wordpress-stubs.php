@@ -1697,3 +1697,16 @@ if ( ! function_exists( 'presshub_test_provider_keys' ) ) {
         return $out;
     }
 }
+if ( ! function_exists( 'presshub_test_providers' ) ) {
+    /**
+     * Connections records with $active first (#309 E1: the first enabled
+     * provider is the active one; there is no presshub_ai_provider option).
+     * $fields are merged into the active record (model, tuning, headers).
+     */
+    function presshub_test_providers( string $key, string $active, array $fields = [], array $types = [ 'openai', 'anthropic', 'gemini' ] ): array {
+        $types = array_values( array_unique( array_merge( [ $active ], $types ) ) );
+        $out   = presshub_test_provider_keys( $key, $types );
+        $out[0] = array_merge( $out[0], $fields );
+        return $out;
+    }
+}

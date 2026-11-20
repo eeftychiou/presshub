@@ -411,7 +411,7 @@ class PressHub_Settings_Registry {
      * registered anything (tests, some hosts).
      */
     public static function ensure_registered( string $page = '' ): void {
-        if ( ( '' === $page || 'ai' === $page ) && ! isset( self::$registered['presshub_ai_provider'] ) && class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+        if ( ( '' === $page || 'ai' === $page ) && ! isset( self::$registered['presshub_ai_fetch_urls'] ) && class_exists( 'PressHub_AI_Settings_Storage' ) ) {
             // register_options() also adds the settings fields, whose callbacks live on the renderer.
             if ( ! class_exists( 'PressHub_AI_Settings_Render' ) ) {
                 require_once __DIR__ . '/class-settings-render.php';

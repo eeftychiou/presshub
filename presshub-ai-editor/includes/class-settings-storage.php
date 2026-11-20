@@ -70,10 +70,7 @@ class PressHub_AI_Settings_Storage {
         $render = new PressHub_AI_Settings_Render();
 
         // --- General ---
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_provider', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_provider' ],
-            'type'              => 'string',
-        ] );
+        // #309 (E1): presshub_ai_provider is gone; the provider is chosen per task in AI models.
 
         // Fetch source URLs server-side (2026-08-16): models cannot browse
         // URLs, so the plugin fetches + extracts article text itself.
@@ -101,34 +98,10 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_remove_github_token' ],
             'type'              => 'boolean',
         ] );
-        foreach ( self::PROVIDERS as $provider ) {
-            PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_model_' . $provider, [
-                'sanitize_callback' => function ( $value ) use ( $provider ) {
-                    return self::sanitize_model( $value, $provider );
-                },
-                'type' => 'string',
-            ] );
-            PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_temperature_' . $provider, [
-                'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
-                'type'              => 'number',
-            ] );
-            PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_max_tokens_' . $provider, [
-                'sanitize_callback' => [ __CLASS__, 'sanitize_max_tokens' ],
-                'type'              => 'integer',
-            ] );
-            PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_timeout_' . $provider, [
-                'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
-                'type'              => 'integer',
-            ] );
-        }
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_openai_org', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_openai_org' ],
-            'type'              => 'string',
-        ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_anthropic_version', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_anthropic_version' ],
-            'type'              => 'string',
-        ] );
+        // #309 (E1): the per-provider model, temperature, max tokens and timeout,
+        // the OpenAI organization and the Anthropic version live on each
+        // provider in Connections; the old flat options were removed by the
+        // settings clean-up.
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_github_token', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_github_token' ],
             'type'              => 'string',
@@ -461,10 +434,6 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_title_prefix' ],
             'type'              => 'string',
         ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_morning_podcast_title_prefix', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_title_prefix' ],
-            'type'              => 'string',
-        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_noon_podcast_title_prefix', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_podcast_title_prefix' ],
             'type'              => 'string',
@@ -474,10 +443,6 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_ids_noon', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
-            'type'              => 'string',
-        ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_ids', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'type'              => 'string',
         ] );
@@ -842,11 +807,6 @@ class PressHub_AI_Settings_Storage {
     // render_*_field callbacks resolve on the render module.
     // ------------------------------------------------------------------
 
-    public static function sanitize_provider( $value ) {
-        $value = self::sanitize_text( $value );
-        return in_array( $value, self::PROVIDERS, true ) ? $value : 'openai';
-    }
-
     /**
      * 1.2.4: fetch-source-URLs toggle ('1'/'0' only).
      */
@@ -1070,24 +1030,6 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_backup_keep( get_option( 'presshub_ai_backup_keep', 5 ) );
     }
 
-    public static function sanitize_model( $value, $provider = 'openai' ) {
-        $value = self::sanitize_text( $value );
-        if ( '' === $value ) {
-            return self::default_model( $provider );
-        }
-        return substr( $value, 0, 200 );
-    }
-
-    public static function sanitize_temperature( $value ) {
-        $value = wp_unslash( $value );
-        if ( ! is_numeric( $value ) ) {
-            return self::default_temperature();
-        }
-        // Clamp to 0–2 like every other temperature field (#258); only a
-        // non-numeric value falls back to the default.
-        return round( max( 0.0, min( 2.0, (float) $value ) ), 2 );
-    }
-
     /**
      * Per-module temperature that may be left empty (#233). Empty stores ''
      * so the API client keeps falling back to the provider's temperature.
@@ -1133,16 +1075,6 @@ class PressHub_AI_Settings_Storage {
         return max( 1, min( 65536, $n ) );
     }
 
-    public static function sanitize_timeout( $value ) {
-        if ( null === $value || '' === trim( (string) $value ) ) {
-            return PressHub_AI_Provider_Defaults::DEFAULT_TIMEOUT;
-        }
-        // 10 s is the shortest timeout the API client honours (#259); a
-        // lower stored value would be silently ignored there.
-        $n = (int) wp_unslash( $value );
-        return max( 10, min( 300, $n ) );
-    }
-
     public static function sanitize_rate_limit_per_hour( $value ) {
         $n = (int) wp_unslash( $value );
         return max( 1, min( 10000, $n ) );
@@ -1173,14 +1105,6 @@ class PressHub_AI_Settings_Storage {
             return $value;
         }
         return 'INFO';
-    }
-
-    public static function sanitize_openai_org( $value ) {
-        return substr( self::sanitize_text( $value ), 0, 512 );
-    }
-
-    public static function sanitize_anthropic_version( $value ) {
-        return substr( self::sanitize_text( $value ), 0, 50 );
     }
 
     /**
@@ -3432,10 +3356,8 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function get_briefing_podcast_title_prefix(): string {
+        // #309 (E1): the old morning name was copied here by the settings clean-up.
         $value = get_option( 'presshub_ai_briefing_podcast_title_prefix', null );
-        if ( null === $value ) {
-            $value = get_option( 'presshub_ai_briefing_morning_podcast_title_prefix', null );
-        }
         if ( null === $value ) {
             return self::default_briefing_podcast_title_prefix();
         }
@@ -3810,8 +3732,8 @@ class PressHub_AI_Settings_Storage {
     // These delegate to PressHub_AI_Provider_Defaults (the single
     // source of truth — class-provider-defaults.php) so that the
     // storage class never diverges from the facade's return values.
-    // sanitize_model → default_model, sanitize_temperature →
-    // default_temperature, etc.
+    // (The per-provider sanitizers went with their options in #309 E1;
+    // provider tuning is sanitized by PressHub_AI_Provider_Store.)
     //
     // The "briefing" defaults (host names, harvest time, voice,
     // style, etc.) live on PressHub_AI_Settings itself for now;
@@ -3913,12 +3835,8 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_briefing_featured_image_ids_morning(): array {
         $val = (string) get_option( 'presshub_ai_briefing_featured_image_ids_morning', '' );
-        $ids = self::parse_ids_to_array( $val );
-        if ( ! empty( $ids ) ) {
-            return $ids;
-        }
-        $legacy = (string) get_option( 'presshub_ai_briefing_featured_image_ids', '' );
-        return self::parse_ids_to_array( $legacy );
+        // #309 (E1): the old single pool was copied here by the settings clean-up.
+        return self::parse_ids_to_array( $val );
     }
 
     public static function get_briefing_featured_image_ids_noon(): array {

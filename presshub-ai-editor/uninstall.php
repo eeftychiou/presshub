@@ -156,6 +156,7 @@ $presshub_ai_options = [
     'presshub_settings_cleanup_report',
     'presshub_settings_cleanup_export',
     'presshub_settings_cleanup_export_2',
+    'presshub_settings_cleanup_export_3',
     'presshub_settings_cleanup_notice',
     'presshub_settings_cleanup_lock',
 ];

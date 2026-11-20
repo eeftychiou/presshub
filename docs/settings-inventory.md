@@ -10,39 +10,24 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 
 | Section | Options | Not shown on screen | Secrets |
 |---|---|---|---|
-| Connections (`connections`) | 42 | 18 | 9 |
+| Connections (`connections`) | 27 | 3 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 81 | 2 | 0 |
+| Daily Briefing (`daily-briefing`) | 79 | 0 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
-| Social publishing (`social-publishing`) | 74 | 5 | 0 |
+| Social publishing (`social-publishing`) | 69 | 0 | 0 |
 | Social listening (`social-listening`) | 33 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **324** | | |
+| **Total** | **302** | | |
 
-**Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
+**Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 34 option(s); both lists are at the end.
 
-## Connections (`connections`, 42)
+## Connections (`connections`, 27)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
-| `presshub_ai_provider` | Active AI provider | string |  | ai / providers | not shown on screen, was: AI Provider |
 | `presshub_ai_remove_google_cloud_api_key` | Remove google cloud api key | boolean |  | ai / advanced | not shown on screen, removes `presshub_ai_google_cloud_api_key` |
 | `presshub_ai_remove_github_token` | Remove github token | boolean |  | ai / advanced | not shown on screen, removes `presshub_ai_github_token` |
-| `presshub_ai_model_openai` | OpenAI model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Openai) |
-| `presshub_ai_temperature_openai` | OpenAI temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Openai) |
-| `presshub_ai_max_tokens_openai` | OpenAI maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Openai) |
-| `presshub_ai_timeout_openai` | OpenAI timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Openai) |
-| `presshub_ai_model_anthropic` | Anthropic model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Anthropic) |
-| `presshub_ai_temperature_anthropic` | Anthropic temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Anthropic) |
-| `presshub_ai_max_tokens_anthropic` | Anthropic maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Anthropic) |
-| `presshub_ai_timeout_anthropic` | Anthropic timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Anthropic) |
-| `presshub_ai_model_gemini` | Gemini model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Gemini) |
-| `presshub_ai_temperature_gemini` | Gemini temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Gemini) |
-| `presshub_ai_max_tokens_gemini` | Gemini maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Gemini) |
-| `presshub_ai_timeout_gemini` | Gemini timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Gemini) |
-| `presshub_ai_openai_org` | OpenAI Organization ID (optional) | string |  | ai / providers | not shown on screen |
-| `presshub_ai_anthropic_version` | Anthropic API Version | string |  | ai / providers | not shown on screen |
 | `presshub_ai_github_token` | GitHub Token (optional) | string |  | ai / advanced | secret, masked |
 | `presshub_ai_google_cloud_api_key` | Google Cloud API Key (Imagen/TTS) | string |  | ai / advanced | secret, masked |
 | `presshub_ai_gcloud_project_id` | Google Cloud Project ID (Imagen) | string |  | ai / advanced |  |
@@ -144,7 +129,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 | `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
-## Daily Briefing (`daily-briefing`, 81)
+## Daily Briefing (`daily-briefing`, 79)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -206,11 +191,9 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_text_title_date_format` | Text Story Title Date Format | string |  | ai / briefing |  |
 | `presshub_ai_briefing_noon_text_title_prefix` | Noon Text Story Title Prefix | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_title_prefix` | Morning Podcast Title Prefix | string |  | ai / briefing |  |
-| `presshub_ai_briefing_morning_podcast_title_prefix` | Morning podcast title prefix (legacy) | string |  | ai / briefing | not shown on screen, was: Briefing morning podcast title prefix |
 | `presshub_ai_briefing_noon_podcast_title_prefix` | Noon Podcast Title Prefix | string |  | ai / briefing |  |
 | `presshub_ai_briefing_featured_image_ids_morning` | Morning Featured Image Pool | string |  | ai / briefing |  |
 | `presshub_ai_briefing_featured_image_ids_noon` | Noon Featured Image Pool | string |  | ai / briefing |  |
-| `presshub_ai_briefing_featured_image_ids` | Featured Image Pool (Attachment IDs) | string |  | ai / briefing | not shown on screen |
 | `presshub_ai_briefing_featured_image_source` | Text Briefing Featured Image Source | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_featured_image_source` | Podcast Featured Image Source | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_include_text` | Include transcript in podcast post | integer |  | ai / briefing | checkbox, was: Include Transcript in Podcast Post |
@@ -249,17 +232,12 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_stakeholders_budgets` | People fiche context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters | ai / knowledge |  |
 
-## Social publishing (`social-publishing`, 74)
+## Social publishing (`social-publishing`, 69)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
 | `presshub_social_auto_publish_enabled` | Auto-Publish on Post | boolean |  | social / general | checkbox |
 | `presshub_social_enabled_platforms` | Active Platforms | array |  | social / general | checkbox |
-| `presshub_social_enabled_twitter` | Legacy switch: X | boolean |  | social / general | not shown on screen, was: Enabled twitter |
-| `presshub_social_enabled_facebook` | Legacy switch: Facebook | boolean |  | social / general | not shown on screen, was: Enabled facebook |
-| `presshub_social_enabled_instagram` | Legacy switch: Instagram | boolean |  | social / general | not shown on screen, was: Enabled instagram |
-| `presshub_social_enabled_tiktok` | Legacy switch: TikTok | boolean |  | social / general | not shown on screen, was: Enabled tiktok |
-| `presshub_social_enabled_youtube` | Legacy switch: YouTube | boolean |  | social / general | not shown on screen |
 | `presshub_social_copy_mode` | Copy Generation Mode | string |  | social / general |  |
 | `presshub_social_engine_twitter` | Twitter Engine | string |  | social / general |  |
 | `presshub_social_engine_facebook` | Facebook Engine | string |  | social / general |  |
@@ -460,7 +438,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 
 None.
 
-## Removed in 2.45.0 and 2.46.0 (#237)
+## Removed in 2.45.0 and 2.46.0 and 2.71.0 (#237)
 
 Deleted on the first admin request after the upgrade, after a copy of all settings (no secrets) was saved; the report is on PressHub → Usage & logs. Reading one fires `_doing_it_wrong()` for one release.
 
@@ -478,3 +456,25 @@ Deleted on the first admin request after the upgrade, after a copy of all settin
 | `presshub_ai_gemini_api_key` | 2.46.0 | Never registered or shown; read only as a fallback after the Gemini provider record. Same upgrade rule (copied into the Gemini provider when it has no key). |
 | `presshub_ai_briefing_tts_api_key` | 2.46.0 | Speech resolves the provider chosen for Speech in AI models first (`resolve_gemini_api_key()`), then any Gemini provider; the separate key was a later fallback. On presshub.cy it was the same key as the "Google Gemini (3.8 Speech)" provider. Same upgrade rule. |
 | `presshub_ai_remove_briefing_tts_api_key` | 2.46.0 | The "Remove stored key" flag of the key above. |
+| `presshub_ai_provider` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_model_openai` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_temperature_openai` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_max_tokens_openai` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_timeout_openai` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_model_anthropic` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_temperature_anthropic` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_max_tokens_anthropic` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_timeout_anthropic` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_model_gemini` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_temperature_gemini` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_max_tokens_gemini` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_timeout_gemini` | 2.71.0 | Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated. |
+| `presshub_ai_openai_org` | 2.71.0 | Never shown; read as a fallback header when the provider record set none. On upgrade it is copied into the `OpenAI-Organization` / `anthropic-version` header of every provider of that type that sets none. |
+| `presshub_ai_anthropic_version` | 2.71.0 | Never shown; read as a fallback header when the provider record set none. On upgrade it is copied into the `OpenAI-Organization` / `anthropic-version` header of every provider of that type that sets none. |
+| `presshub_ai_briefing_morning_podcast_title_prefix` | 2.71.0 | Never shown; read only when `presshub_ai_briefing_podcast_title_prefix` was not set. On upgrade it is copied there in that case. |
+| `presshub_ai_briefing_featured_image_ids` | 2.71.0 | Never shown; read only while the Morning pool was empty. On upgrade it is copied into an empty Morning pool. |
+| `presshub_social_enabled_twitter` | 2.71.0 | Never shown; kept in step with `presshub_social_enabled_platforms`, which they could override. On upgrade they are folded into the list (on adds the platform, off removes it). |
+| `presshub_social_enabled_facebook` | 2.71.0 | Never shown; kept in step with `presshub_social_enabled_platforms`, which they could override. On upgrade they are folded into the list (on adds the platform, off removes it). |
+| `presshub_social_enabled_instagram` | 2.71.0 | Never shown; kept in step with `presshub_social_enabled_platforms`, which they could override. On upgrade they are folded into the list (on adds the platform, off removes it). |
+| `presshub_social_enabled_tiktok` | 2.71.0 | Never shown; kept in step with `presshub_social_enabled_platforms`, which they could override. On upgrade they are folded into the list (on adds the platform, off removes it). |
+| `presshub_social_enabled_youtube` | 2.71.0 | Never shown; kept in step with `presshub_social_enabled_platforms`, which they could override. On upgrade they are folded into the list (on adds the platform, off removes it). |

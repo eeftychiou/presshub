@@ -50,9 +50,9 @@ A new section needs an issue and the owner's agreement. A new setting goes in th
 
 **2.4 One sanitizer that clamps.** Each setting has one `sanitize_<knob>()` that clamps to documented safe bounds. A masked or empty secret keeps the stored value; an explicit Remove clears it.
 
-**2.5 One default, and it is shown.** Every scalar setting has one default in the registry (`default`, or `default_callback` when it depends on another setting), equal to the getter's fallback (`SettingsDefaultsTest`, `SettingsRegistryDefaultsCoverageTest`); an empty default means "use the provider's or the task's default". Inputs and selects show it as "Default: …" with Reset to default. A select shows what is stored, so an untouched Save never stores a value nobody picked. Prompts and templates take their default from an asset file (rule 7.3) and offer "Load default template" instead. The legacy options of exception E1 are excluded.
+**2.5 One default, and it is shown.** Every scalar setting has one default in the registry (`default`, or `default_callback` when it depends on another setting), equal to the getter's fallback (`SettingsDefaultsTest`, `SettingsRegistryDefaultsCoverageTest`); an empty default means "use the provider's or the task's default". Inputs and selects show it as "Default: …" with Reset to default. A select shows what is stored, so an untouched Save never stores a value nobody picked. Prompts and templates take their default from an asset file (rule 7.3) and offer "Load default template" instead.
 
-**2.6 Every active setting is on screen.** A setting with `status => active` renders a field in its section and has `rendered => true`. The rows of a section are printed by its `render_section_<slug>()`; `add_settings_field()` is used only by the sections printed field by field: the three AI sections printed by `render_section_with_fields()` and the Social sections printed by `PressHub_Social_Settings_Render::render_settings_sections()` (fields registered in `class-social-settings.php`). A setting nobody should see is not active: it is `unused` and on its way out (rule 4.3).
+**2.6 Every active setting is on screen.** A setting with `status => active` renders a field in its section and has `rendered => true`. The rows of a section are printed by its `render_section_<slug>()`; `add_settings_field()` is used only by the sections printed field by field: the three AI sections printed by `render_section_with_fields()` and the Social sections printed by `PressHub_Social_Settings_Render::render_settings_sections()` (fields registered in `class-social-settings.php`). A setting nobody should see is not active: it is `unused` and on its way out (rule 4.3). The only active settings without a field of their own are the "Remove stored key" boxes (`removes`), shown while a key is stored.
 
 **2.7 Stores and state.** Structured stores are not settings: they live outside the registry, are edited in their own editor (provider cards in Connections, presets on PressHub → Presets, the music library in Social publishing, fiches and agenda on their PressHub pages), and save through their own AJAX or admin-post endpoint, which checks a nonce and is audited (rule 3.4). Settings stores use the settings capability (rule 3.3). Editorial-content stores (fiches, agenda) use the editorial capability `edit_others_posts` / `presshub_ai_briefing_cap`, so narrowing the settings capability never locks editors out of editorial content (architecture.md §4.0, `AdminMenuCapabilitiesTest`). Runtime state is never shown as an editable field. A new structured store needs an issue, says where it is edited, and is listed in `uninstall.php` (rule 7.6).
 
@@ -125,7 +125,7 @@ These tests and checks guard the rules. A change that has to edit one of them to
 | 1.5, 3.2, 6 | `ModelsTableTest` |
 | 2.1 | `SettingsRegistryTest`, `SettingsInventoryTest` (regenerate `docs/settings-inventory.md` with `php presshub-ai-editor/scripts/settings-inventory.php`) |
 | 2.5 | `SettingsDefaultsTest` (registry default against literal `get_option()` defaults), `SettingsRegistryDefaultsCoverageTest` (every scalar setting declares one), `SettingsSelectDefaultsTest` |
-| 2.6 | `SettingsHiddenSurfacedTest` (every AI setting marked rendered has a field; exception E1) |
+| 2.6 | `SettingsHiddenSurfacedTest` (every active AI and Social setting is marked rendered and has a field; only the "Remove stored key" boxes are exempt) |
 | 3.1 | `SettingsSaveIsolationTest`, `SettingsPerTabAjaxSaveTest` (the per-tab save path), `SettingsNoJsSaveTest` (the form without JavaScript) |
 | 3.4 | `SettingsAuditCoverageTest` (every writer outside the section Save writes its audit event; the worker secret only masked) |
 | 4.3 | `SettingsCleanupTest`, `SettingsUpgradeTest` |
@@ -158,8 +158,6 @@ These tests and checks guard the rules. A change that has to edit one of them to
 
 ## Exceptions
 
-Each row: the rule, what deviates, why it is allowed for now, the tracking issue, and when it ends. Delete a row in the PR that fixes it.
+Each row: the rule, what deviates, why it is allowed for now, the tracking issue, and when it ends. Delete a row in the PR that fixes it. When a new exception is agreed, add a table with the columns `#`, Rule, What deviates, Why, Tracking and Ends.
 
-| # | Rule | What deviates | Why | Tracking | Ends |
-|---|---|---|---|---|---|
-| E1 | 2.6, 4.4 | 21 active, unrendered options (`presshub_ai_provider`, the per-provider model/temperature/max tokens/timeout options, `presshub_ai_openai_org`, `presshub_ai_anthropic_version`, `presshub_ai_briefing_morning_podcast_title_prefix`, `presshub_ai_briefing_featured_image_ids`, `presshub_social_enabled_<platform>`), some still read as fallbacks | Predate the overhaul; removing them needs the clean-up lifecycle | #309 | When migrated or removed |
+None. #309 closed E1 to E10 (2.68.1 to 2.71.0).

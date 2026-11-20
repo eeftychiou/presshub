@@ -1537,6 +1537,18 @@ class PressHub_AI_Settings_Render {
                             </div>
                         </div>
 
+                        <?php // #309 (E1): kept in the provider's headers; shown only for its type (admin.js). ?>
+                        <div class="ph-margin-bottom-15px presshub-form-group presshub-provider-header-field" data-provider-type="openai" hidden>
+                            <label for="provider-form-openai-org"><strong><?php echo esc_html__( 'Organization ID (optional):', 'presshub-ai-editor' ); ?></strong></label>
+                            <input type="text" id="provider-form-openai-org" name="openai_org" class="ph-margin-top-4px widefat" maxlength="512" autocomplete="off" placeholder="org-..." aria-describedby="provider-form-openai-org-help">
+                            <p class="description" id="provider-form-openai-org-help"><?php echo esc_html__( 'Sent as the OpenAI-Organization header, for keys that belong to more than one organization. Leave empty to use the key\'s default organization.', 'presshub-ai-editor' ); ?></p>
+                        </div>
+                        <div class="ph-margin-bottom-15px presshub-form-group presshub-provider-header-field" data-provider-type="anthropic" hidden>
+                            <label for="provider-form-anthropic-version"><strong><?php echo esc_html__( 'API version (optional):', 'presshub-ai-editor' ); ?></strong></label>
+                            <input type="text" id="provider-form-anthropic-version" name="anthropic_version" class="ph-margin-top-4px widefat" maxlength="50" autocomplete="off" placeholder="2023-06-01" aria-describedby="provider-form-anthropic-version-help">
+                            <p class="description" id="provider-form-anthropic-version-help"><?php echo esc_html__( 'Sent as the anthropic-version header. Default: 2023-06-01.', 'presshub-ai-editor' ); ?></p>
+                        </div>
+
                         <div class="ph-margin-bottom-15px presshub-form-group">
                             <label for="provider-form-headers"><strong><?php echo __( 'Custom HTTP Headers (JSON optional):', 'presshub-ai-editor' ); ?></strong></label>
                             <textarea id="provider-form-headers" name="headers" class="ph-margin-top-4px widefat code" rows="2" placeholder='{"HTTP-Referer": "https://mysite.com"}'></textarea>
@@ -4331,13 +4343,7 @@ class PressHub_AI_Settings_Render {
      */
     public function render_image_pool_manager( string $option, string $edition_label, string $description ) {
         $raw_value  = (string) get_option( $option, '' );
-        $is_morning = 'presshub_ai_briefing_featured_image_ids_morning' === $option;
         $is_noon    = 'presshub_ai_briefing_featured_image_ids_noon' === $option;
-
-        // Support fallback from legacy presshub_ai_briefing_featured_image_ids for morning if empty
-        if ( '' === trim( $raw_value ) && $is_morning ) {
-            $raw_value = (string) get_option( 'presshub_ai_briefing_featured_image_ids', '' );
-        }
 
         $sanitized_csv = PressHub_AI_Settings_Storage::sanitize_briefing_featured_image_ids( $raw_value );
         $ids           = '' !== $sanitized_csv ? array_map( 'intval', explode( ',', $sanitized_csv ) ) : [];

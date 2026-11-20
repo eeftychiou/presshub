@@ -139,7 +139,7 @@ class SettingsCleanupTest {
         if ( self::SECRET_VALUES['presshub_social_github_token'] !== get_option( 'presshub_ai_github_token' ) ) {
             $failures[] = 'An empty AI GitHub token should receive the second token.';
         }
-        if ( 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6' !== get_option( 'presshub_social_worker_secret' ) || 'gemini' !== get_option( 'presshub_ai_provider' ) ) {
+        if ( 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6' !== get_option( 'presshub_social_worker_secret' ) || 'Ελένη' !== get_option( 'presshub_ai_briefing_host_female' ) ) {
             $failures[] = 'Settings that stay must keep their values.';
         }
 
@@ -165,7 +165,7 @@ class SettingsCleanupTest {
         ob_start();
         PressHub_Settings_Cleanup::render_notice();
         $second = (string) ob_get_clean();
-        if ( false === strpos( $first, '7 unused settings were removed' ) || false === strpos( $first, 'presshub-cleanup-report' ) ) {
+        if ( false === strpos( $first, '8 unused settings were removed' ) || false === strpos( $first, 'presshub-cleanup-report' ) ) {
             $failures[] = 'The first admin page should show the clean-up notice with a link to the report; got ' . strip_tags( $first );
         }
         if ( '' !== trim( $second ) ) {
@@ -237,7 +237,7 @@ class SettingsCleanupTest {
         }
 
         // 12. A site with none of the removed options: nothing deleted, no notice.
-        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_ai_provider' => 'openai' ];
+        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_ai_briefing_host_female' => 'Ελένη' ];
         PressHub_Settings_Registry::reset();
         PressHub_Settings_Cleanup::run();
         ob_start();
@@ -326,22 +326,134 @@ class SettingsCleanupTest {
         $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']          = [ $gem( 'AIzaSyMAINKEY00000000000000000000001' ) ];
         PressHub_Settings_Cleanup::maybe_run();
         $runs = PressHub_Settings_Cleanup::reports();
-        if ( [ 2, 1 ] !== array_keys( $runs ) || array_key_exists( 'presshub_ai_api_key', $GLOBALS['OPTIONS_STORE'] ) || ! array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
-            $failures[] = 'Clean-up 2 removes only its own options and keeps the 2.45.0 report.';
+        // It runs clean-ups 2 and 3 together, under the newest version.
+        if ( [ 3, 1 ] !== array_keys( $runs ) || array_key_exists( 'presshub_ai_api_key', $GLOBALS['OPTIONS_STORE'] ) || ! array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'A site at clean-up 1 removes only the later options and keeps the 2.45.0 report.';
         }
-        if ( array_keys( $runs[2]['removed'] ) !== PressHub_Settings_Cleanup::removed_keys( 2 ) ) {
-            $failures[] = 'Clean-up 2 reports only its own options.';
+        if ( array_keys( $runs[3]['removed'] ?? [] ) !== array_merge( PressHub_Settings_Cleanup::removed_keys( 2 ), PressHub_Settings_Cleanup::removed_keys( 3 ) ) ) {
+            $failures[] = 'The new report lists only the options removed after clean-up 1.';
         }
         ob_start();
         PressHub_Settings_Cleanup::render_report();
         $both = (string) ob_get_clean();
-        if ( false === strpos( $both, 'Clean-up report, 2.46.0' ) || false === strpos( $both, 'Clean-up report, 2.45.0' ) || strpos( $both, '2.46.0' ) > strpos( $both, '2.45.0' ) || false === strpos( $both, 'cleanup=1' ) || false === strpos( $both, 'cleanup=2' ) ) {
+        if ( false === strpos( $both, 'Clean-up report, 2.71.0' ) || false === strpos( $both, 'Clean-up report, 2.45.0' ) || strpos( $both, '2.71.0' ) > strpos( $both, '2.45.0' ) || false === strpos( $both, 'cleanup=1' ) || false === strpos( $both, 'cleanup=3' ) ) {
             $failures[] = 'Usage & logs shows both reports, newest first, each with its own copy.';
+        }
+
+        // 16. #309 (E1): clean-up 3 keeps what the old hidden options still did.
+        self::seed();
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::VERSION_OPTION ] = 2;
+        $GLOBALS['OPTIONS_STORE'] += [
+            'presshub_social_enabled_platforms'                 => [ 'twitter', 'facebook' ],
+            'presshub_social_enabled_twitter'                   => '0',
+            'presshub_social_enabled_facebook'                  => '1',
+            'presshub_social_enabled_youtube'                   => true,
+            'presshub_ai_briefing_morning_podcast_title_prefix' => 'Πρωινό - ',
+            'presshub_ai_briefing_featured_image_ids'           => '5,6',
+            'presshub_ai_openai_org'                            => 'org-E1TEST',
+            'presshub_ai_anthropic_version'                     => '2024-01-01',
+            'presshub_ai_model_openai'                          => 'gpt-old',
+            'presshub_ai_configured_providers'                  => [
+                [ 'id' => 'openai-a', 'type' => 'openai', 'name' => 'OpenAI A', 'enabled' => true, 'api_key' => 'sk-a' ],
+                [ 'id' => 'openai-b', 'type' => 'openai', 'name' => 'OpenAI B', 'enabled' => true, 'api_key' => 'sk-b', 'headers' => [ 'OpenAI-Organization' => 'org-OWN' ] ],
+                [ 'id' => 'claude', 'type' => 'anthropic', 'name' => 'Claude', 'enabled' => true, 'api_key' => 'sk-ant', 'headers' => [ 'X-Extra' => '1' ] ],
+            ],
+        ];
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_title_prefix'], $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_featured_image_ids_morning'] );
+        $report = PressHub_Settings_Cleanup::run();
+        $store  = $GLOBALS['OPTIONS_STORE'];
+        if ( [ 'facebook', 'youtube' ] !== ( $store['presshub_social_enabled_platforms'] ?? null ) ) {
+            $failures[] = 'The social switches should fold into the platforms list (X off, YouTube on); got ' . json_encode( $store['presshub_social_enabled_platforms'] ?? null );
+        }
+        if ( 'Πρωινό - ' !== ( $store['presshub_ai_briefing_podcast_title_prefix'] ?? null ) ) {
+            $failures[] = 'The morning title prefix should be copied into the unset podcast title prefix.';
+        }
+        if ( '5,6' !== ( $store['presshub_ai_briefing_featured_image_ids_morning'] ?? null ) ) {
+            $failures[] = 'The old pool should be copied into the empty Morning pool.';
+        }
+        $by_id = [];
+        foreach ( (array) ( $store['presshub_ai_configured_providers'] ?? [] ) as $rec ) {
+            $by_id[ $rec['id'] ] = $rec;
+        }
+        if ( 'org-E1TEST' !== ( $by_id['openai-a']['headers']['OpenAI-Organization'] ?? null ) || 'org-OWN' !== ( $by_id['openai-b']['headers']['OpenAI-Organization'] ?? null ) ) {
+            $failures[] = 'The organization should go onto OpenAI providers that set none, never over their own; got ' . json_encode( [ $by_id['openai-a']['headers'] ?? null, $by_id['openai-b']['headers'] ?? null ] );
+        }
+        if ( [ 'X-Extra' => '1', 'anthropic-version' => '2024-01-01' ] !== ( $by_id['claude']['headers'] ?? null ) ) {
+            $failures[] = 'The Anthropic version should join the provider headers; got ' . json_encode( $by_id['claude']['headers'] ?? null );
+        }
+        if ( 'sk-a' !== ( $by_id['openai-a']['api_key'] ?? null ) || 'sk-ant' !== ( $by_id['claude']['api_key'] ?? null ) ) {
+            $failures[] = 'Copying a header must keep the provider key.';
+        }
+        foreach ( PressHub_Settings_Cleanup::removed_keys( 3 ) as $key ) {
+            if ( array_key_exists( $key, $store ) ) {
+                $failures[] = "{$key} should be removed by clean-up 3.";
+            }
+        }
+        foreach ( [ 'presshub_social_enabled_twitter', 'presshub_social_enabled_youtube', 'presshub_ai_briefing_morning_podcast_title_prefix', 'presshub_ai_briefing_featured_image_ids', 'presshub_ai_openai_org', 'presshub_ai_anthropic_version' ] as $key ) {
+            if ( empty( $report['copied'][ $key ] ) ) {
+                $failures[] = "The report should say where {$key} went.";
+            }
+        }
+        if ( isset( $report['copied']['presshub_social_enabled_facebook'] ) || isset( $report['copied']['presshub_ai_model_openai'] ) ) {
+            $failures[] = 'A switch that changed nothing, or a value that was not kept, is not reported as copied.';
+        }
+        $export = json_decode( (string) ( $store[ PressHub_Settings_Cleanup::export_option( 3 ) ] ?? '' ), true );
+        if ( 'gpt-old' !== ( $export['options']['presshub_ai_model_openai'] ?? null ) || 'org-E1TEST' !== ( $export['options']['presshub_ai_openai_org'] ?? null ) ) {
+            $failures[] = 'The copy saved first should hold the removed provider options.';
+        }
+        // The report names every place a group's values went.
+        ob_start();
+        PressHub_Settings_Cleanup::render_report();
+        $r3 = (string) ob_get_clean();
+        foreach ( [ 'the OpenAI A provider in Connections', 'the Claude provider in Connections', '(turned off)', '(turned on)' ] as $where ) {
+            if ( false === strpos( $r3, $where ) ) {
+                $failures[] = "The 2.71.0 report should say the values went to {$where}.";
+            }
+        }
+        // A site at clean-up 1 with no OpenAI provider: the old key creates one,
+        // and that provider also gets the old organization (clean-ups 2 and 3 in one run).
+        self::seed();
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::VERSION_OPTION ] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']              = 'openai';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']               = 'sk-OLDKEY000000000000000000000001';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_openai_org']            = 'org-WITHKEY';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']  = [];
+        PressHub_Settings_Cleanup::run();
+        $made = array_values( array_filter( (array) $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'], static function ( $r ) {
+            return 'openai' === ( $r['type'] ?? '' );
+        } ) );
+        if ( 1 !== count( $made ) || 'sk-OLDKEY000000000000000000000001' !== ( $made[0]['api_key'] ?? '' ) || 'org-WITHKEY' !== ( $made[0]['headers']['OpenAI-Organization'] ?? null ) ) {
+            $failures[] = 'A provider created from the old key should also get the old organization; got ' . json_encode( array_map( static function ( $r ) {
+                return [ 'type' => $r['type'] ?? '', 'key' => '' !== (string) ( $r['api_key'] ?? '' ), 'headers' => $r['headers'] ?? null ];
+            }, $made ) );
+        }
+        // A set prefix (even empty) and a filled Morning pool are never overwritten.
+        self::seed();
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::VERSION_OPTION ] = 2;
+        $GLOBALS['OPTIONS_STORE'] += [
+            'presshub_ai_briefing_morning_podcast_title_prefix' => 'Old - ',
+            'presshub_ai_briefing_podcast_title_prefix'         => '',
+            'presshub_ai_briefing_featured_image_ids'           => '5,6',
+            'presshub_ai_briefing_featured_image_ids_morning'   => '9',
+        ];
+        $report = PressHub_Settings_Cleanup::run();
+        if ( '' !== ( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_title_prefix'] ?? null ) || '9' !== ( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_featured_image_ids_morning'] ?? null ) ) {
+            $failures[] = 'A prefix set on purpose (even empty) and a filled Morning pool are kept.';
+        }
+        if ( isset( $report['copied']['presshub_ai_briefing_morning_podcast_title_prefix'] ) || isset( $report['copied']['presshub_ai_briefing_featured_image_ids'] ) ) {
+            $failures[] = 'Values that were not copied are not reported as copied.';
+        }
+        // Reading a removed E1 option is flagged with its release.
+        $GLOBALS['DOING_IT_WRONG'] = [];
+        PressHub_Settings_Cleanup::reset_warnings();
+        get_option( 'presshub_ai_provider' );
+        if ( ! $GLOBALS['DOING_IT_WRONG'] || false === strpos( (string) $GLOBALS['DOING_IT_WRONG'][0][1] . (string) $GLOBALS['DOING_IT_WRONG'][0][2], '2.71.0' ) ) {
+            $failures[] = 'Reading presshub_ai_provider after clean-up 3 should be flagged with 2.71.0.';
         }
 
         // 13. Uninstall removes the clean-up rows, including the copy.
         $uninstall = (string) file_get_contents( dirname( __DIR__ ) . '/uninstall.php' );
-        foreach ( [ PressHub_Settings_Cleanup::VERSION_OPTION, PressHub_Settings_Cleanup::REPORT_OPTION, PressHub_Settings_Cleanup::EXPORT_OPTION, PressHub_Settings_Cleanup::export_option( 2 ), PressHub_Settings_Cleanup::NOTICE_OPTION, PressHub_Settings_Cleanup::LOCK_OPTION ] as $opt ) {
+        foreach ( [ PressHub_Settings_Cleanup::VERSION_OPTION, PressHub_Settings_Cleanup::REPORT_OPTION, PressHub_Settings_Cleanup::EXPORT_OPTION, PressHub_Settings_Cleanup::export_option( 2 ), PressHub_Settings_Cleanup::export_option( 3 ), PressHub_Settings_Cleanup::NOTICE_OPTION, PressHub_Settings_Cleanup::LOCK_OPTION ] as $opt ) {
             if ( false === strpos( $uninstall, "'" . $opt . "'" ) ) {
                 $failures[] = "uninstall.php should delete {$opt}.";
             }

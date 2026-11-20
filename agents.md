@@ -413,7 +413,8 @@ If a PR introduces a new operational knob without the full six-step registration
 
 1. **Provider Store is the Sole Source of Truth**:
    - Providers, their keys and their default models are managed solely in `PressHub_AI_Provider_Store` (the `presshub_ai_configured_providers` option, edited in Settings → Connections).
-   - Do NOT maintain or check deprecated global options like `presshub_ai_provider`, `presshub_ai_api_key`, `presshub_ai_model_{type}`, or `presshub_ai_model` in business logic.
+   - Do NOT maintain or check deprecated global options like `presshub_ai_provider`, `presshub_ai_api_key`, `presshub_ai_model_{type}`, or `presshub_ai_model` in business logic. Settings clean-up 3 (2.71.0, #309 E1) removed `presshub_ai_provider` and the per-provider `presshub_ai_{model,temperature,max_tokens,timeout}_{openai,anthropic,gemini}` options; only `PressHub_AI_Provider_Store::migrate_legacy_options()` still reads them, once, through `PressHub_Settings_Cleanup::read_removed()`.
+   - Each provider's model, temperature, max tokens, timeout and HTTP headers live on its record. The OpenAI organization (`OpenAI-Organization`) and the Anthropic API version (`anthropic-version`, default `2023-06-01`) are provider headers, edited in the Connections dialog as "Organization ID" and "API version"; the old `presshub_ai_openai_org` and `presshub_ai_anthropic_version` options were copied onto the providers by clean-up 3.
 2. **Direct Module Configuration**:
    - Each module reads its provider from `presshub_ai_{module}_provider` and optional override from `presshub_ai_{module}_model`.
    - If a module has no override, it directly takes `$provider_record['default_model']` from the chosen provider.
@@ -715,10 +716,10 @@ When UI changes are involved, perform visual inspection in the local testing env
 1. **Edition-Aware Pools**:
    - `presshub_ai_briefing_featured_image_ids_morning`: Featured image pool for Morning daily briefing and podcast posts.
    - `presshub_ai_briefing_featured_image_ids_noon`: Featured image pool for Noon updates.
-   - `presshub_ai_briefing_featured_image_ids`: Legacy fallback option for backward compatibility.
+   - The old single pool `presshub_ai_briefing_featured_image_ids` is gone: settings clean-up 3 (#309 E1) copied it into an empty Morning pool.
 2. **Resolution & Fallback Precedence**:
-   - For Noon edition: `presshub_ai_briefing_featured_image_ids_noon` -> `presshub_ai_briefing_featured_image_ids_morning` -> `presshub_ai_briefing_featured_image_ids`.
-   - For Morning edition (or unassigned): `presshub_ai_briefing_featured_image_ids_morning` -> `presshub_ai_briefing_featured_image_ids`.
+   - For Noon edition: `presshub_ai_briefing_featured_image_ids_noon` -> `presshub_ai_briefing_featured_image_ids_morning`.
+   - For Morning edition (or unassigned): `presshub_ai_briefing_featured_image_ids_morning`.
    - Resolution must always be executed via `PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( $edition )` or `PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition )`.
 3. **Interactive Media Library Picker UI**:
    - Media pickers must utilize `wp.media` frames rather than requiring manual numeric ID input.

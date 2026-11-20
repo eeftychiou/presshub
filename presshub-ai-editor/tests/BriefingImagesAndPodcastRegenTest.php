@@ -22,7 +22,8 @@ class BriefingImagesAndPodcastRegenTest {
         // -------------------------------------------------------------
         // 1. Settings Storage: Featured Image Pool & Podcast Include Text
         // -------------------------------------------------------------
-        update_option( 'presshub_ai_briefing_featured_image_ids', '101, 102, 103' );
+        // #309 (E1): the old single pool is gone; the Morning pool is the default.
+        update_option( 'presshub_ai_briefing_featured_image_ids_morning', '101, 102, 103' );
         $ids = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids();
         if ( [ 101, 102, 103 ] !== $ids ) {
             $failures[] = 'get_briefing_featured_image_ids() failed; got: ' . json_encode( $ids );
@@ -39,7 +40,7 @@ class BriefingImagesAndPodcastRegenTest {
         }
 
         // Test empty pool returns 0
-        update_option( 'presshub_ai_briefing_featured_image_ids', '' );
+        update_option( 'presshub_ai_briefing_featured_image_ids_morning', '' );
         if ( 0 !== PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id() ) {
             $failures[] = 'get_random_briefing_featured_image_id() on empty pool must return 0';
         }
@@ -87,15 +88,17 @@ class BriefingImagesAndPodcastRegenTest {
             $failures[] = 'get_random_briefing_featured_image_id("noon") fallback returned unexpected ID: ' . $rand_noon_fallback;
         }
 
-        // Fallback to legacy presshub_ai_briefing_featured_image_ids when morning is also empty
+        // #309 (E1): a left-over row of the old single pool is not read (the
+        // settings clean-up copied it into the Morning pool).
         update_option( 'presshub_ai_briefing_featured_image_ids_morning', '' );
         update_option( 'presshub_ai_briefing_featured_image_ids', '301, 302' );
-        if ( [ 301, 302 ] !== PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'morning' ) ) {
-            $failures[] = 'get_briefing_featured_image_ids("morning") legacy fallback failed';
+        if ( [] !== PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'morning' ) ) {
+            $failures[] = 'get_briefing_featured_image_ids("morning") must not read the old single pool';
         }
-        if ( [ 301, 302 ] !== PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'noon' ) ) {
-            $failures[] = 'get_briefing_featured_image_ids("noon") legacy fallback failed';
+        if ( [] !== PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'noon' ) ) {
+            $failures[] = 'get_briefing_featured_image_ids("noon") must not read the old single pool';
         }
+        delete_option( 'presshub_ai_briefing_featured_image_ids' );
 
         // Test podcast include text default is false (0)
         delete_option( 'presshub_ai_briefing_podcast_include_text' );

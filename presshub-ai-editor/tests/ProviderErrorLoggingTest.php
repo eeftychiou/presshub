@@ -43,10 +43,11 @@ class ProviderErrorLoggingTest
         foreach ( $cases as $provider => $cfg ) {
             foreach ( $modes as $mode ) {
                 $GLOBALS['OPTIONS_STORE'] = [
-                    'presshub_ai_configured_providers' => presshub_test_provider_keys( 'k' ),
-                    'presshub_ai_provider'           => $provider,
+                    // #309 (E1): the active provider is the first in Connections.
+                    'presshub_ai_configured_providers' => 'custom_openai' === $provider
+                        ? presshub_test_provider_keys( 'k' )
+                        : presshub_test_providers( 'k', $provider, [ 'default_model' => $cfg['model'] ] ),
                     'presshub_ai_log_level'          => 'DEBUG',
-                    'presshub_ai_model_' . $provider => $cfg['model'],
                 ];
                 $GLOBALS['CAPTURED_REQUESTS'] = [];
                 $GLOBALS['CAPTURE_FILTER']    = function ( $existing, $req ) use ( $mode ) {

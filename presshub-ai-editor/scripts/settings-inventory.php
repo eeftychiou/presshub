@@ -128,6 +128,12 @@ function presshub_settings_inventory_markdown(): string {
         'legacy_api_key'    => 'Superseded by the per-provider keys in Connections. Read only as a fallback when a provider record had no key; on presshub.cy it was the same key as the main Gemini provider. On upgrade it is copied into a provider of the `presshub_ai_provider` type when none of that type has a key; a different key is kept unread for one release.',
         'legacy_gemini_key' => 'Never registered or shown; read only as a fallback after the Gemini provider record. Same upgrade rule (copied into the Gemini provider when it has no key).',
         'legacy_speech_key' => 'Speech resolves the provider chosen for Speech in AI models first (`resolve_gemini_api_key()`), then any Gemini provider; the separate key was a later fallback. On presshub.cy it was the same key as the "Google Gemini (3.8 Speech)" provider. Same upgrade rule.',
+        // #309 (E1): registered but never shown.
+        'flat_provider'     => 'Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated.',
+        'provider_headers'  => 'Never shown; read as a fallback header when the provider record set none. On upgrade it is copied into the `OpenAI-Organization` / `anthropic-version` header of every provider of that type that sets none.',
+        'morning_prefix'    => 'Never shown; read only when `presshub_ai_briefing_podcast_title_prefix` was not set. On upgrade it is copied there in that case.',
+        'morning_pool'      => 'Never shown; read only while the Morning pool was empty. On upgrade it is copied into an empty Morning pool.',
+        'social_switches'   => 'Never shown; kept in step with `presshub_social_enabled_platforms`, which they could override. On upgrade they are folded into the list (on adds the platform, off removes it).',
     ];
     $md .= sprintf( "\n## Removed in %s (#237)\n\n", implode( ' and ', PressHub_Settings_Cleanup::RELEASES ) );
     $md .= "Deleted on the first admin request after the upgrade, after a copy of all settings (no secrets) was saved; the report is on PressHub → Usage & logs. Reading one fires `_doing_it_wrong()` for one release.\n\n";
