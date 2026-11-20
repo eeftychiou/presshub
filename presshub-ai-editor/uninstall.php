@@ -263,9 +263,10 @@ $presshub_ai_uninstall_site = static function () use ( $presshub_ai_options ): v
         }
     }
     // Transients with a per-user or per-request suffix (settings import,
-    // no-JS save result, YouTube OAuth state, TTS pacing).
+    // no-JS save result, YouTube OAuth state, TTS pacing), and the audio run
+    // locks of each date and edition (2.74.0).
     if ( isset( $wpdb ) && is_object( $wpdb ) && ! empty( $wpdb->options ) && method_exists( $wpdb, 'esc_like' ) ) {
-        foreach ( [ '_transient_presshub_', '_transient_timeout_presshub_' ] as $presshub_ai_prefix ) {
+        foreach ( [ '_transient_presshub_', '_transient_timeout_presshub_', 'presshub_ai_audio_run_lock_' ] as $presshub_ai_prefix ) {
             $wpdb->query( $wpdb->prepare(
                 "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
                 $wpdb->esc_like( $presshub_ai_prefix ) . '%'
