@@ -206,6 +206,10 @@ class PressHub_AI_Social_Trending {
         if ( ! $force && ( $now - (int) $state['last_run'] ) < $interval ) {
             return null;
         }
+        // Quiet hours: no scheduled run overnight ("Refresh now" still works).
+        if ( ! $force && self::in_quiet_hours( $now ) ) {
+            return null;
+        }
         $worker = self::worker_platforms();
         $ig     = self::instagram_ready();
         if ( empty( $worker ) && ! $ig ) {
@@ -698,6 +702,21 @@ class PressHub_AI_Social_Trending {
         $h = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_trending_share_after_hour() : 8;
         $h = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_social_trending_share_after_hour', $h ) : $h;
         return max( 0, min( 23, $h ) );
+    }
+
+    /**
+     * Is $now inside the roundup's quiet hours (site time zone)? The window runs
+     * from the "from" hour up to, not including, the "until" hour and may wrap
+     * past midnight (22 → 6). Equal hours mean no quiet hours.
+     */
+    public static function in_quiet_hours( int $now ): bool {
+        $from  = PressHub_AI_Settings_Storage::get_trending_quiet_from_hour();
+        $until = PressHub_AI_Settings_Storage::get_trending_quiet_until_hour();
+        if ( $from === $until ) {
+            return false;
+        }
+        $hour = (int) ( function_exists( 'wp_date' ) ? wp_date( 'G', $now ) : gmdate( 'G', $now ) );
+        return $from < $until ? ( $hour >= $from && $hour < $until ) : ( $hour >= $from || $hour < $until );
     }
 
     /**

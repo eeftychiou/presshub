@@ -3372,6 +3372,8 @@ class PressHub_AI_Settings_Render {
         $brief_n   = $S::get_social_trending_briefing_count();
         $per_acct  = $S::get_trending_max_per_account();
         $after_h   = $S::get_trending_share_after_hour();
+        $quiet_from  = $S::get_trending_quiet_from_hour();
+        $quiet_until = $S::get_trending_quiet_until_hour();
 
         $state    = class_exists( 'PressHub_AI_Social_Trending' ) ? PressHub_AI_Social_Trending::get_state() : [];
         $fmt      = static function ( $ts ) {
@@ -3473,6 +3475,14 @@ class PressHub_AI_Settings_Render {
             <td>
                 <input type="number" min="0" max="23" name="presshub_ai_social_trending_share_after_hour" id="presshub_ai_social_trending_share_after_hour" value="<?php echo self::esc_attr_safe( (string) $after_h ); ?>" class="small-text" />
                 <p class="description"><?php echo esc_html__( 'A roundup made before this local hour is scheduled for that hour, so its social posts go out when people read. 0 publishes at once. Default: 8.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_quiet_from_hour"><?php echo esc_html__( 'Quiet hours (no roundup runs)', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <?php echo esc_html__( 'From', 'presshub-ai-editor' ); ?> <input type="number" min="0" max="23" name="presshub_ai_social_trending_quiet_from_hour" id="presshub_ai_social_trending_quiet_from_hour" value="<?php echo self::esc_attr_safe( (string) $quiet_from ); ?>" class="small-text" />
+                <label for="presshub_ai_social_trending_quiet_until_hour"><?php echo esc_html__( 'until', 'presshub-ai-editor' ); ?></label> <input type="number" min="0" max="23" name="presshub_ai_social_trending_quiet_until_hour" id="presshub_ai_social_trending_quiet_until_hour" value="<?php echo self::esc_attr_safe( (string) $quiet_until ); ?>" class="small-text" />
+                <p class="description"><?php echo esc_html__( 'Local hours in which no scheduled roundup runs, so the worker does not read X, TikTok and Facebook overnight. The first run after the window happens at the "until" hour. "Refresh now" still works. The same hour twice turns quiet hours off. Default: 0 until 6.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>

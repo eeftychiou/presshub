@@ -16,9 +16,9 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Daily Briefing (`daily-briefing`) | 81 | 0 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 70 | 0 | 0 |
-| Social listening (`social-listening`) | 33 | 0 | 0 |
+| Social listening (`social-listening`) | 35 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **305** | | |
+| **Total** | **307** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 34 option(s); both lists are at the end.
 
@@ -309,7 +309,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_prompt_youtube` | YouTube Caption Prompt | string |  | social / prompts |  |
 | `presshub_social_template_youtube` | YouTube Static Fallback Template | string |  | social / prompts |  |
 
-## Social listening (`social-listening`, 33)
+## Social listening (`social-listening`, 35)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -346,6 +346,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_social_trending_briefing_count` | Trending posts given to the briefing | integer | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
 | `presshub_ai_social_trending_max_per_account` | Trending posts per account | integer | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 | `presshub_ai_social_trending_share_after_hour` | Publish trending roundups from (hour) | integer | hour | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
+| `presshub_ai_social_trending_quiet_from_hour` | Quiet hours: from (hour) | integer | hour | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
+| `presshub_ai_social_trending_quiet_until_hour` | Quiet hours: until (hour) | integer | hour | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 
 ## Site & system (`site-system`, 15)
 
