@@ -13,6 +13,9 @@ import { challengeBackoffUntil, clearChallenge, isChallengeError, recordChalleng
 import { parseTikTokItemList, parseXGraphql, PostMetrics, ScannedPost } from '../monitor/parsers';
 import { resolveReaderSession } from '../monitor/scanner';
 import { parseFacebookStories, splitFacebookPayload } from './facebook-parser';
+import { warmUp, warmUpUrl } from '../automation/warm-up';
+
+export { warmUpUrl };
 
 export type TrendingPlatform = 'x' | 'tiktok' | 'facebook';
 
@@ -129,35 +132,6 @@ export function trimTrending(posts: TrendingPost[], maxAgeHours: number, limit: 
   return out;
 }
 
-/**
- * Page opened first on a platform before its search / hashtag pages, the way
- * a person starts on the home feed. Nothing is read from it. TikTok only.
- */
-export function warmUpUrl(platform: TrendingPlatform): string | undefined {
-  return platform === 'tiktok' ? 'https://www.tiktok.com/' : undefined;
-}
-
-/** Open the platform's home page, look around briefly, close it. A challenge there stops the platform. */
-async function warmUp(conn: ChromeConnection, platform: TrendingPlatform): Promise<void> {
-  const url = warmUpUrl(platform);
-  if (!url) return;
-  const page = await conn.context.newPage();
-  try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await sleep(jitter(4000, 8000));
-    const body = (await page.textContent('body').catch(() => '')) || '';
-    if (/verify to continue|drag the slider|captcha/i.test(body)) {
-      throw new Error(`${platform} showed a verification challenge`);
-    }
-    for (let i = 0; i < 2; i++) {
-      await page.mouse.wheel(0, jitter(900, 1800)).catch(() => {});
-      await sleep(jitter(2500, 5000));
-    }
-  } finally {
-    await page.close().catch(() => {});
-  }
-}
-
 async function scanTrendingPage(conn: ChromeConnection, target: TrendingTarget): Promise<TrendingPost[]> {
   const page = await conn.context.newPage();
   const found = new Map<string, TrendingPost>();
@@ -236,10 +210,8 @@ export const browserTrendingScan: TrendingScanFn = async (plan: TrendingPlan) =>
             skipCdp: true,
             storageState: resolveReaderSession(target.platform)
           });
-          if (warmUpUrl(target.platform)) {
-            await warmUp(connections[target.platform] as ChromeConnection, target.platform);
+          if (await warmUp(connections[target.platform] as ChromeConnection, target.platform)) {
             WorkerLogger.info('Trending', `${target.platform} home page opened before the searches.`);
-            await sleep(jitter(3000, 7000));
           }
         }
         const got = await scanTrendingPage(connections[target.platform] as ChromeConnection, target);
