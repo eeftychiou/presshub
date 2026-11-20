@@ -50,9 +50,11 @@
  * article post (fallback_to_classic()) instead of failing, so the article is still posted.
  * A new podcast never cancels article shorts.
  *
- * The same shorts go to Instagram Reels and YouTube Shorts (`PLATFORMS`). A YouTube short
- * is uploaded by the worker with the YouTube Data API; a failed YouTube article short fails
- * instead of falling back to a normal post, since YouTube takes only videos.
+ * The same shorts go to Instagram Reels, Facebook Reels and YouTube Shorts (`PLATFORMS`). A
+ * YouTube short is uploaded by the worker with the YouTube Data API; a Facebook short is
+ * posted by the worker's browser session as a video, which Facebook makes a Reel. Facebook
+ * and YouTube shorts are extra posts (`EXTRA_PLATFORMS`): Facebook keeps its usual link
+ * post, so a failed short there fails instead of falling back to a normal post.
  *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
@@ -229,6 +231,8 @@ class PressHub_Social_TikTok_Shorts {
     public static function should_split( int $post_id, string $engine, string $platform = 'tiktok' ): bool {
         if ( 'instagram' === $platform ) {
             $enabled = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
+        } elseif ( 'facebook' === $platform ) {
+            $enabled = PressHub_Social_Settings_Storage::get_facebook_shorts_enabled();
         } elseif ( 'youtube' === $platform ) {
             $enabled = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
         } else {
@@ -297,7 +301,7 @@ class PressHub_Social_TikTok_Shorts {
         if ( ! $on || $post_id <= 0 ) {
             return [];
         }
-        $label     = 'instagram' === $platform ? 'Instagram Reel' : self::platform_label( $platform );
+        $label     = in_array( $platform, [ 'instagram', 'facebook' ], true ) ? self::platform_label( $platform ) . ' Reel' : self::platform_label( $platform );
         $cancelled = [];
         foreach ( PressHub_Social_Queue::query_jobs( [ 'status' => 'pending', 'platform' => $platform, 'limit' => 100 ] ) as $job ) {
             $job_post = (int) ( $job['post_id'] ?? 0 );
@@ -417,12 +421,24 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /** Platforms that get the shorts. */
-    public const PLATFORMS = [ 'tiktok', 'instagram', 'youtube' ];
+    public const PLATFORMS = [ 'tiktok', 'instagram', 'facebook', 'youtube' ];
+
+    /**
+     * Platforms whose short is posted in addition to the usual post instead of replacing
+     * it: YouTube takes only videos, and Facebook keeps its link post next to the Reel. A
+     * failed short there fails; it never falls back to a classic post.
+     */
+    public const EXTRA_PLATFORMS = [ 'facebook', 'youtube' ];
 
     /** Name of a shorts platform for log lines. */
     public static function platform_label( string $platform ): string {
-        $labels = [ 'tiktok' => 'TikTok', 'instagram' => 'Instagram', 'youtube' => 'YouTube' ];
+        $labels = [ 'tiktok' => 'TikTok', 'instagram' => 'Instagram', 'facebook' => 'Facebook', 'youtube' => 'YouTube' ];
         return $labels[ $platform ] ?? ucfirst( $platform );
+    }
+
+    /** Whether a failed article short of this job may become the platform's classic post. */
+    public static function has_classic_fallback( array $job ): bool {
+        return ! in_array( (string) ( $job['platform'] ?? '' ), self::EXTRA_PLATFORMS, true );
     }
 
     public static function is_short_job( array $job ): bool {
@@ -719,8 +735,9 @@ class PressHub_Social_TikTok_Shorts {
             foreach ( $failures as [ $job, $error ] ) {
                 $job_id = (int) ( $job['id'] ?? 0 );
                 // An article is still posted, the classic way, when its short cannot be made.
-                // YouTube has no classic post: only videos go there, so its short fails.
-                if ( self::is_article_job( $job ) && ! self::is_test_job( $job ) && 'youtube' !== ( $job['platform'] ?? '' ) && self::fallback_to_classic( $job, $error, $attempts ) ) {
+                // YouTube has no classic post (only videos go there) and Facebook already
+                // has its link post, so their short fails.
+                if ( self::is_article_job( $job ) && ! self::is_test_job( $job ) && self::has_classic_fallback( $job ) && self::fallback_to_classic( $job, $error, $attempts ) ) {
                     continue;
                 }
                 $err    = self::fail( $job_id, $error );
@@ -817,7 +834,7 @@ class PressHub_Social_TikTok_Shorts {
      * in which case the job is pending again with fresh attempts for the classic post.
      */
     public static function fallback_after_render_failure( array $job, string $error ): bool {
-        if ( ! self::is_article_job( $job ) || self::is_test_job( $job ) || 'youtube' === ( $job['platform'] ?? '' ) ) {
+        if ( ! self::is_article_job( $job ) || self::is_test_job( $job ) || ! self::has_classic_fallback( $job ) ) {
             return false;
         }
         $attempts     = (int) ( $job['attempts'] ?? 0 );

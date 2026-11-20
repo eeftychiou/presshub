@@ -473,7 +473,7 @@ export class PressHubPoller {
             copy.toLowerCase().includes('podcast')
           );
 
-          if ((platform === 'tiktok' || platform === 'instagram' || platform === 'youtube') && job.tiktok_short) {
+          if ((platform === 'tiktok' || platform === 'instagram' || platform === 'youtube' || platform === 'facebook') && job.tiktok_short) {
             // A short is rendered with synced captions over its own story images. It
             // never falls back to the podcast's featured image.
             const short = job.tiktok_short;
@@ -701,6 +701,11 @@ export class PressHubPoller {
             for (const file of downloadedImages) {
               try { fs.unlinkSync(file); } catch {}
             }
+            // A rendered short is made for this one post: remove it once posted (or failed),
+            // as the YouTube upload does, so each platform's copy does not pile up in output/.
+            if (job.tiktok_short && mediaPath) {
+              try { fs.unlinkSync(mediaPath); } catch {}
+            }
           }
 
           if (result && result.success) {
@@ -848,6 +853,7 @@ export class PressHubPoller {
 export function platformLabel(platform: string): string {
   if (platform === 'instagram') return 'Instagram Reel';
   if (platform === 'youtube') return 'YouTube';
+  if (platform === 'facebook') return 'Facebook Reel';
   return 'TikTok';
 }
 

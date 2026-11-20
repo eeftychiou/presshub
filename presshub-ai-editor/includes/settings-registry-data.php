@@ -3838,6 +3838,20 @@ escort
     'status' => 'active',
     'default' => false,
   ],
+  'presshub_social_facebook_shorts_enabled' => [
+    'page' => 'social',
+    'tab' => 'shorts',
+    'group' => 'where',
+    'section' => 'presshub_social_media_specs_sec',
+    'label' => 'Facebook Reels (Shorts)',
+    'help' => 'Posts the same short videos to the Facebook Page as Reels, after the usual Facebook link post, which is still made. Default: off.',
+    'checkbox' => true,
+    'secret' => false,
+    'type' => 'boolean',
+    'rendered' => true,
+    'status' => 'active',
+    'default' => false,
+  ],
   'presshub_social_youtube_shorts_enabled' => [
     'page' => 'social',
     'tab' => 'shorts',
@@ -3969,7 +3983,7 @@ escort
     'rendered' => true,
     'status' => 'active',
     'default' => true,
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_count' => [
     'page' => 'social',
@@ -3985,7 +3999,7 @@ escort
     'status' => 'active',
     'default' => 3,
     'unit' => 'shorts',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_spacing_minutes' => [
     'page' => 'social',
@@ -4004,7 +4018,7 @@ escort
     'aliases' => [
       0 => 'Time Between Shorts',
     ],
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_max_words' => [
     'page' => 'social',
@@ -4020,7 +4034,7 @@ escort
     'status' => 'active',
     'default' => 130,
     'unit' => 'words',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_images' => [
     'page' => 'social',
@@ -4036,7 +4050,7 @@ escort
     'status' => 'active',
     'default' => 3,
     'unit' => 'images',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_caption_words' => [
     'page' => 'social',
@@ -4052,7 +4066,7 @@ escort
     'status' => 'active',
     'default' => 120,
     'unit' => 'words',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_narrators' => [
     'page' => 'social',
@@ -4068,7 +4082,7 @@ escort
     'status' => 'active',
     'default' => 1,
     'unit' => 'narrators',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_voice_1' => [
     'page' => 'social',
@@ -4083,7 +4097,7 @@ escort
     'rendered' => true,
     'status' => 'active',
     'default' => 'Puck',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_voice_2' => [
     'page' => 'social',
@@ -4098,7 +4112,7 @@ escort
     'rendered' => true,
     'status' => 'active',
     'default' => '',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_voice_speed' => [
     'page' => 'social',
@@ -4117,7 +4131,7 @@ escort
     'aliases' => [
       0 => 'Short Voice Speed',
     ],
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_music_enabled' => [
     'page' => 'social',

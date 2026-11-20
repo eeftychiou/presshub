@@ -30,6 +30,8 @@ export interface PostOptions {
   headless?: boolean;
   /** TikTok: switch on "AI-generated content" (AI voice and images), as TikTok requires. */
   aiGenerated?: boolean;
+  /** Facebook: most milliseconds to wait for a video upload (default FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS). */
+  videoUploadTimeoutMs?: number;
 }
 
 export interface PostResult {
@@ -1717,8 +1719,8 @@ export interface FacebookPermalink {
   id: string;
 }
 
-/** Hrefs that are a post's own page: /posts/<id>, permalink.php?story_fbid=, /permalink/, a photo or video. */
-const FACEBOOK_PERMALINK_RE = /\/posts\/[A-Za-z0-9]+|[?&]story_fbid=[A-Za-z0-9]+|\/permalink\/[0-9]+|\/(?:photos|videos)\/[^?#]*[0-9]{6,}|\/(?:photo|watch)\/?\?[^#]*\b(?:fbid|v)=[0-9]+/;
+/** Hrefs that are a post's own page: /posts/<id>, permalink.php?story_fbid=, /permalink/, a photo, video or Reel. */
+const FACEBOOK_PERMALINK_RE = /\/posts\/[A-Za-z0-9]+|[?&]story_fbid=[A-Za-z0-9]+|\/permalink\/[0-9]+|\/(?:photos|videos)\/[^?#]*[0-9]{6,}|\/reel\/[0-9]{6,}|\/(?:photo|watch)\/?\?[^#]*\b(?:fbid|v)=[0-9]+/;
 
 /**
  * Clean a Facebook post href into an absolute permalink and its id, or null when it is not one.
@@ -1798,6 +1800,52 @@ export async function resolveFacebookPermalink(
   return null;
 }
 
+/** Most time a Facebook video upload may take before the post fails (5 minutes). */
+export const FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** Whether a file is a video Facebook takes (a rendered short is an .mp4). */
+export function isFacebookVideoFile(file: string): boolean {
+  return /\.(mp4|mov|m4v|webm)$/i.test(file || '');
+}
+
+/** The composer's enabled Post (or Share now / Share) button, preferring the dialog's, or null. */
+async function facebookPostButton(page: Page): Promise<Locator | null> {
+  const selectors = [
+    'div[role="dialog"] div[aria-label="Post"][role="button"], div[role="dialog"] div[aria-label="Post"]',
+    'div[role="dialog"] div[aria-label="Share now"][role="button"], div[role="dialog"] div[aria-label="Share"][role="button"]',
+    'div[aria-label="Post"][role="button"]'
+  ];
+  for (const selector of selectors) {
+    const button = page.locator(selector).first();
+    if ((await button.count()) > 0) return button;
+  }
+  return null;
+}
+
+/**
+ * Waits until the video attached in the composer is uploaded: the dialog shows no progress
+ * bar and its Post, Next or Share button is no longer disabled. Throws when that takes
+ * longer than timeoutMs, so a half-uploaded video is never posted.
+ */
+export async function waitForFacebookVideoReady(page: Page, timeoutMs: number, pollMs: number = 2000): Promise<void> {
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  for (;;) {
+    const ready = await page.evaluate(() => {
+      const doc = (globalThis as any).document;
+      const root = doc.querySelector('div[role="dialog"]') || doc.body;
+      if (root.querySelector('[role="progressbar"]')) return false;
+      const labels = ['Post', 'Next', 'Share now', 'Share'];
+      const buttons: any[] = Array.from(root.querySelectorAll('[aria-label]')).filter((el: any) => labels.includes(el.getAttribute('aria-label') || ''));
+      return buttons.some((el: any) => el.getAttribute('aria-disabled') !== 'true');
+    }).catch(() => false);
+    if (ready) return;
+    if (Date.now() >= deadline) {
+      throw new Error(`Facebook did not finish uploading the video within ${Math.round(timeoutMs / 1000)}s.`);
+    }
+    await page.waitForTimeout(pollMs);
+  }
+}
+
 export async function postFacebook(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('facebook', options.sessionsDir);
   const timeout = options.timeoutMs || 30000;
@@ -1843,27 +1891,49 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
     await postBox.click();
     await postBox.fill(options.copy);
 
-    const facebookMedia = postMediaFiles(options, 4);
+    // A video (a short) is posted on its own: Facebook makes it a Reel.
+    const allMedia = postMediaFiles(options, 4);
+    const isVideo = allMedia.some(isFacebookVideoFile);
+    const facebookMedia = isVideo ? allMedia.filter(isFacebookVideoFile).slice(0, 1) : allMedia;
     if (facebookMedia.length > 0) {
       const mediaSize = facebookMedia.reduce((sum, f) => sum + fs.statSync(f).size, 0);
       WorkerLogger.info('Facebook Automation', `Uploading ${facebookMedia.length} media attachment(s): ${facebookMedia.join(', ')} (${mediaSize} bytes)...`);
       const fileInput = page.locator('input[type="file"][accept*="image"], input[type="file"]').first();
+      if (isVideo && (await fileInput.count()) === 0) {
+        throw new Error('Facebook composer has no file input, so the video could not be attached.');
+      }
       if ((await fileInput.count()) > 0) {
         await fileInput.setInputFiles(facebookMedia.length === 1 ? facebookMedia[0] : facebookMedia);
-        await page.waitForTimeout(2000 + (facebookMedia.length - 1) * 1500);
+        if (isVideo) {
+          // A video takes far longer than a photo: Post stays disabled until it is uploaded.
+          WorkerLogger.info('Facebook Automation', 'Waiting for the video to finish uploading...');
+          await page.waitForTimeout(3000);
+          await waitForFacebookVideoReady(page, options.videoUploadTimeoutMs ?? FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS);
+        } else {
+          await page.waitForTimeout(2000 + (facebookMedia.length - 1) * 1500);
+        }
       }
     }
 
     WorkerLogger.info('Facebook Automation', 'Clicking Post button...');
-    const modalPostBtn = page.locator('div[role="dialog"] div[aria-label="Post"][role="button"], div[role="dialog"] div[aria-label="Post"]').first();
-    const postButton = (await modalPostBtn.count()) > 0
-      ? modalPostBtn
-      : page.locator('div[aria-label="Post"][role="button"]').first();
-    if ((await postButton.count()) === 0) {
+    let postButton = await facebookPostButton(page);
+    if (!postButton && isVideo) {
+      // A video may open Facebook's Reel steps: Next, then Post (or Share now).
+      const next = page.locator('div[role="dialog"] div[aria-label="Next"][role="button"], div[role="dialog"] div[aria-label="Next"]').first();
+      if ((await next.count()) > 0) {
+        WorkerLogger.info('Facebook Automation', 'Clicking Next (video composer)...');
+        await next.click();
+        await page.waitForTimeout(1500);
+        await waitForFacebookVideoReady(page, options.videoUploadTimeoutMs ?? FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS);
+        postButton = await facebookPostButton(page);
+      }
+    }
+    if (!postButton) {
       throw new Error('Facebook composer "Post" button not found (the composer may have closed or changed).');
     }
     await postButton.click();
-    await page.waitForTimeout(3000);
+    // A video post is still being published for a few seconds after the click.
+    await page.waitForTimeout(isVideo ? 10000 : 3000);
 
     // Facebook's composer does not show the new post's link, so find it on the profile or
     // Page the session posts as (never a made-up URL: WordPress shows it as the post's link).

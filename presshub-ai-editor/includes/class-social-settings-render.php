@@ -378,8 +378,9 @@ class PressHub_Social_Settings_Render {
         // they are not a switch of their own here (#234 review).
         $tiktok    = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
         $instagram = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
+        $facebook  = PressHub_Social_Settings_Storage::get_facebook_shorts_enabled();
         $youtube   = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() || PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
-        if ( ! $tiktok && ! $instagram && ! $youtube ) {
+        if ( ! $tiktok && ! $instagram && ! $facebook && ! $youtube ) {
             return [];
         }
         $issues = [];
@@ -402,6 +403,13 @@ class PressHub_Social_Settings_Render {
                 'text' => __( 'Instagram Reels need the automation engine, but Instagram uses another engine.', 'presshub-social-autopost' ),
                 'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_instagram' ),
                 'link' => __( 'Change Instagram engine', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $facebook && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'facebook' ) ) {
+            $issues[] = [
+                'text' => __( 'Facebook Reels need the automation engine, but Facebook uses another engine.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_facebook' ),
+                'link' => __( 'Change Facebook engine', 'presshub-social-autopost' ),
             ];
         }
         if ( $youtube && class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason() ) {
@@ -437,7 +445,7 @@ class PressHub_Social_Settings_Render {
             <h3 class="ph-margin-0_8em-0-0_4em">
                 <?php
                 /* translators: %d: number of things to fix */
-                $only_episodes = ! PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_instagram_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+                $only_episodes = ! PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_instagram_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_facebook_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
                 echo esc_html( $only_episodes
                     /* translators: %d: number of things to fix */
                     ? sprintf( _n( 'YouTube podcast episodes can\'t be uploaded yet. %d thing to fix:', 'YouTube podcast episodes can\'t be uploaded yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) )
@@ -460,6 +468,7 @@ class PressHub_Social_Settings_Render {
         $rows  = [
             'TikTok'          => 'tiktok',
             'Instagram Reels' => 'instagram',
+            'Facebook Reels'  => 'facebook',
         ];
         echo '<ul class="ph-margin-0-0-8px presshub-shorts-ready-list">';
         foreach ( $rows as $label => $platform ) {
@@ -653,6 +662,17 @@ class PressHub_Social_Settings_Render {
         <label>
             <input type="checkbox" name="presshub_social_instagram_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
             <?php echo esc_html__( 'Also post each short (podcast shorts, and article shorts when Article Shorts are on) as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_facebook_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_facebook_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_facebook_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_facebook_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Also post each short (podcast stories and, with Article Shorts on, articles) to the Facebook Page as a Reel, with the short\'s own caption. The usual Facebook link post to the article is still made; each Reel follows it by the time between shorts. Needs Facebook enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }

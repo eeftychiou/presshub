@@ -529,6 +529,8 @@ __( 'TikTok Shorts', 'presshub-ai-editor' );
 __( 'Turns each podcast into short narrated videos for TikTok (and each article into one, when Article Shorts are on). Default: off.', 'presshub-ai-editor' );
 __( 'Instagram Reels (Shorts)', 'presshub-ai-editor' );
 __( 'Posts the same short videos to Instagram as Reels. Default: off.', 'presshub-ai-editor' );
+__( 'Facebook Reels (Shorts)', 'presshub-ai-editor' );
+__( 'Posts the same short videos to the Facebook Page as Reels, after the usual Facebook link post, which is still made. Default: off.', 'presshub-ai-editor' );
 __( 'YouTube Shorts', 'presshub-ai-editor' );
 __( 'Uploads the same short videos to YouTube, where every vertical video of three minutes or less is a Short. Needs a connected YouTube channel. Default: off.', 'presshub-ai-editor' );
 __( 'YouTube Podcast Episodes', 'presshub-ai-editor' );
