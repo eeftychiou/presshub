@@ -130,7 +130,10 @@ class PressHub_AI_Memory_Digest_Builder {
      */
     public static function without_related_list( string $html ): string {
         $class = class_exists( 'PressHub_AI_Briefing_SEO' ) ? PressHub_AI_Briefing_SEO::RELATED_CLASS : 'presshub-briefing-related';
-        $out   = preg_replace( '#<(h2|ul)\b[^>]*\bclass="[^"]*\b' . preg_quote( $class, '#' ) . '\b[^"]*"[^>]*>.*?</\1>#is', '', $html );
+        // The whitespace in front goes too: add_internal_links() puts the list
+        // before the sources as "\n" . list . "\n", or at the end as "\n" . list,
+        // so removing it with its leading newline gives back the text exactly.
+        $out   = preg_replace( '#\s*<(h2|ul)\b[^>]*\bclass="[^"]*\b' . preg_quote( $class, '#' ) . '\b[^"]*"[^>]*>.*?</\1>#is', '', $html );
         return is_string( $out ) ? trim( $out ) : $html;
     }
 

@@ -809,12 +809,23 @@ foreach ( [ 'class-memory-rollup-builder.php', 'class-stakeholders.php' ] as $md
 // The "Διαβάστε επίσης" list added after the post is created does not build the digest again.
 $rel_html = "<p>Κείμενο.</p>\n<h2 class=\"presshub-briefing-related\">Διαβάστε επίσης</h2><ul class=\"presshub-briefing-related\"><li><a href=\"https://x.test/1\">Παλιό άρθρο</a></li></ul>";
 mdb_check( 'related list: left out of the digest source', '<p>Κείμενο.</p>' === PressHub_AI_Memory_Digest_Builder::without_related_list( $rel_html ) );
-mdb_check( 'related list: other headings stay', false !== strpos( PressHub_AI_Memory_Digest_Builder::without_related_list( '<h2 class="presshub-briefing-sources">Πηγές</h2><ul><li>a</li></ul>' ), 'Πηγές' ) );
+// The real markup, inserted the way PressHub_AI_Briefing_SEO::add_internal_links() does it:
+// before the "Πηγές" list ("\n" . list . "\n"), or at the end ("\n" . list).
+if ( ! class_exists( 'PressHub_AI_Briefing_SEO' ) ) {
+    require_once dirname( __DIR__ ) . '/includes/class-briefing-seo.php';
+}
+$src_list = PressHub_AI_Briefing_SEO::sources_section( [ [ 'url' => 'https://a.test/1', 'title' => 'Άρθρο', 'source' => 'philenews' ] ], [] );
+$rel_list = PressHub_AI_Briefing_SEO::related_section( [ [ 'url' => 'https://x.test/2', 'title' => 'Πρωινή Ενημέρωση' ] ] );
+$rel_body = '<h2>Ενέργεια</h2><p>Κείμενο.</p>';
+$with_src = $rel_body . "\n" . $src_list;
+mdb_check( 'related list: before the sources list, the text comes back exactly', $with_src === PressHub_AI_Memory_Digest_Builder::without_related_list( $rel_body . "\n" . $rel_list . "\n" . $src_list ) );
+mdb_check( 'related list: at the end, the text comes back exactly', $rel_body === PressHub_AI_Memory_Digest_Builder::without_related_list( $rel_body . "\n" . $rel_list ) );
+mdb_check( 'related list: the sources list stays', '' !== $src_list && $with_src === PressHub_AI_Memory_Digest_Builder::without_related_list( $with_src ) );
 $post_id_rel = 777;
 $GLOBALS['POSTS_STORE'][ $post_id_rel ] = (object) [
     'ID'           => $post_id_rel,
     'post_title'   => 'Μεσημβρινή Ενημέρωση 9 Νοεμβρίου 2026',
-    'post_content' => "<h2>Ενέργεια</h2><p>Νέα συμφωνία για τις τιμές ενέργειας.</p>",
+    'post_content' => "<h2>Ενέργεια</h2><p>Νέα συμφωνία για τις τιμές ενέργειας.</p>\n" . $src_list,
     'post_status'  => 'publish',
     'post_date'    => '2026-11-09 13:00:00',
 ];
@@ -825,12 +836,15 @@ $GLOBALS['POST_META_STORE'][ $post_id_rel ] = [
 ];
 $rel_first = new MockMemoryAPIClient( [ $valid_json_response ] );
 $rel_res1  = PressHub_AI_Memory_Digest_Builder::build_for_post( $post_id_rel, $rel_first );
-$GLOBALS['POSTS_STORE'][ $post_id_rel ]->post_content .= "\n<h2 class=\"presshub-briefing-related\">Διαβάστε επίσης</h2><ul class=\"presshub-briefing-related\"><li><a href=\"https://x.test/2\">Πρωινή Ενημέρωση</a></li></ul>";
+// As add_internal_links() does it: the list goes in front of the "Πηγές" list.
+$rel_content = $GLOBALS['POSTS_STORE'][ $post_id_rel ]->post_content;
+$rel_pos     = strpos( $rel_content, '<h2 class="presshub-briefing-sources"' );
+$GLOBALS['POSTS_STORE'][ $post_id_rel ]->post_content = substr( $rel_content, 0, $rel_pos ) . $rel_list . "\n" . substr( $rel_content, $rel_pos );
 $rel_second = new MockMemoryAPIClient( [ $valid_json_response ] );
 $rel_res2   = PressHub_AI_Memory_Digest_Builder::build_for_post( $post_id_rel, $rel_second );
 mdb_check( 'related list: first build calls the AI', is_array( $rel_res1 ) && 1 === count( $rel_first->call_log ) );
 mdb_check( 'related list: adding the list is "already built", no second AI call', is_array( $rel_res2 ) && 'already_built' === ( $rel_res2['reason'] ?? '' ) && 0 === count( $rel_second->call_log ) );
-$GLOBALS['POSTS_STORE'][ $post_id_rel ]->post_content .= "\n<p>Νέα παράγραφος με εξέλιξη.</p>";
+$GLOBALS['POSTS_STORE'][ $post_id_rel ]->post_content = "<p>Νέα παράγραφος με εξέλιξη.</p>\n" . $GLOBALS['POSTS_STORE'][ $post_id_rel ]->post_content;
 $rel_third = new MockMemoryAPIClient( [ $valid_json_response ] );
 PressHub_AI_Memory_Digest_Builder::build_for_post( $post_id_rel, $rel_third );
 mdb_check( 'related list: a real change to the briefing still rebuilds', 1 === count( $rel_third->call_log ) );

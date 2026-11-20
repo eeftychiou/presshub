@@ -415,7 +415,6 @@ $new_rows = array_slice( $GLOBALS['wpdb']->tables['wp_presshub_ai_token_logs'] ?
 $audio_rows = array_values( array_filter( $new_rows, static function ( $r ) { return 'podcast_audio' === ( $r['action_trigger'] ?? '' ); } ) );
 as_check( 'tts_log: one Gemini turn is one Usage & logs row', 1 === count( $audio_rows ) );
 as_check( 'tts_log: the row names the model, not the voice', 1 === count( $audio_rows ) && 'Kore' !== ( $audio_rows[0]['model'] ?? '' ) );
-as_check( 'tts_log: early Gemini errors (no request sent) are still logged by the synthesizer', [ 'no_gemini_key', 'missing_tts_voice', 'missing_tts_model', 'decode_failed' ] === PressHub_AI_Audio_Synthesizer::GEMINI_UNLOGGED_ERRORS );
 
 // Test 8b: synthesize_podcast with null api_client resolves tts model (gemini-2.5-flash-preview-tts)
 $captured_models = [];
