@@ -12,6 +12,8 @@ import {
   resolveInstagramPermalink,
   resolveFacebookPermalink,
   parseFacebookPermalink,
+  waitForFacebookVideoReady,
+  isFacebookVideoFile,
   markTikTokAiGenerated,
   getTwitterWeightedLength,
   sanitizeTwitterCopy,
@@ -279,6 +281,56 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     await expect(postFacebook({ platform: 'facebook', copy: 'No button here', browserSession: mockSession, timeoutMs: 3000 }))
       .rejects.toThrow(/"Post" button not found/);
   }, 30000);
+
+  test('postFacebook waits for a video upload, goes through Next and posts the Reel', async () => {
+    const fs = require('fs');
+    const os = require('os');
+    const pathMod = require('path');
+    const dir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'ph-fb-video-'));
+    const video = pathMod.join(dir, 'short.mp4');
+    fs.writeFileSync(video, 'video');
+    const page = await context.newPage();
+    page.goto = async (url: string) => {
+      if (url.includes('/me/')) {
+        await page.setContent(`<html><body><div role="article"><span>Reel caption text for the test</span>
+          <a href="https://www.facebook.com/reel/1234567890123?__cft__=1">Just now</a></div></body></html>`);
+      } else {
+        // Upload "finishes" 1.5s after a file is chosen: the progress bar goes and Next is enabled.
+        // Next swaps in the Post button.
+        await page.setContent(`<html><body><div role="dialog">
+          <div role="textbox" contenteditable="true"></div>
+          <input type="file" accept="image/*,video/*" onchange="var d=document.querySelector('[role=dialog]');var p=document.createElement('div');p.setAttribute('role','progressbar');d.appendChild(p);setTimeout(function(){p.remove();document.getElementById('next').setAttribute('aria-disabled','false');},1500);" />
+          <div id="next" role="button" aria-label="Next" aria-disabled="true" onclick="this.outerHTML='<div role=&quot;button&quot; aria-label=&quot;Post&quot; onclick=&quot;window.__posted=1&quot;>Post</div>'">Next</div>
+        </div></body></html>`);
+      }
+      return null as any;
+    };
+    const mockSession = { browser, isExternalCdp: false, context: { newPage: async () => page } as any, close: async () => {} } as ChromeConnection;
+    const res = await postFacebook({ platform: 'facebook', copy: 'Reel caption text for the test', mediaPath: video, browserSession: mockSession, timeoutMs: 5000, videoUploadTimeoutMs: 20000 });
+    expect(res.success).toBe(true);
+    expect(res.externalPostUrl).toBe('https://www.facebook.com/reel/1234567890123');
+    expect(res.externalPostId).toBe('1234567890123');
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 60000);
+
+  test('waitForFacebookVideoReady fails when the upload never finishes', async () => {
+    const page = await context.newPage();
+    try {
+      await page.setContent('<html><body><div role="dialog"><div role="progressbar"></div><div role="button" aria-label="Post" aria-disabled="true">Post</div></div></body></html>');
+      await expect(waitForFacebookVideoReady(page, 1500, 200)).rejects.toThrow(/did not finish uploading/);
+      await page.setContent('<html><body><div role="dialog"><div role="button" aria-label="Post">Post</div></div></body></html>');
+      await expect(waitForFacebookVideoReady(page, 1500, 200)).resolves.toBeUndefined();
+    } finally {
+      await page.close();
+    }
+  }, 30000);
+
+  test('isFacebookVideoFile tells a rendered short from a post image', () => {
+    expect(isFacebookVideoFile('/out/short-1.mp4')).toBe(true);
+    expect(isFacebookVideoFile('C:\\out\\SHORT.MOV')).toBe(true);
+    expect(isFacebookVideoFile('/out/image.jpg')).toBe(false);
+    expect(isFacebookVideoFile('')).toBe(false);
+  });
 
   test('parseFacebookPermalink keeps the post id and drops tracking parameters', () => {
     expect(parseFacebookPermalink('/PressHub.cy/posts/pfbid0abc?__cft__[0]=x&__tn__=R')).toEqual({

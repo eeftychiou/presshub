@@ -274,6 +274,13 @@ class PressHub_Social_Settings_Storage {
             'default'           => false,
         ] );
 
+        // Facebook Reels: the same shorts as Reels, next to the usual Facebook link post.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_facebook_shorts_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_facebook_shorts_enabled' ],
+            'default'           => false,
+        ] );
+
         // YouTube: the same shorts as YouTube Shorts, and podcast episodes in a playlist.
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_shorts_enabled', [
             'type'              => 'boolean',
@@ -1287,6 +1294,18 @@ class PressHub_Social_Settings_Storage {
     public static function sanitize_instagram_shorts_enabled( $value ): bool {
         if ( null === $value && empty( $_POST['presshub_social_instagram_shorts_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
             return self::get_instagram_shorts_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Whether the shorts also go to the Facebook Page as Reels, next to its link post (default off). */
+    public static function get_facebook_shorts_enabled(): bool {
+        return in_array( get_option( 'presshub_social_facebook_shorts_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_facebook_shorts_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_facebook_shorts_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_facebook_shorts_enabled();
         }
         return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
     }

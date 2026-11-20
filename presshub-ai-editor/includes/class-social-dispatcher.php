@@ -283,6 +283,12 @@ class PressHub_Social_Dispatcher {
                     );
                 }
             }
+
+            // Facebook Reels: the shorts go to the Page too, after its link post (which is
+            // kept), with the short's own caption.
+            if ( 'facebook' === $platform ) {
+                $job_ids = array_merge( $job_ids, self::enqueue_facebook_shorts( $post_id, $engine, $media_url, $media_type, strtotime( $scheduled_at . ' UTC' ) ?: $base_time ) );
+            }
         }
 
         if ( ! empty( $needs_images ) ) {
@@ -290,6 +296,39 @@ class PressHub_Social_Dispatcher {
         }
 
         return $job_ids;
+    }
+
+    /**
+     * Queue a post's shorts as Facebook Reels when Facebook Reels are on: Shorts per Podcast
+     * jobs for a podcast post, one for an article. The first Reel follows the link post by
+     * the time between shorts. The Reel's text is the short's own caption, so no AI call is
+     * made here.
+     *
+     * @param int $link_time Unix time of the post's Facebook link post.
+     * @return int[] IDs of the queued Reel jobs.
+     */
+    public static function enqueue_facebook_shorts( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $link_time ): array {
+        if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, 'facebook' ) ) {
+            return [];
+        }
+        if ( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE !== PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
+            PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, 'facebook' );
+        }
+        $start = $link_time + PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+        $ids   = [];
+        foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $start, false, 'facebook' ) as $short_job ) {
+            $job_id = PressHub_Social_Queue::enqueue( $short_job );
+            if ( is_wp_error( $job_id ) ) {
+                PressHub_Social_Logger::error( sprintf( 'Failed to enqueue Facebook Reel for post #%d: %s', $post_id, $job_id->get_error_message() ) );
+            } elseif ( $job_id > 0 ) {
+                $ids[] = (int) $job_id;
+                PressHub_Social_Logger::info( sprintf( 'Enqueued Facebook Reel job #%d for post #%d (scheduled: %s)', $job_id, $post_id, $short_job['scheduled_at'] ) );
+            }
+        }
+        if ( $ids ) {
+            PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );
+        }
+        return $ids;
     }
 
     /**
