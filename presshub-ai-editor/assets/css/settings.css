@@ -645,7 +645,7 @@ html:has(#presshub-settings-page) { scroll-padding-top: 90px; scroll-padding-bot
 .presshub-log-exposure { padding: 10px 12px; margin: 15px 0; }
 .presshub-log-exposure-rule { background: #f6f7f7; padding: 8px; overflow: auto; }
 
-/* Prompt history and changes (2.79.0, assets/js/prompt-versions.js). */
+/* Prompt history and changes (2.81.0, assets/js/prompt-versions.js). */
 .presshub-pv-bar { margin: 8px 0 0; }
 .presshub-pv-panel { margin: 8px 0 16px; padding: 12px 14px; border: 1px solid #c3c4c7; border-radius: 4px; background: #fff; max-width: 1100px; }
 .presshub-pv-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }

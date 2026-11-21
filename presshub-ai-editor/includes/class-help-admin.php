@@ -170,16 +170,17 @@ class PressHub_AI_Help_Admin {
             __( 'Editorial agenda: the themes you want followed this week and your standing guidance. It goes to every editorial AI task.', 'presshub-ai-editor' ),
             __( 'People fiches: for the people named in the material, their current role, party and latest stated positions.', 'presshub-ai-editor' ),
             __( 'Policy fiches: for the policy files mentioned in the material, the newsroom\'s principles, framing rules, checked facts and the claims to watch.', 'presshub-ai-editor' ),
+            __( 'Fact checks: claims, photos, videos or slogans that a fact-checker found false, as a published briefing reported them. They are kept in the editorial memory and go to any task whose material repeats them, so the post says the claim was checked instead of passing it on.', 'presshub-ai-editor' ),
         ] );
         $html .= self::p( __( 'The articles still decide what happened today. The editorial knowledge decides how it is selected, ordered, titled and framed, and what the AI must not repeat as fact. Each block has its own size limit per task (in characters). When a block is longer than its limit, its least important part is dropped first. Memory is also shrunk when the articles alone come close to the model\'s limit; the other blocks only follow their own limit.', 'presshub-ai-editor' ) );
         $html .= self::h3( __( 'Which AI task gets what', 'presshub-ai-editor' ) );
         $html .= self::p( __( 'Read from the current settings. A number is the most characters of that block the task can receive; a dash means the task never gets it.', 'presshub-ai-editor' ) );
         $html .= self::table(
-            [ __( 'AI task', 'presshub-ai-editor' ), __( 'Memory', 'presshub-ai-editor' ), __( 'Agenda', 'presshub-ai-editor' ), __( 'People', 'presshub-ai-editor' ), __( 'Policies (parts sent)', 'presshub-ai-editor' ) ],
+            [ __( 'AI task', 'presshub-ai-editor' ), __( 'Memory', 'presshub-ai-editor' ), __( 'Agenda', 'presshub-ai-editor' ), __( 'People', 'presshub-ai-editor' ), __( 'Policies (parts sent)', 'presshub-ai-editor' ), __( 'Fact checks', 'presshub-ai-editor' ) ],
             self::matrix_rows(),
             true
         );
-        $html .= self::p( __( 'Never receive any of it: the AI calls that only extract facts or classify (building memory digests and weekly rollups, extracting people and policy updates, intent detection in the co-pilot, reading uploaded files, the Trending in Cyprus summary, image and speech generation). They must report what the text says, not the newsroom line.', 'presshub-ai-editor' ) );
+        $html .= self::p( __( 'Never receive any of it: the AI calls that only extract facts or classify (building memory digests and weekly rollups, extracting people and policy updates, intent detection in the co-pilot, reading uploaded files, image and speech generation). They must report what the text says, not the newsroom line. The Trending in Cyprus summary gets fact checks only, so it can say when a trending post repeats something already shown to be false, and the roundup adds a note under that post.', 'presshub-ai-editor' ) );
         return self::section( 'overview', $html );
     }
 
@@ -199,6 +200,7 @@ class PressHub_AI_Help_Admin {
             'generate_post_seo'     => __( 'SEO tags, meta description and focus keyphrase', 'presshub-ai-editor' ),
             'social_copy_facebook'  => __( 'Social post copy (X, Facebook, Instagram, TikTok)', 'presshub-ai-editor' ),
             'social_tiktok_shorts'  => __( 'TikTok short and Reel plan', 'presshub-ai-editor' ),
+            'social_trending_summary' => __( 'Trending in Cyprus summary', 'presshub-ai-editor' ),
             'generate_image_prompt' => __( 'Featured image prompt', 'presshub-ai-editor' ),
         ];
     }
@@ -222,6 +224,7 @@ class PressHub_AI_Help_Admin {
                 esc_html( $policy > 0 && PressHub_AI_Policy_Fiches::is_enabled()
                     ? self::chars( $policy ) . ' (' . self::parts_label( PressHub_AI_Policy_Fiches::parts_for( $action ) ) . ')'
                     : self::chars( 0 ) ),
+                esc_html( self::chars( class_exists( 'PressHub_AI_Fact_Checks' ) && PressHub_AI_Fact_Checks::is_enabled() ? PressHub_AI_Fact_Checks::budget_for( $action ) : 0 ) ),
             ];
         }
         return $rows;

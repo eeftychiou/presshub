@@ -119,8 +119,12 @@ $seo_check = $by['QA gate: SEO check'] ?? [];
 hp_check( 'matrix: QA SEO check gets the agenda', '—' !== ( $seo_check[2] ?? '—' ) );
 hp_check( 'matrix: QA SEO check gets no policy fiches', '—' === ( $seo_check[4] ?? '' ) );
 $seo_meta = $by['SEO tags, meta description and focus keyphrase'] ?? [];
-hp_check( 'matrix: post SEO row present', 5 === count( $seo_meta ) );
-hp_check( 'matrix: post SEO gets nothing', [ '—', '—', '—', '—' ] === array_slice( $seo_meta, 1 ) );
+hp_check( 'matrix: post SEO row present', 6 === count( $seo_meta ) );
+hp_check( 'matrix: post SEO gets nothing', [ '—', '—', '—', '—', '—' ] === array_slice( $seo_meta, 1 ) );
+$trend = $by['Trending in Cyprus summary'] ?? [];
+hp_check( 'matrix: trending summary gets fact checks only', [ '—', '—', '—', '—' ] === array_slice( $trend, 1, 4 ) && '—' !== ( $trend[5] ?? '—' ) );
+$brief_fc = $by['Daily briefing text (morning and noon)'] ?? [];
+hp_check( 'matrix: briefing gets fact checks', '—' !== ( $brief_fc[5] ?? '—' ) );
 
 // Every task key is an action the code really sets (exact literal, or a prefix the code builds on).
 $src = '';

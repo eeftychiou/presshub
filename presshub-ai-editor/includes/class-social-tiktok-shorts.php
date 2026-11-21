@@ -929,7 +929,7 @@ class PressHub_Social_TikTok_Shorts {
             ? self::build_prompt( $post_id, $prompt, '', $count, $max_words, $images, $script )
             : self::build_prompt( $post_id, $prompt, $script, $count, $max_words, $images );
         $sys_prompt  = PressHub_Social_Settings_Storage::get_system_prompt();
-        // 2.79.0: the prompt studio versions the plan is written with.
+        // 2.81.0: the prompt studio versions the plan is written with.
         self::$prompt_versions = [];
         if ( class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
             self::$prompt_versions = PressHub_AI_Prompt_Versions::clean_refs( [

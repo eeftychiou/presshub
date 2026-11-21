@@ -755,13 +755,18 @@ class PressHub_AI_Settings_Storage {
 
         // #233 step 5: switches that were filter-only. Each default equals the
         // value the code used before, and the filter still runs on top.
-        foreach ( [ 'presshub_ai_policy_fiches_enabled', 'presshub_ai_stakeholders_enabled', 'presshub_ai_claim_check_enabled', 'presshub_ai_pool_cleanup_enabled', 'presshub_ai_podcast_show_notes_enabled', 'presshub_ai_podcast_lead_enabled' ] as $switch ) {
+        foreach ( [ 'presshub_ai_policy_fiches_enabled', 'presshub_ai_stakeholders_enabled', 'presshub_ai_claim_check_enabled', 'presshub_ai_pool_cleanup_enabled', 'presshub_ai_podcast_show_notes_enabled', 'presshub_ai_podcast_lead_enabled', 'presshub_ai_fact_checks_enabled' ] as $switch ) {
             PressHub_Settings_Registry::register( 'presshub_ai_options', $switch, [
                 'sanitize_callback' => [ __CLASS__, 'sanitize_checkbox' ],
                 'type'              => 'integer',
                 'default'           => 1,
             ] );
         }
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_fact_check_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_fact_check_days' ],
+            'type'              => 'integer',
+            'default'           => 30,
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_pool_max_age_hours', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_pool_max_age_hours' ],
             'type'              => 'integer',
@@ -4615,6 +4620,20 @@ class PressHub_AI_Settings_Storage {
         return self::get_switch( 'presshub_ai_claim_check_enabled' );
     }
 
+    public static function get_fact_checks_enabled(): bool {
+        return self::get_switch( 'presshub_ai_fact_checks_enabled' );
+    }
+
+    /** How many days a fact check in the editorial memory is used (1 to 180, default 30). */
+    public static function sanitize_fact_check_days( $value ): int {
+        $n = is_numeric( $value ) ? (int) $value : 30;
+        return max( 1, min( 180, $n ) );
+    }
+
+    public static function get_fact_check_days(): int {
+        return self::sanitize_fact_check_days( get_option( 'presshub_ai_fact_check_days', 30 ) );
+    }
+
     public static function get_pool_cleanup_enabled(): bool {
         return self::get_switch( 'presshub_ai_pool_cleanup_enabled' );
     }
@@ -4719,6 +4738,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_policy_fiches_budgets'     => class_exists( 'PressHub_AI_Policy_Fiches' ) ? PressHub_AI_Policy_Fiches::BUDGETS : [],
             'presshub_ai_stakeholders_budgets'      => class_exists( 'PressHub_AI_Stakeholders' ) ? PressHub_AI_Stakeholders::BUDGETS : [],
             'presshub_ai_editorial_agenda_budgets'  => class_exists( 'PressHub_AI_Editorial_Agenda' ) ? PressHub_AI_Editorial_Agenda::BUDGETS : [],
+            'presshub_ai_fact_checks_budgets'       => class_exists( 'PressHub_AI_Fact_Checks' ) ? PressHub_AI_Fact_Checks::BUDGETS : [],
         ];
     }
 
@@ -4750,6 +4770,10 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_context_budgets( $value, self::context_budget_options()['presshub_ai_editorial_agenda_budgets'] );
     }
 
+    public static function sanitize_fact_checks_budgets( $value ): array {
+        return self::sanitize_context_budgets( $value, self::context_budget_options()['presshub_ai_fact_checks_budgets'] );
+    }
+
     /** Effective budgets for one budget option: stored values over the defaults. */
     public static function get_context_budgets( string $option, array $defaults ): array {
         $stored = get_option( $option, [] );
@@ -4766,6 +4790,10 @@ class PressHub_AI_Settings_Storage {
 
     public static function default_editorial_agenda_budgets(): array {
         return self::context_budget_options()['presshub_ai_editorial_agenda_budgets'];
+    }
+
+    public static function default_fact_checks_budgets(): array {
+        return self::context_budget_options()['presshub_ai_fact_checks_budgets'];
     }
 
 }

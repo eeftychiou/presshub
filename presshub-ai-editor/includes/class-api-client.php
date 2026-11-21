@@ -106,7 +106,7 @@ class PressHub_AI_API_Client {
     public $suppress_provider_prompt_log = false;
 
     /**
-     * 2.79.0: extra config keys for the `generic` generation record that
+     * 2.81.0: extra config keys for the `generic` generation record that
      * call_provider() stores (for example the social copy's prompt_versions).
      *
      * @var array
@@ -3126,6 +3126,11 @@ class PressHub_AI_API_Client {
         // in the material; last, so the recorder can rebuild the prompt as sent.
         if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
             $sys_prompt = PressHub_AI_Policy_Fiches::apply( $sys_prompt, $policy_material, $this->get_action() );
+        }
+        // Fact checks in the editorial memory (claims, photos or videos found false)
+        // that the material repeats; after the fiches, matched on the same material.
+        if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            $sys_prompt = PressHub_AI_Fact_Checks::apply( $sys_prompt, $policy_material, $this->get_action() );
         }
 
         // Material the caller cut to fit its limits (noted with

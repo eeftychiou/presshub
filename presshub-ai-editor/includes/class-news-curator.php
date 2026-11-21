@@ -153,7 +153,7 @@ class PressHub_AI_News_Curator {
     private static int $last_memory_tokens_estimate = 0;
 
     /**
-     * @internal 2.79.0 - prompt versions the most recent build_prompt() call used.
+     * @internal 2.81.0 - prompt versions the most recent build_prompt() call used.
      *
      * @var array<int,array>
      */
@@ -592,7 +592,7 @@ class PressHub_AI_News_Curator {
     }
 
     /**
-     * 2.79.0 - prompt versions (PressHub_AI_Prompt_Versions refs) the most
+     * 2.81.0 - prompt versions (PressHub_AI_Prompt_Versions refs) the most
      * recent build_prompt() call used; goes on the briefing_text record.
      */
     public function last_prompt_versions(): array {
@@ -856,7 +856,7 @@ class PressHub_AI_News_Curator {
         $base_prompt = class_exists( 'PressHub_AI_Settings_Storage' )
             ? PressHub_AI_Settings_Storage::get_curation_prompt()
             : $this->get_default_curation_prompt();
-        // 2.79.0: the prompt studio version this briefing is written with.
+        // 2.81.0: the prompt studio version this briefing is written with.
         self::$last_prompt_versions = [];
         if ( class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
             $ref = PressHub_AI_Prompt_Versions::ref( 'presshub_ai_briefing_text_prompt', (string) $base_prompt );
