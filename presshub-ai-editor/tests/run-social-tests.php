@@ -1579,29 +1579,38 @@ $job_pull_gate = PressHub_Social_Queue::enqueue( [
     'scheduled_at' => $past_time,
 ] );
 $batch_summary = PressHub_Social_Dispatcher::process_due_queue();
-assert_equals( [], $batch_summary['job_ids'], 'process_due_queue leaves automation jobs to the worker during cron in pull mode' );
+assert_true( ! in_array( $job_pull_gate, $batch_summary['job_ids'], true ), 'process_due_queue leaves automation jobs to the worker during cron in pull mode' );
 $gate_job_after_cron = PressHub_Social_Queue::get_job( $job_pull_gate );
 assert_equals( 'pending', $gate_job_after_cron['status'], 'Job remains pending after server-side cron' );
 
-$disp_res = PressHub_Social_Dispatcher::dispatch_job( $job_pull_gate );
-assert_true( is_wp_error( $disp_res ) && 'pull_mode_queued' === $disp_res->get_error_code(), 'dispatch_job returns pull_mode_queued in pull mode' );
-$gate_job_after_disp = PressHub_Social_Queue::get_job( $job_pull_gate );
-assert_equals( 'pending', $gate_job_after_disp['status'], 'Job remains pending for local worker after dispatch_job' );
-
-// An automation job waiting for the worker never holds up the API jobs behind it,
-// even with a batch of one (21 Nov: worker down, Facebook API posts stuck behind a tweet).
+// 2.76.1: a due automation job waiting for the worker must not take the whole batch from an
+// API job behind it (batch size 1 on presshub.cy left Facebook API posts unsent while the worker was down).
 update_option( 'presshub_social_batch_size', 1 );
 $job_api_behind = PressHub_Social_Queue::enqueue( [
     'post_id'      => 502,
     'platform'     => 'facebook',
     'engine'       => 'api',
-    'post_copy'    => 'Facebook API post behind a worker job',
-    'scheduled_at' => gmdate( 'Y-m-d H:i:s', strtotime( $past_time . ' UTC' ) + 1 ),
+    'post_copy'    => 'API job behind a worker job',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', strtotime( $past_time ) + 10 ),
 ] );
-$behind_summary = PressHub_Social_Dispatcher::process_due_queue();
-assert_equals( [ (int) $job_api_behind ], $behind_summary['job_ids'], 'process_due_queue reaches an API job queued behind a pending automation job (batch size 1)' );
-assert_equals( 'pending', PressHub_Social_Queue::get_job( $job_pull_gate )['status'], 'The automation job stays pending for the worker' );
+$hol_due = PressHub_Social_Queue::get_due_pending_jobs( 0, null, [], [], 'automation' );
+assert_equals( [ $job_api_behind ], array_map( fn( $j ) => (int) $j['id'], $hol_due ), 'get_due_pending_jobs can leave one engine out' );
+$hol_summary = PressHub_Social_Dispatcher::process_due_queue();
+assert_equals( [ $job_api_behind ], $hol_summary['job_ids'], 'With batch size 1 the cron still reaches the API job behind a due automation job' );
 delete_option( 'presshub_social_batch_size' );
+PressHub_Social_Queue::reset_memory_store();
+$job_pull_gate = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 501,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => 'Queued for Pull Worker',
+    'scheduled_at' => $past_time,
+] );
+
+$disp_res = PressHub_Social_Dispatcher::dispatch_job( $job_pull_gate );
+assert_true( is_wp_error( $disp_res ) && 'pull_mode_queued' === $disp_res->get_error_code(), 'dispatch_job returns pull_mode_queued in pull mode' );
+$gate_job_after_disp = PressHub_Social_Queue::get_job( $job_pull_gate );
+assert_equals( 'pending', $gate_job_after_disp['status'], 'Job remains pending for local worker after dispatch_job' );
 
 // ----------------------------------------------------------------------
 // Test Suite 19: Copy Regeneration, Published Job Retry & Re-post Operations

@@ -6,7 +6,7 @@
  *   1. plan_speech_requests(): per_turn (unchanged), same_voice, two_voices, the
  *      character cap, and the fallbacks (3 hosts, equal voices, Google Cloud).
  *   2. two_voice_labels() and split_request_seconds().
- *   3. build_gemini_tts_request_body() with labelled dialogue: one part per line, each with its speaker.
+ *   3. build_gemini_tts_request_body() with labelled dialogue: one part, labels kept.
  *   4. synthesize_podcast() end to end in each mode: request count, bodies, timeline.
  *   5. A failed or cut-short joined request is voiced turn by turn; a daily quota error is not.
  *   6. The audio run lock: second job refused, re-entry, release, stale takeover.
@@ -61,6 +61,14 @@ $p = $S::plan_speech_requests( $turns, 'same_voice', 1500, $voice_of, 2, 'gemini
 sr_check( 'same_voice: back-to-back lines by one voice share a request', 3 === count( $p ) && [ 0, 1 ] === $p[0]['turns'] );
 sr_check( 'same_voice: joined text, no labels, whitespace flattened', "Καλημέρα σας.\n\nΣήμερα έχουμε τρία θέματα." === $p[0]['text'] && null === $p[0]['speakers'] );
 
+// 2.76.1: Gemini rejects the labelled two-voice request, so by default two_voices plans like
+// same_voice (single-voice requests only, never a multi-speaker body).
+$p = $S::plan_speech_requests( $turns, 'two_voices', 1500, $voice_of, 2, 'gemini', $labels, $tv );
+sr_check( 'two_voices (default, 2.76.1): plans like same_voice', 3 === count( $p ) && [ 0, 1 ] === $p[0]['turns'] );
+sr_check( 'two_voices (default, 2.76.1): no multi-speaker request', 0 === count( array_filter( $p, static function ( $r ) { return null !== $r['speakers']; } ) ) );
+
+// The joined two-voice path stays covered for when Gemini accepts a labelled request again.
+$S::$two_voice_requests_accepted = true;
 $p = $S::plan_speech_requests( $turns, 'two_voices', 1500, $voice_of, 2, 'gemini', $labels, $tv );
 sr_check( 'two_voices: the whole list in one request', 1 === count( $p ) && [ 0, 1, 2, 3 ] === $p[0]['turns'] );
 sr_check( 'two_voices: labelled lines', "Μαρία: Καλημέρα σας.\nΜαρία: Σήμερα έχουμε τρία θέματα.\nΝίκος: Ας ξεκινήσουμε.\nΜαρία: Πρώτο θέμα." === $p[0]['text'] );
@@ -107,14 +115,8 @@ $ms   = [
 $text = "Μαρία: Καλημέρα.\nΝίκος: Γεια σας.";
 $body = PressHub_AI_API_Client::build_gemini_tts_request_body( $text, 'Aoede', true, $ms, 'formal', 1.0, 0.0, 'structured', '', true );
 $parts = $body['contents'][0]['parts'] ?? [];
-// Gemini refuses multi-speaker parts without speech_metadata.speaker (21 Nov), so every
-// labelled line is its own part with its speaker, and the label is not spoken.
-sr_check( 'body: one part per labelled line', 2 === count( $parts ) && 'Καλημέρα.' === ( $parts[0]['text'] ?? '' ) && 'Γεια σας.' === ( $parts[1]['text'] ?? '' ) );
-sr_check( 'body: every part names its speaker', 'Μαρία' === ( $parts[0]['speech_metadata']['speaker'] ?? '' ) && 'Νίκος' === ( $parts[1]['speech_metadata']['speaker'] ?? '' ) && isset( $parts[0]['speech_metadata']['style'] ) );
-$wrapped = PressHub_AI_API_Client::build_gemini_tts_request_body( "Μαρία: Πρώτη γραμμή\nσυνέχεια.\nΝίκος: Δεύτερη.", 'Aoede', true, $ms, 'formal', 1.0, 0.0, 'structured', '', true );
-sr_check( 'body: a line without a label continues the previous speaker', 2 === count( $wrapped['contents'][0]['parts'] ?? [] ) && "Πρώτη γραμμή\nσυνέχεια." === ( $wrapped['contents'][0]['parts'][0]['text'] ?? '' ) );
-$si = PressHub_AI_API_Client::build_gemini_tts_request_body( $text, 'Aoede', true, $ms, 'formal', 1.0, 0.0, 'system_instruction', '', true );
-sr_check( 'body: system_instruction mode keeps one labelled part without metadata', 1 === count( $si['contents'][0]['parts'] ?? [] ) && $text === ( $si['contents'][0]['parts'][0]['text'] ?? '' ) && ! isset( $si['contents'][0]['parts'][0]['speech_metadata'] ) );
+sr_check( 'body: one part holding the labelled dialogue', 1 === count( $parts ) && $text === $parts[0]['text'] );
+sr_check( 'body: no per-part speaker tag', ! isset( $parts[0]['speech_metadata']['speaker'] ) && isset( $parts[0]['speech_metadata']['style'] ) );
 sr_check( 'body: multiSpeakerVoiceConfig names match the labels', 'Μαρία' === ( $body['generationConfig']['speechConfig']['multiSpeakerVoiceConfig']['speakerVoiceConfigs'][0]['speaker'] ?? '' ) );
 $old = PressHub_AI_API_Client::build_gemini_tts_request_body( $text, 'Aoede', true, $ms, 'formal', 1.0, 0.0, 'structured', '' );
 sr_check( 'body: without the flag, the old split parts are unchanged', 2 === count( $old['contents'][0]['parts'] ?? [] ) );
@@ -188,9 +190,7 @@ $res = $run( 'two_voices', '2026-11-23' );
 sr_check( 'e2e two_voices: succeeds', is_array( $res ) && ! empty( $res['success'] ) );
 sr_check( 'e2e two_voices: 1 request', 1 === count( $captured ) );
 $b = $captured[0] ?? [];
-$e2e_parts = (array) ( $b['contents'][0]['parts'] ?? [] );
-sr_check( 'e2e two_voices: one part per line, each with its speaker', 5 === count( $e2e_parts ) && 0 === count( array_filter( $e2e_parts, static function ( $pt ) { return '' === (string) ( $pt['speech_metadata']['speaker'] ?? '' ); } ) ) );
-sr_check( 'e2e two_voices: labels are not spoken', 0 === strpos( (string) ( $e2e_parts[0]['text'] ?? '' ), 'Καλημέρα' ) && 'Μαρία' === ( $e2e_parts[0]['speech_metadata']['speaker'] ?? '' ) );
+sr_check( 'e2e two_voices: labelled text in one part', 1 === count( $b['contents'][0]['parts'] ?? [] ) && 0 === strpos( (string) ( $b['contents'][0]['parts'][0]['text'] ?? '' ), 'Μαρία: Καλημέρα' ) );
 sr_check( 'e2e two_voices: Νίκος is Charon', 'Charon' === ( $b['generationConfig']['speechConfig']['multiSpeakerVoiceConfig']['speakerVoiceConfigs'][1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) );
 $pid = (int) ( $res['post_id'] ?? 0 );
 $timeline = $pid ? get_post_meta( $pid, PressHub_AI_Podcast_Timeline::META_KEY, true ) : null;

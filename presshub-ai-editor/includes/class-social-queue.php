@@ -232,9 +232,13 @@ class PressHub_Social_Queue {
      * @param int         $limit     Maximum number of jobs to fetch.
      * @param string|null $engine    Optional engine filter (e.g. 'automation' or 'api').
      * @param array       $platforms Optional list of platforms to filter by.
+     * @param array       $exclude_ids    Job ids to leave out.
+     * @param string|null $exclude_engine 2.76.1: leave out jobs of this engine (the cron passes
+     *                                    'automation' in Pull Mode, so worker jobs waiting for the
+     *                                    worker never take the batch from the API jobs behind them).
      * @return array<int, array>
      */
-    public static function get_due_pending_jobs( int $limit = 0, ?string $engine = null, array $platforms = [], array $exclude_ids = [] ): array {
+    public static function get_due_pending_jobs( int $limit = 0, ?string $engine = null, array $platforms = [], array $exclude_ids = [], ?string $exclude_engine = null ): array {
         $exclude_ids = array_values( array_filter( array_map( 'intval', $exclude_ids ), fn( $id ) => $id > 0 ) );
         if ( $limit <= 0 ) {
             $limit = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_batch_size' )
@@ -261,6 +265,11 @@ class PressHub_Social_Queue {
             if ( ! empty( $engine ) ) {
                 $where    .= " AND engine = %s";
                 $params[] = sanitize_key( $engine );
+            }
+
+            if ( ! empty( $exclude_engine ) ) {
+                $where    .= ' AND engine <> %s';
+                $params[] = sanitize_key( $exclude_engine );
             }
 
             if ( ! empty( $clean_platforms ) ) {
@@ -293,6 +302,9 @@ class PressHub_Social_Queue {
                 continue;
             }
             if ( ! empty( $engine ) && ( $job['engine'] ?? 'api' ) !== $engine ) {
+                continue;
+            }
+            if ( ! empty( $exclude_engine ) && ( $job['engine'] ?? 'api' ) === $exclude_engine ) {
                 continue;
             }
             if ( ! empty( $clean_platforms ) && ! in_array( $job['platform'] ?? '', $clean_platforms, true ) ) {

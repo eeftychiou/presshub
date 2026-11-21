@@ -3926,7 +3926,7 @@ class PressHub_AI_Settings_Render {
         $choices = [
             'per_turn'   => __( 'One request per turn (best quality)', 'presshub-ai-editor' ),
             'same_voice' => __( 'Join back-to-back lines by the same voice', 'presshub-ai-editor' ),
-            'two_voices' => __( 'Two voices per request (fewest requests)', 'presshub-ai-editor' ),
+            'two_voices' => __( 'Two voices per request (paused: joins lines by the same voice)', 'presshub-ai-editor' ),
         ];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
@@ -3935,7 +3935,7 @@ class PressHub_AI_Settings_Render {
             <?php endforeach; ?>
         </select>
         <p class="description">
-            <?php echo esc_html__( 'A temporary way to stay under a low daily Gemini speech limit. One request per turn sends each line on its own (about 40 requests for an episode). Joining back-to-back lines by the same voice saves a few, and is the big saving with one host. Two voices per request sends a few turns of both hosts at once, with the host names kept in the text so Gemini gives each line the right voice: about 8 to 10 requests for an episode, for the Greek podcast and its translations. It needs two hosts with two different voices; otherwise lines by the same voice are joined. A joined request that fails or comes back cut short is voiced again turn by turn. Listen to an episode before you rely on it, and go back to one request per turn once your Google limit is raised. Google Cloud TTS always uses one request per turn. Default: one request per turn.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'A temporary way to stay under a low daily Gemini speech limit. One request per turn sends each line on its own (about 40 requests for an episode). Joining back-to-back lines by the same voice saves a few, and is the big saving with one host. Two voices per request sends a few turns of both hosts at once, with the host names kept in the text so Gemini gives each line the right voice: about 8 to 10 requests for an episode, for the Greek podcast and its translations. It needs two hosts with two different voices; otherwise lines by the same voice are joined. Paused since 2.76.1: Gemini now rejects these requests, so this choice joins lines by the same voice until a request Gemini accepts is proven. A joined request that fails or comes back cut short is voiced again turn by turn. Listen to an episode before you rely on it, and go back to one request per turn once your Google limit is raised. Google Cloud TTS always uses one request per turn. Default: one request per turn.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

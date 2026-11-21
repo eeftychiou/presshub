@@ -2223,44 +2223,14 @@ class PressHub_AI_API_Client {
 
         // Modern modes ('structured', 'hybrid_instruction', 'speech_metadata', 'system_instruction')
         $parts = [];
-        if ( $is_multi_speaker && $labelled_dialogue && 'system_instruction' === $payload_mode ) {
-            // No per-part metadata in this mode: one part holding the labelled dialogue,
-            // whose "Name:" labels choose each line's voice.
-            $parts[] = [ 'text' => $clean_text ];
-        } elseif ( $is_multi_speaker && $labelled_dialogue ) {
-            // 2.77.0: Gemini refuses a multi-speaker request whose text parts carry
-            // speech_metadata without a speaker ("must specify speech_metadata.speaker for
-            // each text part"). So each "Name: line" becomes its own part with that name as
-            // its speaker (the names match speakerVoiceConfigs); the label is taken out of
-            // the spoken text. A line without a known label continues the previous part.
-            $names = [];
-            foreach ( $multi_speakers as $ms ) {
-                $name = trim( (string) ( $ms['speaker'] ?? '' ) );
-                if ( '' !== $name ) {
-                    $names[] = $name;
-                }
+        if ( $is_multi_speaker && $labelled_dialogue ) {
+            // One part holding the whole labelled dialogue: Gemini reads the labels to
+            // choose each line's voice and does not speak them.
+            $part = [ 'text' => $clean_text ];
+            if ( 'system_instruction' !== $payload_mode ) {
+                $part['speech_metadata'] = [ 'style' => $composed_style ];
             }
-            $label_re = $names ? '/^\s*(' . implode( '|', array_map( static fn( $n ) => preg_quote( $n, '/' ), $names ) ) . ')\s*:\s*(.*)$/u' : '';
-            $lines    = [];
-            foreach ( preg_split( '/\R/u', $clean_text ) as $line ) {
-                if ( '' !== $label_re && preg_match( $label_re, $line, $lm ) ) {
-                    $lines[] = [ 'speaker' => $lm[1], 'text' => trim( $lm[2] ) ];
-                } elseif ( '' !== trim( $line ) && $lines ) {
-                    $lines[ count( $lines ) - 1 ]['text'] = trim( $lines[ count( $lines ) - 1 ]['text'] . "\n" . trim( $line ) );
-                }
-            }
-            foreach ( $lines as $line ) {
-                if ( '' === $line['text'] ) {
-                    continue;
-                }
-                $parts[] = [
-                    'text'            => $line['text'],
-                    'speech_metadata' => [
-                        'speaker' => $line['speaker'],
-                        'style'   => $composed_style,
-                    ],
-                ];
-            }
+            $parts[] = $part;
         } elseif ( $is_multi_speaker ) {
             $speaker_tags = [ 'Presenter\s*\d+', 'Speaker[_\s]*\d+', 'Host[_\s]*\d+', 'Ομιλητής\s*\d+', 'Παρουσιαστής\s*\d+' ];
             if ( ! empty( $multi_speakers ) ) {

@@ -587,12 +587,10 @@ class PressHub_Social_Dispatcher {
         $worker_mode = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_worker_mode' )
             ? PressHub_Social_Settings_Storage::get_worker_mode()
             : 'pull';
-        // In Pull Mode the local worker claims the automation jobs, so the batch is taken
-        // from the API jobs only. Taking the oldest due jobs of any engine let a waiting
-        // automation job (worker down) fill the batch and hold every API post behind it.
-        $due_jobs = 'pull' === $worker_mode
-            ? PressHub_Social_Queue::get_due_pending_jobs( 0, 'api' )
-            : PressHub_Social_Queue::get_due_pending_jobs();
+        // 2.76.1: in Pull Mode the worker claims the automation jobs, so the batch holds only the
+        // jobs the cron sends itself. Before, with a small batch size, due automation jobs (e.g. while
+        // the worker was down) filled the batch and the API jobs behind them were never sent.
+        $due_jobs = PressHub_Social_Queue::get_due_pending_jobs( 0, null, [], [], 'pull' === $worker_mode ? 'automation' : null );
 
         $summary  = [
             'total_due' => count( $due_jobs ),
