@@ -355,7 +355,7 @@ class PressHub_AI_Generation_Inspector {
         if ( in_array( $status, [ 'success', 'error' ], true ) ) {
             $filters['status'] = $status;
         }
-        // 2.81.0: only the generations that used one prompt version.
+        // 2.82.0: only the generations that used one prompt version.
         $prompt_version = isset( $input['prompt_version'] ) && is_scalar( $input['prompt_version'] ) ? (int) $input['prompt_version'] : 0;
         if ( $prompt_version > 0 ) {
             $filters['prompt_version'] = $prompt_version;
@@ -675,7 +675,7 @@ class PressHub_AI_Generation_Inspector {
         if ( isset( $config['editorial_agenda_version'] ) ) {
             $knowledge[ __( 'Editorial agenda', 'presshub-ai-editor' ) ] = 'v' . (int) $config['editorial_agenda_version'] . ' (' . (int) ( $config['editorial_agenda_chars'] ?? 0 ) . ' chars)';
         }
-        // 2.81.0: the prompt studio versions the generation was written with.
+        // 2.82.0: the prompt studio versions the generation was written with.
         $prompt_rows = self::prompt_version_rows( $config );
 
         // Design principle: every cut a context limit made is shown with the call.
@@ -745,7 +745,7 @@ class PressHub_AI_Generation_Inspector {
 
     /**
      * "v3 · History and changes" rows for the prompt versions on a record's
-     * config (2.81.0). The link opens the prompt's history in Settings for
+     * config (2.82.0). The link opens the prompt's history in Settings for
      * users who may edit that prompt.
      */
     private static function prompt_version_rows( array $config ): array {
@@ -769,7 +769,7 @@ class PressHub_AI_Generation_Inspector {
         return $rows;
     }
 
-    /** Short "Curator v3, System v1" line for the records list (2.81.0). */
+    /** Short "Curator v3, System v1" line for the records list (2.82.0). */
     private static function prompt_versions_cell( array $config ): string {
         if ( empty( $config['prompt_versions'] ) || ! class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
             return '—';

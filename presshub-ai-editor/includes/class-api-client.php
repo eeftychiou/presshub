@@ -106,7 +106,7 @@ class PressHub_AI_API_Client {
     public $suppress_provider_prompt_log = false;
 
     /**
-     * 2.81.0: extra config keys for the `generic` generation record that
+     * 2.82.0: extra config keys for the `generic` generation record that
      * call_provider() stores (for example the social copy's prompt_versions).
      *
      * @var array

@@ -234,7 +234,7 @@ class PressHub_AI_Generation_Recorder {
             }
 
             $record_id = (int) $wpdb->insert_id;
-            // 2.81.0: link the record to the prompt versions it used.
+            // 2.82.0: link the record to the prompt versions it used.
             if ( ! empty( $data['config']['prompt_versions'] ) && class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
                 PressHub_AI_Prompt_Versions::record_uses( $record_id, (array) $data['config']['prompt_versions'] );
             }
