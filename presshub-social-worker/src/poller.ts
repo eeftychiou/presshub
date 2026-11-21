@@ -4,6 +4,7 @@ import { generateCard, CardResult } from './media/card-generator';
 import { generateVideo, VideoResult } from './media/video-generator';
 import { generateShortVideo, ShortSegment, ShortVideoResult, GenerateShortOptions, siteEndCardLine, YOUTUBE_SHORT_MAX_SECONDS } from './media/short-video';
 import { generateEpisodeVideo, GenerateEpisodeOptions, EpisodeVideoResult } from './media/episode-video';
+import { generatePhotoSlides, GeneratePhotoSlidesOptions, PhotoSlidesResult, removePhotoSlides } from './media/photo-slides';
 import { WorkerLogger } from './logger';
 import fs from 'fs';
 import path from 'path';
@@ -46,6 +47,26 @@ export interface ClaimedJob {
     /** On-screen badge set by the site (e.g. the article's category); replaces ΕΙΔΗΣΗ n/N. */
     badge?: string;
   };
+  /**
+   * Set on TikTok photo slide jobs (#333): a short's hook and script as text on photo
+   * slides, posted as a TikTok photo post with a sound found for the story's mood.
+   */
+  tiktok_slides?: {
+    index: number;
+    count: number;
+    topic?: string;
+    hook?: string;
+    /** Script texts, one per slide (the worker adds the title and closing slides). */
+    slides?: string[];
+    images?: string[];
+    mood?: string;
+    /** Words to search in TikTok's sound picker ('' keeps the sound TikTok adds). */
+    sound_query?: string;
+    /** Most slides in all, title and closing slide included. */
+    max_slides?: number;
+    source?: string;
+    badge?: string;
+  };
   /** Set on YouTube jobs by WordPress: what to upload and how (title, description, playlist...). */
   youtube?: YouTubeUploadMeta;
   /**
@@ -78,6 +99,8 @@ export interface PollerOptions {
   generateVideoFn?: (params: any) => Promise<VideoResult>;
   generateShortFn?: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
   generateEpisodeFn?: (params: GenerateEpisodeOptions) => Promise<EpisodeVideoResult>;
+  /** Renders the slides of a TikTok photo post (tests inject a fake). */
+  generateSlidesFn?: (params: GeneratePhotoSlidesOptions) => Promise<PhotoSlidesResult>;
   /** Uploads a rendered video to YouTube (tests inject a fake). */
   youtubeUploadFn?: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
   /** Uploads a rendered short as a Facebook Reel through the Graph API (tests inject a fake). */
@@ -123,6 +146,7 @@ export class PressHubPoller {
   private readonly generateVideoFn: (params: any) => Promise<VideoResult>;
   private readonly generateShortFn: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
   private readonly generateEpisodeFn: (params: GenerateEpisodeOptions) => Promise<EpisodeVideoResult>;
+  private readonly generateSlidesFn: (params: GeneratePhotoSlidesOptions) => Promise<PhotoSlidesResult>;
   private readonly youtubeUploadFn: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
   private readonly facebookReelUploadFn: (options: FacebookReelOptions) => Promise<FacebookReelResult>;
   private readonly reportTries: number;
@@ -158,6 +182,7 @@ export class PressHubPoller {
     this.generateVideoFn = options.generateVideoFn || generateVideo;
     this.generateShortFn = options.generateShortFn || generateShortVideo;
     this.generateEpisodeFn = options.generateEpisodeFn || generateEpisodeVideo;
+    this.generateSlidesFn = options.generateSlidesFn || generatePhotoSlides;
     this.youtubeUploadFn = options.youtubeUploadFn || uploadToYouTube;
     this.facebookReelUploadFn = options.facebookReelUploadFn || uploadFacebookReel;
     this.reportTries = Math.max(1, options.reportTries ?? 5);
@@ -389,7 +414,8 @@ export class PressHubPoller {
         body: JSON.stringify({
           sessions,
           // This worker can post Facebook Reels through the Graph API, without a browser session.
-          capabilities: ['facebook_reels_api'],
+          // ...and TikTok photo slide posts (#333).
+          capabilities: ['facebook_reels_api', 'tiktok_photo_slides'],
           limit: 5
         })
       });
@@ -516,6 +542,61 @@ export class PressHubPoller {
           let episodeNote: string | undefined;
           let mediaPaths: string[] | undefined;
           let downloadedImages: string[] = [];
+
+          if (platform === 'tiktok' && job.tiktok_slides) {
+            // A photo post: the short's hook and script as text on the slides, no voice.
+            const sl = job.tiktok_slides;
+            const texts = Array.isArray(sl.slides) ? sl.slides.filter((t) => typeof t === 'string' && t.trim() !== '') : [];
+            const images = Array.isArray(sl.images) ? sl.images.filter((u) => typeof u === 'string' && u !== '') : [];
+            WorkerLogger.info(
+              'Poller',
+              `${jobTag} Rendering TikTok photo slides ${sl.index + 1}${Number(sl.count) > 0 ? `/${sl.count}` : ''} (${texts.length} text slide(s), ${images.length} story image(s), sound search: ${sl.sound_query ? `"${sl.sound_query}"` : 'none, TikTok\'s own'})...`
+            );
+            const rendered = await this.generateSlidesFn({
+              hook: String(sl.hook || title),
+              badge: shortBadge(sl),
+              slides: texts,
+              imageUrls: images,
+              siteName: job.site_name || 'PressHub.Cy',
+              endCardLine: siteEndCardLine(this.wpUrl),
+              maxSlides: typeof sl.max_slides === 'number' ? sl.max_slides : undefined,
+              outputDir: this.outputDir
+            });
+            if (rendered.missingImages > 0) {
+              WorkerLogger.warn('Poller', `${jobTag} ${rendered.missingImages} story image(s) could not be downloaded; those slides use the branded background.`);
+            }
+            let slideResult: PostResult;
+            try {
+              slideResult = await this.posterHandler({
+                platform: 'tiktok',
+                copy,
+                mediaPath: rendered.files[0],
+                mediaPaths: rendered.files,
+                photoPost: true,
+                soundQuery: typeof sl.sound_query === 'string' ? sl.sound_query : '',
+                sessionsDir: this.sessionsDir,
+                // The story images are AI-generated: TikTok requires the label.
+                aiGenerated: true
+              });
+            } finally {
+              removePhotoSlides(rendered.dir);
+            }
+            if (slideResult && slideResult.success) {
+              WorkerLogger.info('Poller', `${jobTag} Photo post published: ${slideResult.external_url || slideResult.externalPostUrl || ''}`);
+              await this.reportComplete({
+                job_id: job.id,
+                status: 'published',
+                external_post_id: slideResult.external_id || slideResult.externalPostId || '',
+                external_post_url: slideResult.external_url || slideResult.externalPostUrl || '',
+                ...(slideResult.note ? { metadata: { tiktok_slides_note: slideResult.note } } : {})
+              });
+              succeeded++;
+            } else {
+              await this.reportComplete({ job_id: job.id, status: 'failed', error: slideResult?.error || 'TikTok photo post failed' });
+              failed++;
+            }
+            continue;
+          }
 
           const { imageUrl, audioUrl } = await this.resolveJobMedia(job);
           const isPodcast = Boolean(

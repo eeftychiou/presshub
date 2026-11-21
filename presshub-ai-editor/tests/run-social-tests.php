@@ -514,6 +514,9 @@ require_once $base_dir . '/includes/class-social-queue-admin.php';
 require_once $base_dir . '/includes/class-social-ajax-handlers.php';
 require_once $base_dir . '/includes/class-social-rest-controller.php';
 
+// TikTok Photo Slides are on by default (#333); the suites before theirs count only the shorts.
+update_option( 'presshub_social_tiktok_slides_enabled', false );
+
 // Force queue into in-memory mode for clean unit testing
 PressHub_Social_Queue::$force_memory = true;
 PressHub_Social_Queue::reset_memory_store();
@@ -3783,6 +3786,174 @@ delete_option( 'presshub_social_engine_facebook' );
 delete_option( 'presshub_social_facebook_shorts_enabled' );
 null === $fb_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $fb_saved_platforms );
 null === $fb_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $fb_saved_sessions );
+
+// ----------------------------------------------------------------------
+// Suite: TikTok photo slides (#333)
+// ----------------------------------------------------------------------
+echo "\n--- Suite: TikTok photo slides ---\n";
+
+delete_option( 'presshub_social_tiktok_slides_enabled' );
+delete_option( 'presshub_social_tiktok_slides_words' );
+delete_option( 'presshub_social_tiktok_slides_max' );
+assert_true( PressHub_Social_Settings_Storage::get_tiktok_slides_enabled(), 'TikTok Photo Slides are on by default' );
+assert_equals( 30, PressHub_Social_Settings_Storage::get_tiktok_slides_words(), 'Words per photo slide default to 30' );
+assert_equals( 10, PressHub_Social_Settings_Storage::get_tiktok_slides_max(), 'Most photo slides default to 10' );
+assert_equals( 12, PressHub_Social_Settings_Storage::sanitize_tiktok_slides_words( 2 ), 'Words per slide are clamped to at least 12' );
+assert_equals( 35, PressHub_Social_Settings_Storage::sanitize_tiktok_slides_max( 99 ), 'Photo slides are clamped to TikTok\'s 35' );
+update_option( 'presshub_social_tiktok_slides_enabled', true );
+$_POST = [ 'unrelated_tab' => '1' ];
+assert_true( PressHub_Social_Settings_Storage::sanitize_tiktok_slides_enabled( null ), 'sanitize_tiktok_slides_enabled keeps the stored value when the box is on another tab' );
+$_POST = [];
+delete_option( 'presshub_social_prompt_tiktok_slides_sounds' );
+assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_slides_sounds(), 'neutral:' ), 'Sound searches are seeded from the asset file' );
+assert_equals( 'emotional piano', PressHub_Social_TikTok_Shorts::sound_query( 'serious' ), 'sound_query gives the search words of the mood' );
+assert_equals( '', PressHub_Social_TikTok_Shorts::sound_query( 'unknown' ), 'A mood without a line keeps TikTok\'s own sound' );
+
+// Slide texts: speaker tags removed, whole sentences, every word kept.
+$sl_script = "[SPEAKER_1]: Πρώτη πρόταση εδώ. Δεύτερη πρόταση με λίγες ακόμα λέξεις;\n[SPEAKER_2]: Τρίτη πρόταση! Τέταρτη και τελευταία πρόταση.";
+$sl_texts  = PressHub_Social_TikTok_Shorts::slide_texts( $sl_script, 7, 8 );
+assert_true( count( $sl_texts ) >= 2, 'slide_texts cuts the script into several slides' );
+assert_false( (bool) preg_match( '/SPEAKER/u', implode( ' ', $sl_texts ) ), 'slide_texts drops the speaker tags' );
+assert_equals( 'Πρώτη πρόταση εδώ.', $sl_texts[0], 'A slide ends on a whole sentence' );
+$sl_words = fn( $t ) => count( preg_split( '/\s+/u', trim( $t ), -1, PREG_SPLIT_NO_EMPTY ) );
+assert_equals( $sl_words( 'Πρώτη πρόταση εδώ. Δεύτερη πρόταση με λίγες ακόμα λέξεις; Τρίτη πρόταση! Τέταρτη και τελευταία πρόταση.' ), array_sum( array_map( $sl_words, $sl_texts ) ), 'slide_texts keeps every word' );
+$sl_long = '[SPEAKER_1]: ' . implode( ' ', array_fill( 0, 120, 'λέξη' ) ) . '.';
+$sl_fit  = PressHub_Social_TikTok_Shorts::slide_texts( $sl_long, 12, 4 );
+assert_equals( 4, count( $sl_fit ), 'A long script fits the most slides allowed' );
+assert_equals( 120, array_sum( array_map( $sl_words, $sl_fit ) ), 'The fitted slides still hold every word' );
+assert_equals( [], PressHub_Social_TikTok_Shorts::slide_texts( '[SPEAKER_1]:   ', 30, 8 ), 'An empty script gives no slides' );
+
+// Queueing: one slide job per short, halfway between two shorts.
+$sl_post_id = 913;
+$GLOBALS['mock_posts'][ $sl_post_id ] = (object) [
+    'ID'           => $sl_post_id,
+    'post_title'   => 'Daily Briefing Podcast Slides Test',
+    'post_content' => 'Podcast body',
+    'post_status'  => 'publish',
+    'post_type'    => 'post',
+];
+update_post_meta( $sl_post_id, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $sl_post_id, '_presshub_podcast_script', '[SPEAKER_1]: Welcome to the news.' );
+PressHub_Social_Queue::reset_memory_store();
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_post_id, 'api', time() ), 'No photo slides on the TikTok API engine' );
+$sl_start = time() + 300;
+$sl_ids   = PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_post_id, 'automation', $sl_start );
+$sl_count = PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
+assert_equals( $sl_count, count( $sl_ids ), 'A podcast gets one photo slide job per short' );
+$sl_first = PressHub_Social_Queue::get_job( $sl_ids[0] );
+$sl_gap   = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+assert_true( PressHub_Social_TikTok_Shorts::is_slides_job( $sl_first ), 'The queued job is a photo slide job' );
+assert_true( PressHub_Social_TikTok_Shorts::is_short_job( $sl_first ), 'A photo slide job is prepared like a short' );
+assert_equals( 'tiktok', $sl_first['platform'], 'Photo slides go to TikTok' );
+assert_equals( gmdate( 'Y-m-d H:i:s', $sl_start + (int) floor( $sl_gap / 2 ) ), (string) $sl_first['scheduled_at'], 'The first photo post goes out halfway to the second short' );
+assert_false( PressHub_Social_TikTok_Shorts::has_classic_fallback( $sl_first ), 'Photo slides never fall back to a classic post' );
+assert_false( PressHub_Social_TikTok_Shorts::is_ready( $sl_first ), 'An unprepared slide job is not ready' );
+
+// Through the dispatcher with TikTok video shorts on: the shorts and the slides are both queued.
+$sl_saved_platforms = get_option( 'presshub_social_enabled_platforms', null );
+$sl_saved_sessions  = get_option( 'presshub_social_worker_sessions', null );
+update_option( 'presshub_social_enabled_platforms', [ 'tiktok' ] );
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true ] );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+PressHub_Social_Queue::reset_memory_store();
+$sl_all    = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $sl_post_id, [ 'tiktok' ] ) );
+$sl_slides = array_values( array_filter( $sl_all, [ 'PressHub_Social_TikTok_Shorts', 'is_slides_job' ] ) );
+$sl_videos = array_values( array_filter( $sl_all, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_slides_job( $j ) ) );
+assert_equals( $sl_count, count( $sl_slides ), 'The dispatcher queues the photo slides' );
+assert_equals( $sl_count, count( $sl_videos ), 'The video shorts are queued as before' );
+
+// Preparation: shared plan and images, no speech for the slide jobs.
+$sl_synth = 0;
+$sl_imgs  = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => json_encode( [ 'shorts' => [
+    [ 'topic' => 'One', 'hook' => 'Hook one', 'script' => '[SPEAKER_1]: First sentence of story one. Second sentence.', 'caption' => 'Caption one #news', 'mood' => 'serious', 'visuals' => [ 'Scene one' ] ],
+    [ 'topic' => 'Two', 'hook' => 'Hook two', 'script' => '[SPEAKER_1]: Story two.', 'caption' => 'Caption two #news', 'mood' => 'neutral', 'visuals' => [ 'Scene two' ] ],
+    [ 'topic' => 'Three', 'hook' => 'Hook three', 'script' => '[SPEAKER_1]: Story three.', 'caption' => 'Caption three #news', 'mood' => 'neutral', 'visuals' => [ 'Scene three' ] ],
+] ] ) );
+PressHub_Social_TikTok_Shorts::set_synthesizer( function( $short, $job ) use ( &$sl_synth ) {
+    $sl_synth++;
+    return [ 'url' => 'https://example.com/sl-audio-' . $sl_synth . '.mp3', 'id' => 300 + $sl_synth, 'segments' => [ [ 'speaker' => 'SPEAKER_1', 'text' => 'Line', 'start' => 0.0, 'end' => 2.0 ] ] ];
+} );
+PressHub_Social_TikTok_Shorts::set_image_generator( function( $prompt, $pid, $short ) use ( &$sl_imgs ) {
+    $sl_imgs++;
+    return [ 'url' => 'https://example.com/sl-img-' . $sl_imgs . '.png', 'id' => 400 + $sl_imgs ];
+} );
+PressHub_Social_TikTok_Shorts::prepare_post( $sl_post_id );
+assert_equals( $sl_count, $sl_synth, 'Only the video shorts are voiced' );
+assert_equals( $sl_count, $sl_imgs, 'The slides share the shorts\' story images' );
+$sl_ready = array_values( array_filter( PressHub_Social_Queue::get_jobs_for_post( $sl_post_id ), [ 'PressHub_Social_TikTok_Shorts', 'is_slides_job' ] ) );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( $sl_ready[0] ), 'A prepared slide job is ready without audio' );
+$sl_meta = json_decode( (string) $sl_ready[0]['metadata'], true )['tiktok_short'] ?? [];
+assert_false( isset( $sl_meta['audio'] ), 'A slide job stores no audio' );
+
+// Claim: only a worker with the capability; the payload has tiktok_slides and no audio.
+foreach ( PressHub_Social_Queue::get_jobs_for_post( $sl_post_id ) as $sl_j ) {
+    PressHub_Social_Queue::update_job( (int) $sl_j['id'], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+}
+update_post_meta( $sl_post_id, '_presshub_audio_url', 'https://example.com/full-podcast.mp3' );
+$sl_req = new WP_REST_Request( 'POST', '/worker/claim' );
+$sl_req->set_param( 'sessions', [ 'tiktok' => true ] );
+$sl_req->set_param( 'limit', 10 );
+$sl_claim_old = PressHub_Social_REST_Controller::handle_claim( $sl_req )['jobs'];
+assert_equals( 0, count( array_filter( $sl_claim_old, fn( $j ) => ! empty( $j['tiktok_slides'] ) || PressHub_Social_TikTok_Shorts::is_slides_job( $j ) ) ), 'A worker without the photo slides capability gets no slide job' );
+$sl_waiting = PressHub_Social_Queue::get_job( (int) $sl_ready[0]['id'] );
+assert_equals( 'pending', $sl_waiting['status'] ?? '', 'The slide job waits in the queue' );
+assert_true( str_starts_with( (string) ( $sl_waiting['last_error'] ?? '' ), 'Waiting for a worker' ), 'The waiting slide job says what it waits for' );
+$sl_req->set_param( 'capabilities', [ PressHub_Social_TikTok_Shorts::SLIDES_CAPABILITY ] );
+$sl_claim = array_values( array_filter( PressHub_Social_REST_Controller::handle_claim( $sl_req )['jobs'], fn( $j ) => ! empty( $j['tiktok_slides'] ) ) );
+assert_true( count( $sl_claim ) >= 1, 'A worker with the capability gets the slide jobs' );
+$sl_payload = $sl_claim[0];
+assert_true( empty( $sl_payload['audio_url'] ), 'A slide job carries no audio, not even the podcast\'s' );
+assert_false( isset( $sl_payload['tiktok_short'] ), 'A slide job is not handed out as a video short' );
+assert_equals( 'Hook one', $sl_payload['tiktok_slides']['hook'] ?? '', 'The slides carry the short\'s hook' );
+assert_equals( [ 'First sentence of story one. Second sentence.' ], $sl_payload['tiktok_slides']['slides'] ?? [], 'The slides carry the script as text' );
+assert_equals( 'emotional piano', $sl_payload['tiktok_slides']['sound_query'] ?? '', 'The slides carry the sound search of their mood' );
+assert_equals( 1, count( array_filter( (array) ( $sl_payload['tiktok_slides']['images'] ?? [] ), fn( $u ) => (bool) preg_match( '#^https://example\.com/sl-img-\d\.png$#', (string) $u ) ) ), 'The slides carry the story image' );
+assert_equals( 'Caption one #news', $sl_payload['post_copy'] ?? '', 'The placeholder becomes the short\'s caption' );
+assert_equals( '', (string) ( PressHub_Social_Queue::get_job( (int) $sl_payload['id'] )['last_error'] ?? '' ), 'The waiting note is cleared once handed out' );
+
+// An article's slides post its TikTok caption, like its video short, from one AI call (#333 review).
+$sl_art_id = 914;
+$GLOBALS['POSTS_STORE'][ $sl_art_id ] = [ 'ID' => $sl_art_id, 'post_title' => 'Άρθρο για φωτογραφίες', 'post_content' => '<p>Ένα άρθρο με αρκετό κείμενο για τις φωτογραφίες του TikTok.</p>', 'post_excerpt' => '', 'post_status' => 'publish' ];
+$GLOBALS['test_posts'][ $sl_art_id ]  = new WP_Post( $GLOBALS['POSTS_STORE'][ $sl_art_id ] );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+$sl_copy_calls = 0;
+PressHub_Social_AI_Copywriter::set_ai_caller( function() use ( &$sl_copy_calls ) {
+    $sl_copy_calls++;
+    return 'Λεζάντα άρθρου για TikTok #slides';
+} );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_jobs   = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $sl_art_id, [ 'tiktok' ] ) );
+$sl_art_slides = array_values( array_filter( $sl_art_jobs, [ 'PressHub_Social_TikTok_Shorts', 'is_slides_job' ] ) );
+$sl_art_videos = array_values( array_filter( $sl_art_jobs, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_slides_job( $j ) ) );
+assert_equals( 1, count( $sl_art_slides ), 'An article gets one photo slide job' );
+assert_equals( 'Λεζάντα άρθρου για TikTok #slides', $sl_art_slides[0]['post_copy'] ?? '', 'An article\'s slides post the TikTok caption prompt\'s copy' );
+assert_equals( 'Λεζάντα άρθρου για TikTok #slides', $sl_art_videos[0]['post_copy'] ?? '', 'The article\'s video short posts the same caption' );
+assert_equals( 1, $sl_copy_calls, 'The article\'s slides and video short share one caption call' );
+update_post_meta( $sl_art_id, '_presshub_social_copy_tiktok', 'Δική μου λεζάντα' );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_own = PressHub_Social_Queue::get_job( PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_art_id, 'automation', time() )[0] );
+assert_equals( 'Δική μου λεζάντα', $sl_art_own['post_copy'] ?? '', 'An article\'s slides post the editor\'s own TikTok text' );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => '' );
+update_post_meta( $sl_art_id, '_presshub_social_copy_tiktok', '' );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_fail = PressHub_Social_Queue::get_job( PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_art_id, 'automation', time() )[0] );
+assert_true( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) ( $sl_art_fail['post_copy'] ?? '' ) ), 'Without a caption the article\'s slides keep the placeholder for the plan\'s caption' );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+delete_post_meta( $sl_art_id, '_presshub_social_copy_tiktok' );
+unset( $GLOBALS['POSTS_STORE'][ $sl_art_id ], $GLOBALS['test_posts'][ $sl_art_id ] );
+
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+PressHub_Social_TikTok_Shorts::set_synthesizer( null );
+PressHub_Social_TikTok_Shorts::set_image_generator( null );
+PressHub_Social_Queue::reset_memory_store();
+delete_post_meta( $sl_post_id, '_presshub_audio_url' );
+delete_option( 'presshub_social_tiktok_shorts_enabled' );
+delete_option( 'presshub_social_engine_tiktok' );
+update_option( 'presshub_social_tiktok_slides_enabled', false );
+null === $sl_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $sl_saved_platforms );
+null === $sl_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $sl_saved_sessions );
 
 // Verify wait_for_instagram_container handles IN_PROGRESS -> FINISHED, ERROR, and timeout
 $poll_calls = 0;

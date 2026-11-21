@@ -188,7 +188,7 @@ describe('Poller with Facebook Reels through the API', () => {
   test('the claim says the worker can post Reels through the API', async () => {
     const { poller, claims } = makePoller(reelJob(70, 'api'));
     await poller.pollOnce();
-    expect(claims[0].capabilities).toEqual(['facebook_reels_api']);
+    expect(claims[0].capabilities).toEqual(['facebook_reels_api', 'tiktok_photo_slides']);
   });
 
   test('mode api uploads through the Graph API, never the browser, and removes the video', async () => {

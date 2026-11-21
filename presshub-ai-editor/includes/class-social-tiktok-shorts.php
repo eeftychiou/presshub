@@ -56,6 +56,14 @@
  * and YouTube shorts are extra posts (`EXTRA_PLATFORMS`): Facebook keeps its usual link
  * post, so a failed short there fails instead of falling back to a normal post.
  *
+ * TikTok photo slides (#333, `presshub_social_tiktok_slides_enabled`, default on): each
+ * short also becomes a TikTok photo post (`metadata.tiktok_short.format = slides`, queued by
+ * build_slides_jobs() halfway between two shorts). It shares the short's plan and story
+ * images (no extra AI call) and has no voice: the claim hands the worker `tiktok_slides`
+ * with the hook, the script cut into slide texts (slide_texts()), the images and a sound
+ * search for the story's mood (sound_query()). Only a worker that announces the
+ * `tiktok_photo_slides` capability gets these jobs. Slides never fall back to a classic post.
+ *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
  *
@@ -84,6 +92,15 @@ class PressHub_Social_TikTok_Shorts {
 
     /** Most characters of article text sent to the article short prompt. */
     public const ARTICLE_TEXT_MAX_CHARS = 15000;
+
+    /**
+     * `metadata.tiktok_short.format` of a TikTok photo slide post (#333): the short's plan
+     * and story images, with its hook and script as text on the slides and no voice.
+     */
+    public const FORMAT_SLIDES = 'slides';
+
+    /** Capability a worker announces at claim time when it can post photo slides. */
+    public const SLIDES_CAPABILITY = 'tiktok_photo_slides';
 
     /** Prefix of the placeholder copy set at enqueue time. */
     public const PLACEHOLDER_PREFIX = '[TikTok short ';
@@ -459,7 +476,144 @@ class PressHub_Social_TikTok_Shorts {
 
     /** Whether a failed article short of this job may become the platform's classic post. */
     public static function has_classic_fallback( array $job ): bool {
-        return ! in_array( (string) ( $job['platform'] ?? '' ), self::EXTRA_PLATFORMS, true );
+        // Photo slides are an extra TikTok post: the classic post is the short's (or none).
+        return ! in_array( (string) ( $job['platform'] ?? '' ), self::EXTRA_PLATFORMS, true ) && ! self::is_slides_job( $job );
+    }
+
+    /** Whether a job is a TikTok photo slide post (#333) rather than a video short. */
+    public static function is_slides_job( array $job ): bool {
+        if ( 'tiktok' !== ( $job['platform'] ?? '' ) || ! self::is_short_job( $job ) ) {
+            return false;
+        }
+        return self::FORMAT_SLIDES === ( self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ]['format'] ?? '' );
+    }
+
+    /**
+     * Whether a post gets TikTok photo slides: the switch is on, the post has shorts
+     * material (a podcast, or an article with Article Shorts on and its prompt set), and
+     * TikTok goes through the worker (automation engine, Pull Mode).
+     *
+     * @param bool $log Whether to log the warning when the engine or worker mode rules them out.
+     */
+    public static function slides_wanted( int $post_id, string $engine, bool $log = true ): bool {
+        if ( ! PressHub_Social_Settings_Storage::get_tiktok_slides_enabled() ) {
+            return false;
+        }
+        $source = self::source_type( $post_id );
+        if ( '' === $source ) {
+            return false;
+        }
+        if ( self::SOURCE_ARTICLE === $source && ( ! PressHub_Social_Settings_Storage::get_tiktok_article_shorts_enabled() || '' === PressHub_Social_Settings_Storage::get_tiktok_article_short_prompt() ) ) {
+            return false;
+        }
+        if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() || 'automation' !== $engine ) {
+            if ( ! $log ) {
+                return false;
+            }
+            PressHub_Social_Logger::warning( sprintf(
+                'TikTok Photo Slides are on but post #%d gets none: they need Pull Mode and the TikTok automation engine (engine: %s, worker mode: %s).',
+                $post_id,
+                $engine,
+                PressHub_Social_Settings_Storage::get_worker_mode()
+            ) );
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * The photo slide jobs of a post: one per short (Shorts per Podcast for a podcast, one
+     * for an article), each halfway between two shorts so the TikTok posts alternate.
+     * Their text is the plan's caption, filled in at claim time.
+     *
+     * @param int         $start_time Unix time of the post's first TikTok short (or TikTok post).
+     * @param string|null $copy       Post text of an article's slides (its usual TikTok caption);
+     *                                null or '' uses the placeholder, filled with the plan's caption.
+     * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().
+     */
+    public static function build_slides_jobs( int $post_id, int $start_time, ?string $copy = null ): array {
+        $article = self::SOURCE_ARTICLE === self::source_type( $post_id );
+        $count   = $article ? 1 : PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
+        $spacing = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+        $offset  = (int) floor( $spacing / 2 );
+        $jobs    = [];
+        for ( $i = 0; $i < $count; $i++ ) {
+            $meta = [ 'index' => $i, 'count' => $count, 'format' => self::FORMAT_SLIDES ];
+            if ( $article ) {
+                $meta['source'] = self::SOURCE_ARTICLE;
+            }
+            $jobs[] = [
+                'post_id'      => $post_id,
+                'platform'     => 'tiktok',
+                'engine'       => 'automation',
+                'post_copy'    => ( $article && null !== $copy && '' !== trim( $copy ) ) ? $copy : self::placeholder_copy( $i, $count ),
+                'media_url'    => null,
+                'media_type'   => null,
+                'scheduled_at' => gmdate( 'Y-m-d H:i:s', $start_time + $offset + ( $i * $spacing ) ),
+                'status'       => 'pending',
+                'metadata'     => [ self::JOB_META_KEY => $meta ],
+            ];
+        }
+        return $jobs;
+    }
+
+    /**
+     * The script of a short cut into slide texts: speaker tags removed, whole sentences
+     * grouped to about $words words each. When that makes more than $max slides, each
+     * slide takes more words so the whole script still fits; a sentence much longer than
+     * a slide is cut between words.
+     *
+     * @return string[]
+     */
+    public static function slide_texts( string $script, int $words, int $max ): array {
+        $text = (string) preg_replace( '/\[\s*SPEAKER_[12]\s*\]\s*:/iu', ' ', $script );
+        $text = trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+        if ( '' === $text ) {
+            return [];
+        }
+        $max   = max( 1, $max );
+        $total = count( preg_split( '/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY ) ?: [] );
+        $words = max( 1, $words, (int) ceil( $total / $max ) );
+        // Greek uses ";" as its question mark.
+        $sentences = preg_split( '/(?<=[.!?;…])\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY ) ?: [ $text ];
+
+        $pieces = [];
+        foreach ( $sentences as $sentence ) {
+            $sw = preg_split( '/\s+/u', trim( $sentence ), -1, PREG_SPLIT_NO_EMPTY ) ?: [];
+            if ( count( $sw ) > (int) ceil( $words * 1.5 ) ) {
+                foreach ( array_chunk( $sw, $words ) as $chunk ) {
+                    $pieces[] = $chunk;
+                }
+            } else {
+                $pieces[] = $sw;
+            }
+        }
+
+        $slides  = [];
+        $current = [];
+        foreach ( $pieces as $piece ) {
+            if ( ! empty( $current ) && count( $current ) + count( $piece ) > $words ) {
+                $slides[] = implode( ' ', $current );
+                $current  = [];
+            }
+            $current = array_merge( $current, $piece );
+        }
+        if ( ! empty( $current ) ) {
+            $slides[] = implode( ' ', $current );
+        }
+        if ( count( $slides ) > $max ) {
+            // Whole sentences can still leave one slide too many: join the overflow onto the last.
+            $head   = array_slice( $slides, 0, $max - 1 );
+            $head[] = implode( ' ', array_slice( $slides, $max - 1 ) );
+            $slides = $head;
+        }
+        return $slides;
+    }
+
+    /** TikTok sound search words for a story's mood, or '' to keep TikTok's own sound. */
+    public static function sound_query( string $mood ): string {
+        $lines = PressHub_Social_TikTok_Music::parse_prompts( PressHub_Social_Settings_Storage::get_tiktok_slides_sounds(), true );
+        return mb_substr( trim( (string) ( $lines[ strtolower( trim( $mood ) ) ] ?? '' ) ), 0, 80 );
     }
 
     public static function is_short_job( array $job ): bool {
@@ -477,6 +631,13 @@ class PressHub_Social_TikTok_Shorts {
      */
     public static function is_ready( array $job ): bool {
         $short = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? null;
+        if ( is_array( $short ) && self::FORMAT_SLIDES === ( $short['format'] ?? '' ) ) {
+            // Photo slides have no voice: the script, hook, caption and images are enough.
+            return '' !== trim( (string) ( $short['script'] ?? '' ) )
+                && is_array( $short['images'] ?? null )
+                && '' !== trim( (string) ( $short['hook'] ?? '' ) )
+                && '' !== trim( (string) ( $short['caption'] ?? '' ) );
+        }
         return is_array( $short )
             && ! empty( $short['audio']['audio_url'] )
             && ! empty( $short['audio']['segments'] )
@@ -519,6 +680,10 @@ class PressHub_Social_TikTok_Shorts {
             }
         }
 
+        if ( self::FORMAT_SLIDES === ( $short['format'] ?? '' ) ) {
+            return self::attach_slides( $job, $short, $copy );
+        }
+
         $job['post_copy']    = $copy;
         $job['test_render']  = ! empty( $short['test'] );
         $job['audio_url']    = (string) $short['audio']['audio_url'];
@@ -537,6 +702,36 @@ class PressHub_Social_TikTok_Shorts {
             $job['tiktok_short']['badge']  = self::article_badge( (int) ( $job['post_id'] ?? 0 ) );
         }
         $job['tiktok_short'] = array_merge( $job['tiktok_short'], self::music_for( $short, $job_id ) );
+        return $job;
+    }
+
+    /**
+     * The claim payload of a photo slide job: `tiktok_slides` with the slide texts, story
+     * images, title, badge and sound search, and no audio (the worker posts the slides as
+     * a TikTok photo post). The job never carries `tiktok_short`, so it is not a video.
+     */
+    private static function attach_slides( array $job, array $short, string $copy ): array {
+        $max    = PressHub_Social_Settings_Storage::get_tiktok_slides_max();
+        // The worker adds the title slide and the closing slide.
+        $texts  = self::slide_texts( (string) $short['script'], PressHub_Social_Settings_Storage::get_tiktok_slides_words(), max( 1, $max - 2 ) );
+        $mood   = (string) ( $short['mood'] ?? '' );
+        $slides = [
+            'index'       => (int) $short['index'],
+            'count'       => (int) ( $short['total'] ?? $short['count'] ?? 0 ),
+            'topic'       => (string) ( $short['topic'] ?? '' ),
+            'hook'        => (string) $short['hook'],
+            'slides'      => $texts,
+            'images'      => array_values( array_filter( array_map( fn( $img ) => is_array( $img ) ? (string) ( $img['url'] ?? '' ) : '', (array) ( $short['images'] ?? [] ) ) ) ),
+            'mood'        => $mood,
+            'sound_query' => self::sound_query( $mood ),
+            'max_slides'  => $max,
+        ];
+        if ( self::SOURCE_ARTICLE === ( $short['source'] ?? '' ) ) {
+            $slides['source'] = self::SOURCE_ARTICLE;
+            $slides['badge']  = self::article_badge( (int) ( $job['post_id'] ?? 0 ) );
+        }
+        $job['post_copy']     = $copy;
+        $job['tiktok_slides'] = $slides;
         return $job;
     }
 
@@ -693,8 +888,11 @@ class PressHub_Social_TikTok_Shorts {
                 continue;
             }
 
+            $slides_job          = self::FORMAT_SLIDES === ( $metadata[ self::JOB_META_KEY ]['format'] ?? '' );
             $expected_audio_hash = self::audio_hash( $short['script'] );
-            if ( isset( $audio_by_index[ $index ] ) && ( $audio_by_index[ $index ]['hash'] ?? '' ) === $expected_audio_hash ) {
+            if ( $slides_job ) {
+                $audio = null; // Photo slides carry the script as text, not as speech.
+            } elseif ( isset( $audio_by_index[ $index ] ) && ( $audio_by_index[ $index ]['hash'] ?? '' ) === $expected_audio_hash ) {
                 $audio = $audio_by_index[ $index ];
             } else {
                 $audio = self::get_audio( $job, $short, $date );
@@ -713,20 +911,25 @@ class PressHub_Social_TikTok_Shorts {
                 $images_by_index[ $index ] = $images;
             }
 
-            $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], [
+            $prepared = [
                 'total'       => count( $plan['shorts'] ),
                 'topic'       => $short['topic'],
                 'hook'        => $short['hook'],
                 'caption'     => $short['caption'],
                 'mood'        => (string) ( $short['mood'] ?? '' ),
-                'audio'       => $audio,
                 'images'      => $images['images'],
                 'images_hash' => $images['hash'],
-            ] );
+            ];
+            if ( $slides_job ) {
+                $prepared['script'] = $short['script'];
+            } else {
+                $prepared['audio'] = $audio;
+            }
+            $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], $prepared );
             PressHub_Social_Queue::update_job( $job_id, [
                 'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
             ] );
-            PressHub_Social_Logger::info( sprintf( 'TikTok short %d/%d prepared for job #%d (post #%d): "%s"', $index + 1, count( $plan['shorts'] ), $job_id, $post_id, $short['hook'] ) );
+            PressHub_Social_Logger::info( sprintf( '%s %d/%d prepared for job #%d (post #%d): "%s"', $slides_job ? 'TikTok photo slides' : 'TikTok short', $index + 1, count( $plan['shorts'] ), $job_id, $post_id, $short['hook'] ) );
         }
 
         self::handle_failures( $post_id, $failures );

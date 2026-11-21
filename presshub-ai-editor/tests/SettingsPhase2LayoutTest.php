@@ -120,8 +120,8 @@ class SettingsPhase2LayoutTest {
                 $failures[] = "{$key} should be on Shorts & Reels.";
             }
         }
-        if ( 6 !== count( $ids( 'presshub_social_shorts_prompts', 'presshub_social_shorts_prompts_sec' ) ) ) {
-            $failures[] = 'All six Shorts prompts should be in the collapsed Shorts prompts block.';
+        if ( 7 !== count( $ids( 'presshub_social_shorts_prompts', 'presshub_social_shorts_prompts_sec' ) ) ) {
+            $failures[] = 'All seven Shorts prompts (with the photo slide sound searches) should be in the collapsed Shorts prompts block.';
         }
         foreach ( PressHub_Settings_Registry::for_page( 'social' ) as $key => $e ) {
             if ( 0 === strpos( $key, 'presshub_social_tiktok_shorts_' ) && 'shorts' !== $e['tab'] ) {
@@ -147,9 +147,19 @@ class SettingsPhase2LayoutTest {
         if ( [] !== $render->shorts_unmet_requirements() ) {
             $failures[] = 'With everything ready, no requirement should be listed.';
         }
-        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_mode' => 'push', 'presshub_social_tiktok_shorts_enabled' => 0, 'presshub_social_instagram_shorts_enabled' => 0, 'presshub_social_tiktok_article_shorts_enabled' => 1 ];
+        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_mode' => 'push', 'presshub_social_tiktok_shorts_enabled' => 0, 'presshub_social_instagram_shorts_enabled' => 0, 'presshub_social_tiktok_article_shorts_enabled' => 1, 'presshub_social_tiktok_slides_enabled' => 0 ];
         if ( [] !== $render->shorts_unmet_requirements() ) {
-            $failures[] = 'With Shorts and Reels off, no notice.';
+            $failures[] = 'With Shorts, Reels and photo slides off, no notice.';
+        }
+        // Photo slides alone (on by default) still need Pull mode and the TikTok automation engine (#333 review).
+        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_mode' => 'push', 'presshub_social_engine_tiktok' => 'api', 'presshub_social_enabled_platforms' => [ 'tiktok' ] ];
+        $slide_issues = $render->shorts_unmet_requirements();
+        if ( 2 !== count( $slide_issues ) || false === strpos( $slide_issues[1]['text'] ?? '', 'photo slides' ) ) {
+            $failures[] = 'Photo slides alone should list Push mode and the TikTok engine; got ' . count( $slide_issues );
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_social_enabled_platforms'] = [ 'facebook' ];
+        if ( [] !== $render->shorts_unmet_requirements() ) {
+            $failures[] = 'Photo slides should not raise a notice when TikTok is not posted to.';
         }
 
         // 5. Search index.
