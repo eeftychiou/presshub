@@ -1177,7 +1177,7 @@ export async function pickTikTokSound(page: Page, query: string): Promise<TikTok
 export const TIKTOK_STUDIO_CONTENT_URL = 'https://www.tiktok.com/tiktokstudio/content';
 
 export interface TikTokResolvedUrl {
-  kind: 'video' | 'profile' | 'studio';
+  kind: 'video' | 'photo' | 'profile' | 'studio';
   url: string;
   videoId?: string;
 }
@@ -1210,7 +1210,7 @@ export function parseTikTokProfileHref(href: string): string | null {
 export async function resolveTikTokPostUrl(page: Page, caption: string, waitMs: number = 12000): Promise<TikTokResolvedUrl> {
   const fromPage = parseTikTokVideoHref(page.url());
   if (fromPage) {
-    return { kind: 'video', url: tiktokPostUrl(fromPage), videoId: fromPage.videoId };
+    return { kind: fromPage.kind, url: tiktokPostUrl(fromPage), videoId: fromPage.videoId };
   }
 
   const snippet = (caption || '').replace(/\s+/g, ' ').trim().slice(0, 30);
@@ -1257,7 +1257,7 @@ export async function resolveTikTokPostUrl(page: Page, caption: string, waitMs: 
         const match = found.videos.find((v) => v.text.includes(snippet));
         const parsed = match ? parseTikTokVideoHref(match.href) : null;
         if (parsed) {
-          return { kind: 'video', url: tiktokPostUrl(parsed), videoId: parsed.videoId };
+          return { kind: parsed.kind, url: tiktokPostUrl(parsed), videoId: parsed.videoId };
         }
       }
       if (!handle) {

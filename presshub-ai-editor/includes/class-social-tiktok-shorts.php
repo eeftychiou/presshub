@@ -489,8 +489,10 @@ class PressHub_Social_TikTok_Shorts {
      * Whether a post gets TikTok photo slides: the switch is on, the post has shorts
      * material (a podcast, or an article with Article Shorts on and its prompt set), and
      * TikTok goes through the worker (automation engine, Pull Mode).
+     *
+     * @param bool $log Whether to log the warning when the engine or worker mode rules them out.
      */
-    public static function slides_wanted( int $post_id, string $engine ): bool {
+    public static function slides_wanted( int $post_id, string $engine, bool $log = true ): bool {
         if ( ! PressHub_Social_Settings_Storage::get_tiktok_slides_enabled() ) {
             return false;
         }
@@ -502,6 +504,9 @@ class PressHub_Social_TikTok_Shorts {
             return false;
         }
         if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() || 'automation' !== $engine ) {
+            if ( ! $log ) {
+                return false;
+            }
             PressHub_Social_Logger::warning( sprintf(
                 'TikTok Photo Slides are on but post #%d gets none: they need Pull Mode and the TikTok automation engine (engine: %s, worker mode: %s).',
                 $post_id,
@@ -518,10 +523,12 @@ class PressHub_Social_TikTok_Shorts {
      * for an article), each halfway between two shorts so the TikTok posts alternate.
      * Their text is the plan's caption, filled in at claim time.
      *
-     * @param int $start_time Unix time of the post's first TikTok short (or TikTok post).
+     * @param int         $start_time Unix time of the post's first TikTok short (or TikTok post).
+     * @param string|null $copy       Post text of an article's slides (its usual TikTok caption);
+     *                                null or '' uses the placeholder, filled with the plan's caption.
      * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().
      */
-    public static function build_slides_jobs( int $post_id, int $start_time ): array {
+    public static function build_slides_jobs( int $post_id, int $start_time, ?string $copy = null ): array {
         $article = self::SOURCE_ARTICLE === self::source_type( $post_id );
         $count   = $article ? 1 : PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
         $spacing = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
@@ -536,7 +543,7 @@ class PressHub_Social_TikTok_Shorts {
                 'post_id'      => $post_id,
                 'platform'     => 'tiktok',
                 'engine'       => 'automation',
-                'post_copy'    => self::placeholder_copy( $i, $count ),
+                'post_copy'    => ( $article && null !== $copy && '' !== trim( $copy ) ) ? $copy : self::placeholder_copy( $i, $count ),
                 'media_url'    => null,
                 'media_type'   => null,
                 'scheduled_at' => gmdate( 'Y-m-d H:i:s', $start_time + $offset + ( $i * $spacing ) ),

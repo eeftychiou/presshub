@@ -3913,6 +3913,37 @@ assert_equals( 1, count( array_filter( (array) ( $sl_payload['tiktok_slides']['i
 assert_equals( 'Caption one #news', $sl_payload['post_copy'] ?? '', 'The placeholder becomes the short\'s caption' );
 assert_equals( '', (string) ( PressHub_Social_Queue::get_job( (int) $sl_payload['id'] )['last_error'] ?? '' ), 'The waiting note is cleared once handed out' );
 
+// An article's slides post its TikTok caption, like its video short, from one AI call (#333 review).
+$sl_art_id = 914;
+$GLOBALS['POSTS_STORE'][ $sl_art_id ] = [ 'ID' => $sl_art_id, 'post_title' => 'Άρθρο για φωτογραφίες', 'post_content' => '<p>Ένα άρθρο με αρκετό κείμενο για τις φωτογραφίες του TikTok.</p>', 'post_excerpt' => '', 'post_status' => 'publish' ];
+$GLOBALS['test_posts'][ $sl_art_id ]  = new WP_Post( $GLOBALS['POSTS_STORE'][ $sl_art_id ] );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+$sl_copy_calls = 0;
+PressHub_Social_AI_Copywriter::set_ai_caller( function() use ( &$sl_copy_calls ) {
+    $sl_copy_calls++;
+    return 'Λεζάντα άρθρου για TikTok #slides';
+} );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_jobs   = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $sl_art_id, [ 'tiktok' ] ) );
+$sl_art_slides = array_values( array_filter( $sl_art_jobs, [ 'PressHub_Social_TikTok_Shorts', 'is_slides_job' ] ) );
+$sl_art_videos = array_values( array_filter( $sl_art_jobs, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_slides_job( $j ) ) );
+assert_equals( 1, count( $sl_art_slides ), 'An article gets one photo slide job' );
+assert_equals( 'Λεζάντα άρθρου για TikTok #slides', $sl_art_slides[0]['post_copy'] ?? '', 'An article\'s slides post the TikTok caption prompt\'s copy' );
+assert_equals( 'Λεζάντα άρθρου για TikTok #slides', $sl_art_videos[0]['post_copy'] ?? '', 'The article\'s video short posts the same caption' );
+assert_equals( 1, $sl_copy_calls, 'The article\'s slides and video short share one caption call' );
+update_post_meta( $sl_art_id, '_presshub_social_copy_tiktok', 'Δική μου λεζάντα' );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_own = PressHub_Social_Queue::get_job( PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_art_id, 'automation', time() )[0] );
+assert_equals( 'Δική μου λεζάντα', $sl_art_own['post_copy'] ?? '', 'An article\'s slides post the editor\'s own TikTok text' );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => '' );
+update_post_meta( $sl_art_id, '_presshub_social_copy_tiktok', '' );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_fail = PressHub_Social_Queue::get_job( PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_art_id, 'automation', time() )[0] );
+assert_true( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) ( $sl_art_fail['post_copy'] ?? '' ) ), 'Without a caption the article\'s slides keep the placeholder for the plan\'s caption' );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+delete_post_meta( $sl_art_id, '_presshub_social_copy_tiktok' );
+unset( $GLOBALS['POSTS_STORE'][ $sl_art_id ], $GLOBALS['test_posts'][ $sl_art_id ] );
+
 PressHub_Social_TikTok_Shorts::set_ai_caller( null );
 PressHub_Social_TikTok_Shorts::set_synthesizer( null );
 PressHub_Social_TikTok_Shorts::set_image_generator( null );

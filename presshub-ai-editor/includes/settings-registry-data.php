@@ -3997,7 +3997,7 @@ escort
     'rendered' => true,
     'status' => 'active',
     'default' => true,
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled', 'presshub_social_tiktok_slides_enabled' ],
   ],
   'presshub_social_tiktok_shorts_count' => [
     'page' => 'social',
@@ -4013,7 +4013,7 @@ escort
     'status' => 'active',
     'default' => 3,
     'unit' => 'shorts',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled', 'presshub_social_tiktok_slides_enabled' ],
   ],
   'presshub_social_tiktok_slides_words' => [
     'page' => 'social',
@@ -4064,7 +4064,7 @@ escort
     'aliases' => [
       0 => 'Time Between Shorts',
     ],
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled', 'presshub_social_tiktok_slides_enabled' ],
   ],
   'presshub_social_tiktok_shorts_max_words' => [
     'page' => 'social',
@@ -4080,7 +4080,7 @@ escort
     'status' => 'active',
     'default' => 130,
     'unit' => 'words',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled', 'presshub_social_tiktok_slides_enabled' ],
   ],
   'presshub_social_tiktok_shorts_images' => [
     'page' => 'social',
@@ -4096,7 +4096,7 @@ escort
     'status' => 'active',
     'default' => 3,
     'unit' => 'images',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled', 'presshub_social_tiktok_slides_enabled' ],
   ],
   'presshub_social_tiktok_shorts_caption_words' => [
     'page' => 'social',
@@ -4112,7 +4112,7 @@ escort
     'status' => 'active',
     'default' => 120,
     'unit' => 'words',
-    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_facebook_shorts_enabled', 'presshub_social_youtube_shorts_enabled', 'presshub_social_tiktok_slides_enabled' ],
   ],
   'presshub_social_tiktok_shorts_narrators' => [
     'page' => 'social',
@@ -4509,7 +4509,7 @@ escort
     'group' => 'prompts',
     'section' => 'presshub_social_prompts_sec',
     'label' => 'TikTok Shorts: Script Prompt',
-    'help' => 'Used for podcast posts when TikTok Shorts, Instagram Reels or YouTube Shorts are on. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from the Shorts tab: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.',
+    'help' => 'Used for podcast posts when TikTok Shorts, TikTok Photo Slides, Instagram Reels or YouTube Shorts are on. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from the Shorts tab: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.',
     'checkbox' => false,
     'secret' => false,
     'type' => 'string',

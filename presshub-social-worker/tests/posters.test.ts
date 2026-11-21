@@ -442,6 +442,15 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     await page.close();
   });
 
+  test('resolveTikTokPostUrl reports a photo post as a photo (#333)', async () => {
+    const page = await studioPage(`<html><body>
+      <div class="row"><a href="/@presshub.cy/photo/7300000000000000003">open</a><span>Φωτογραφίες της ημέρας #news</span></div>
+    </body></html>`);
+    const res = await resolveTikTokPostUrl(page, 'Φωτογραφίες της ημέρας #news', 3000);
+    expect(res).toEqual({ kind: 'photo', url: 'https://www.tiktok.com/@presshub.cy/photo/7300000000000000003', videoId: '7300000000000000003' });
+    await page.close();
+  });
+
   test('resolveTikTokPostUrl falls back to the profile when no row matches (#191)', async () => {
     const page = await studioPage(`<html><body>
       <a href="/@presshub.cy">Profile</a>

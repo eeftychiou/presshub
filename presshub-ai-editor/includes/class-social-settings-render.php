@@ -380,7 +380,9 @@ class PressHub_Social_Settings_Render {
         $instagram = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
         $facebook  = PressHub_Social_Settings_Storage::get_facebook_shorts_enabled();
         $youtube   = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() || PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
-        if ( ! $tiktok && ! $instagram && ! $facebook && ! $youtube ) {
+        // TikTok photo slides (#333) are on by default, so they count only where TikTok is posted to.
+        $slides = PressHub_Social_Settings_Storage::get_tiktok_slides_enabled() && PressHub_Social_Settings_Storage::is_platform_enabled( 'tiktok' );
+        if ( ! $tiktok && ! $slides && ! $instagram && ! $facebook && ! $youtube ) {
             return [];
         }
         $issues = [];
@@ -391,9 +393,11 @@ class PressHub_Social_Settings_Render {
                 'link' => __( 'Change worker mode', 'presshub-social-autopost' ),
             ];
         }
-        if ( $tiktok && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'tiktok' ) ) {
+        if ( ( $tiktok || $slides ) && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'tiktok' ) ) {
             $issues[] = [
-                'text' => __( 'TikTok shorts need the automation engine, but TikTok uses another engine.', 'presshub-social-autopost' ),
+                'text' => $tiktok
+                    ? __( 'TikTok shorts need the automation engine, but TikTok uses another engine.', 'presshub-social-autopost' )
+                    : __( 'TikTok photo slides need the automation engine, but TikTok uses another engine.', 'presshub-social-autopost' ),
                 'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_tiktok' ),
                 'link' => __( 'Change TikTok engine', 'presshub-social-autopost' ),
             ];
