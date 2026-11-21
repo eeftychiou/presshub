@@ -413,8 +413,8 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
   });
 
   test('parseTikTokVideoHref / parseTikTokProfileHref read handles and video ids (#191)', () => {
-    expect(parseTikTokVideoHref('https://www.tiktok.com/@presshub.cy/video/7312345678901234567')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567' });
-    expect(parseTikTokVideoHref('/@presshub.cy/video/7312345678901234567?is_from_webapp=1')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567' });
+    expect(parseTikTokVideoHref('https://www.tiktok.com/@presshub.cy/video/7312345678901234567')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567', kind: 'video' });
+    expect(parseTikTokVideoHref('/@presshub.cy/video/7312345678901234567?is_from_webapp=1')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567', kind: 'video' });
     expect(parseTikTokVideoHref('https://www.tiktok.com/@creator/video/tt-123')).toBeNull();
     expect(parseTikTokProfileHref('/@presshub.cy')).toBe('presshub.cy');
     expect(parseTikTokProfileHref('https://www.tiktok.com/@presshub.cy?lang=el')).toBe('presshub.cy');
@@ -439,6 +439,15 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     </body></html>`);
     const res = await resolveTikTokPostUrl(page, 'Σήμερα στην Κύπρο: τα νέα της ημέρας #cyprus', 3000);
     expect(res).toEqual({ kind: 'video', url: 'https://www.tiktok.com/@presshub.cy/video/7300000000000000001', videoId: '7300000000000000001' });
+    await page.close();
+  });
+
+  test('resolveTikTokPostUrl reports a photo post as a photo (#333)', async () => {
+    const page = await studioPage(`<html><body>
+      <div class="row"><a href="/@presshub.cy/photo/7300000000000000003">open</a><span>Φωτογραφίες της ημέρας #news</span></div>
+    </body></html>`);
+    const res = await resolveTikTokPostUrl(page, 'Φωτογραφίες της ημέρας #news', 3000);
+    expect(res).toEqual({ kind: 'photo', url: 'https://www.tiktok.com/@presshub.cy/photo/7300000000000000003', videoId: '7300000000000000003' });
     await page.close();
   });
 
