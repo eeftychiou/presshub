@@ -184,6 +184,11 @@ class PressHub_Social_Dispatcher {
                 continue;
             }
 
+            // TikTok photo slides (#333): each short also as a photo post, between the shorts.
+            if ( 'tiktok' === $platform ) {
+                $job_ids = array_merge( $job_ids, self::enqueue_tiktok_slides( $post_id, $engine, $base_time + ( $index * $interval ) ) );
+            }
+
             // Podcast posts can go to TikTok and Instagram as several short videos, one per top story.
             // Their copy is written with the short when the worker claims the job.
             // Articles go there as one short each, with the platform's usual AI caption as its
@@ -296,6 +301,37 @@ class PressHub_Social_Dispatcher {
         }
 
         return $job_ids;
+    }
+
+    /**
+     * Queue a post's TikTok photo slides when TikTok Photo Slides are on: one photo post per
+     * short, each halfway between two shorts. Their text is the short's own caption, so no
+     * AI call is made here.
+     *
+     * @param int $start_time Unix time of the post's first TikTok post.
+     * @return int[] IDs of the queued slide jobs.
+     */
+    public static function enqueue_tiktok_slides( int $post_id, string $engine, int $start_time ): array {
+        if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::slides_wanted( $post_id, $engine ) ) {
+            return [];
+        }
+        if ( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE !== PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
+            PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, 'tiktok' );
+        }
+        $ids = [];
+        foreach ( PressHub_Social_TikTok_Shorts::build_slides_jobs( $post_id, $start_time ) as $slides_job ) {
+            $job_id = PressHub_Social_Queue::enqueue( $slides_job );
+            if ( is_wp_error( $job_id ) ) {
+                PressHub_Social_Logger::error( sprintf( 'Failed to enqueue TikTok photo slides for post #%d: %s', $post_id, $job_id->get_error_message() ) );
+            } elseif ( $job_id > 0 ) {
+                $ids[] = (int) $job_id;
+                PressHub_Social_Logger::info( sprintf( 'Enqueued TikTok photo slides job #%d for post #%d (scheduled: %s)', $job_id, $post_id, $slides_job['scheduled_at'] ) );
+            }
+        }
+        if ( $ids ) {
+            PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );
+        }
+        return $ids;
     }
 
     /**

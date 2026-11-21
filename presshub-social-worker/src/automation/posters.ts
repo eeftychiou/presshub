@@ -30,6 +30,10 @@ export interface PostOptions {
   headless?: boolean;
   /** TikTok: switch on "AI-generated content" (AI voice and images), as TikTok requires. */
   aiGenerated?: boolean;
+  /** TikTok: post mediaPaths as a photo post (carousel) instead of a video (#333). */
+  photoPost?: boolean;
+  /** TikTok photo post: words to search in the sound picker; empty keeps TikTok's own sound. */
+  soundQuery?: string;
   /** Facebook: most milliseconds to wait for a video upload (default FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS). */
   videoUploadTimeoutMs?: number;
 }
@@ -43,6 +47,8 @@ export interface PostResult {
   external_id?: string;
   error?: string;
   mediaPath?: string;
+  /** Something the post went out without (e.g. the sound it should have had), for WordPress. */
+  note?: string;
 }
 
 export type PosterHandler = (options: PostOptions) => Promise<PostResult>;
@@ -1050,6 +1056,121 @@ export async function markTikTokAiGenerated(page: any): Promise<boolean> {
   }
 }
 
+/** TikTok takes up to 35 photos in one photo post. */
+export const TIKTOK_MAX_PHOTO_FILES = 35;
+
+export interface TikTokSoundResult {
+  picked: boolean;
+  /** Name of the sound as the picker shows it, when one was picked. */
+  name?: string;
+  /** Why no sound was picked. */
+  reason?: string;
+}
+
+/** The upload page's tab for photo posts. */
+export const TIKTOK_PHOTOS_TAB_RE = /^(?:photos?|φωτογραφίες)$/i;
+
+/** Visible controls that open TikTok Studio's sound picker on a photo post. */
+export const TIKTOK_SOUND_BUTTON_RE = /^(?:\+\s*)?(?:add sound|sounds?|music|edit sound|change sound|προσθήκη ήχου|ήχοι|ήχος|μουσική)$/i;
+
+/** TikTok Studio's sound picker (the "Sounds" window of the photo post editor). */
+export const TIKTOK_SOUND_PICKER = {
+  modal: '.TUXModal',
+  search: 'input[placeholder="Search sounds"], input[placeholder*="Search sound" i], input[placeholder*="ναζήτηση ήχ" i]',
+  row: '.MusicPanelMusicItem__wrap',
+  title: '.MusicPanelMusicItem__infoBasicTitle',
+  use: '.MusicPanelMusicItem__operation'
+};
+
+/** Whether a sound's title is someone's "original sound" clip rather than a music track. */
+export function isOriginalSound(title: string): boolean {
+  return /^(?:original sound|πρωτότυπος ήχος|αυθεντικός ήχος)\b/i.test((title || '').trim());
+}
+
+/**
+ * Pick a sound for a photo post in the editor's sound picker ("Add sound"): search the
+ * words and use the first result that is a music track (people's "original sound" clips
+ * are skipped). Never throws: on any problem the post keeps the sound TikTok added itself
+ * and the reason is returned.
+ */
+export async function pickTikTokSound(page: Page, query: string): Promise<TikTokSoundResult> {
+  const close = async () => {
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(500);
+  };
+  try {
+    // Not the sidebar's "Royalty-free sounds" link, which leaves the upload page.
+    const opener = page
+      .locator('[data-e2e*="sound" i], [data-e2e*="music" i], button, [role="button"]')
+      .filter({ hasText: TIKTOK_SOUND_BUTTON_RE })
+      .filter({ hasNotText: /royalty-free/i })
+      .first();
+    if ((await opener.count()) === 0) {
+      return { picked: false, reason: 'the "Add sound" button was not found in the photo post editor' };
+    }
+    await opener.click({ timeout: 5000 });
+
+    const modal = page.locator(TIKTOK_SOUND_PICKER.modal).filter({ has: page.locator(TIKTOK_SOUND_PICKER.search) }).first();
+    await modal.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    const search = modal.locator(TIKTOK_SOUND_PICKER.search).first();
+    if ((await search.count()) === 0) {
+      await close();
+      return { picked: false, reason: 'the sound picker has no search box' };
+    }
+    const before = ((await modal.locator(TIKTOK_SOUND_PICKER.title).first().innerText().catch(() => '')) || '').trim();
+    await search.click({ timeout: 5000 });
+    await search.fill('');
+    await search.pressSequentially(query, { delay: 40 });
+    await search.press('Enter').catch(() => {});
+
+    // Wait for the list to change from the "For You" suggestions to the search results.
+    let rows = modal.locator(TIKTOK_SOUND_PICKER.row);
+    for (let i = 0; i < 20; i++) {
+      await page.waitForTimeout(500);
+      const first = ((await modal.locator(TIKTOK_SOUND_PICKER.title).first().innerText().catch(() => '')) || '').trim();
+      if ((await rows.count()) > 0 && first !== '' && first !== before) break;
+    }
+    const count = await rows.count();
+    if (count === 0) {
+      await close();
+      return { picked: false, reason: `no sound found for "${query}"` };
+    }
+    let pick = -1;
+    let name = '';
+    for (let i = 0; i < Math.min(count, 20); i++) {
+      const title = ((await rows.nth(i).locator(TIKTOK_SOUND_PICKER.title).first().innerText().catch(() => '')) || '').trim();
+      if (title !== '' && !isOriginalSound(title)) {
+        pick = i;
+        name = title;
+        break;
+      }
+    }
+    if (pick < 0) {
+      await close();
+      return { picked: false, reason: `only "original sound" clips were found for "${query}"` };
+    }
+    const row = rows.nth(pick);
+    await row.hover().catch(() => {});
+    await page.waitForTimeout(400);
+    await row.locator(TIKTOK_SOUND_PICKER.use).first().click({ timeout: 5000 });
+    await page.waitForTimeout(2000);
+
+    // The editor's Sound field shows the chosen track instead of "Add sound".
+    if (await modal.isVisible().catch(() => false)) {
+      await close();
+    }
+    const stillEmpty = await page.locator('button').filter({ hasText: /^add sound$|^προσθήκη ήχου$/i }).first().isVisible().catch(() => false);
+    if (stillEmpty) {
+      return { picked: false, reason: `"${name}" was chosen but the editor still shows "Add sound"` };
+    }
+    WorkerLogger.info('TikTok Automation', `Picked the sound "${name}" for "${query}".`);
+    return { picked: true, name };
+  } catch (err: any) {
+    await close();
+    return { picked: false, reason: `the sound picker failed (${err?.message || err})` };
+  }
+}
+
 /**
  * TikTok Studio / Creator Center automation poster using saved browser session or running Chrome.
  */
@@ -1061,10 +1182,15 @@ export interface TikTokResolvedUrl {
   videoId?: string;
 }
 
-/** Pull "/@handle/video/123" out of a URL or href. */
-export function parseTikTokVideoHref(href: string): { handle: string; videoId: string } | null {
-  const m = /\/@([A-Za-z0-9._-]+)\/video\/(\d{8,})/.exec(href || '');
-  return m ? { handle: m[1], videoId: m[2] } : null;
+/** Pull "/@handle/video/123" (or a photo post's "/@handle/photo/123") out of a URL or href. */
+export function parseTikTokVideoHref(href: string): { handle: string; videoId: string; kind: 'video' | 'photo' } | null {
+  const m = /\/@([A-Za-z0-9._-]+)\/(video|photo)\/(\d{8,})/.exec(href || '');
+  return m ? { handle: m[1], videoId: m[3], kind: m[2] as 'video' | 'photo' } : null;
+}
+
+/** The public URL of a parsed TikTok post. */
+export function tiktokPostUrl(p: { handle: string; videoId: string; kind?: 'video' | 'photo' }): string {
+  return `https://www.tiktok.com/@${p.handle}/${p.kind === 'photo' ? 'photo' : 'video'}/${p.videoId}`;
 }
 
 /** Pull the account handle out of a profile href like "/@handle" or "https://www.tiktok.com/@handle?lang=el". */
@@ -1084,7 +1210,7 @@ export function parseTikTokProfileHref(href: string): string | null {
 export async function resolveTikTokPostUrl(page: Page, caption: string, waitMs: number = 12000): Promise<TikTokResolvedUrl> {
   const fromPage = parseTikTokVideoHref(page.url());
   if (fromPage) {
-    return { kind: 'video', url: `https://www.tiktok.com/@${fromPage.handle}/video/${fromPage.videoId}`, videoId: fromPage.videoId };
+    return { kind: 'video', url: tiktokPostUrl(fromPage), videoId: fromPage.videoId };
   }
 
   const snippet = (caption || '').replace(/\s+/g, ' ').trim().slice(0, 30);
@@ -1098,12 +1224,12 @@ export async function resolveTikTokPostUrl(page: Page, caption: string, waitMs: 
     const profiles: string[] = [];
     for (const a of anchors) {
       const href = a.getAttribute('href') || '';
-      if (/\/@[^/]+\/video\/\d+/.test(href)) {
+      if (/\/@[^/]+\/(?:video|photo)\/\d+/.test(href)) {
         let el: any = a;
         let text = '';
         // Climb to the largest ancestor (the row) that still holds only this video link.
         for (let i = 0; i < 8 && el; i++) {
-          if (el.querySelectorAll && el.querySelectorAll('a[href*="/video/"]').length > 1) break;
+          if (el.querySelectorAll && el.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]').length > 1) break;
           text = norm(el.innerText || el.textContent || '');
           if (snip && text.includes(snip)) break;
           el = el.parentElement;
@@ -1131,7 +1257,7 @@ export async function resolveTikTokPostUrl(page: Page, caption: string, waitMs: 
         const match = found.videos.find((v) => v.text.includes(snippet));
         const parsed = match ? parseTikTokVideoHref(match.href) : null;
         if (parsed) {
-          return { kind: 'video', url: `https://www.tiktok.com/@${parsed.handle}/video/${parsed.videoId}`, videoId: parsed.videoId };
+          return { kind: 'video', url: tiktokPostUrl(parsed), videoId: parsed.videoId };
         }
       }
       if (!handle) {
@@ -1298,9 +1424,15 @@ export async function typeTikTokCaption(
 }
 
 export async function postTikTok(options: PostOptions): Promise<PostResult> {
-  if (!options.mediaPath || !fs.existsSync(options.mediaPath)) {
+  // A photo post (#333) uploads its slides together; anything else uploads one video.
+  const photos = options.photoPost ? postMediaFiles(options, TIKTOK_MAX_PHOTO_FILES) : [];
+  if (options.photoPost && photos.length === 0) {
+    throw new Error('TikTok photo post requires at least one image file in mediaPaths');
+  }
+  if (!options.photoPost && (!options.mediaPath || !fs.existsSync(options.mediaPath))) {
     throw new Error('TikTok automation requires a valid video file path in mediaPath');
   }
+  let note: string | undefined;
 
   const sessionPath = getSessionPath('tiktok', options.sessionsDir);
   const timeout = options.timeoutMs || 45000;
@@ -1403,13 +1535,35 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     await dismissTikTokOverlays();
 
-    WorkerLogger.debug('TikTok Automation', 'Finding video upload input element...');
-    const uploadInput = page.locator('input[type="file"][accept*="video"], input[type="file"]').first();
-    await uploadInput.waitFor({ state: 'attached', timeout });
+    if (options.photoPost) {
+      // The upload page opens on its Videos tab, whose only input takes one video.
+      const photosTab = page.getByRole('tab', { name: TIKTOK_PHOTOS_TAB_RE }).first();
+      await photosTab.waitFor({ state: 'visible', timeout }).catch(() => {});
+      if ((await photosTab.count()) === 0) {
+        throw new Error('TikTok Studio shows no Photos tab on the upload page, so the photo post cannot be made.');
+      }
+      await photosTab.click();
+      await page.waitForTimeout(2000);
+      await dismissTikTokOverlays();
+      const photoInput = page.locator('input[type="file"][accept*="image"]').first();
+      await photoInput.waitFor({ state: 'attached', timeout });
+      const multiple = await photoInput.evaluate((el: any) => Boolean(el.multiple)).catch(() => false);
+      WorkerLogger.info('TikTok Automation', `Uploading ${photos.length} photo slide(s) as a photo post...`);
+      if (multiple || photos.length === 1) {
+        await photoInput.setInputFiles(photos);
+      } else {
+        throw new Error('TikTok Studio\'s photo upload takes one file at a time; the photo post needs an update of the worker.');
+      }
+    } else {
+      WorkerLogger.debug('TikTok Automation', 'Finding video upload input element...');
+      const uploadInput = page.locator('input[type="file"][accept*="video"], input[type="file"]').first();
+      await uploadInput.waitFor({ state: 'attached', timeout });
 
-    const mediaSize = fs.statSync(options.mediaPath).size;
-    WorkerLogger.info('TikTok Automation', `Uploading video file: ${options.mediaPath} (${mediaSize} bytes)...`);
-    await uploadInput.setInputFiles(path.resolve(options.mediaPath));
+      const mediaPath = options.mediaPath as string;
+      const mediaSize = fs.statSync(mediaPath).size;
+      WorkerLogger.info('TikTok Automation', `Uploading video file: ${mediaPath} (${mediaSize} bytes)...`);
+      await uploadInput.setInputFiles(path.resolve(mediaPath));
+    }
 
     WorkerLogger.debug('TikTok Automation', 'Waiting for upload stream and caption editor to mount...');
     await page.waitForTimeout(4000);
@@ -1440,6 +1594,15 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     }
 
     await dismissTikTokOverlays();
+
+    if (options.photoPost && (options.soundQuery || '').trim() !== '') {
+      const sound = await pickTikTokSound(page, (options.soundQuery || '').trim());
+      if (!sound.picked) {
+        note = `Posted with the sound TikTok chose: ${sound.reason}`;
+        WorkerLogger.warn('TikTok Automation', `${note}.`);
+      }
+      await dismissTikTokOverlays();
+    }
 
     if (options.aiGenerated) {
       await markTikTokAiGenerated(page);
@@ -1696,7 +1859,8 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       externalPostUrl: postUrl,
       external_id: generatedId,
       external_url: postUrl,
-      mediaPath: options.mediaPath
+      mediaPath: options.mediaPath,
+      ...(note ? { note } : {})
     };
   } catch (err: any) {
     await captureAutomationFailure(page, 'TikTok', err);

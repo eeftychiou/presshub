@@ -15,10 +15,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
 | Daily Briefing (`daily-briefing`) | 81 | 0 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 17 | 0 | 0 |
-| Social publishing (`social-publishing`) | 70 | 0 | 0 |
+| Social publishing (`social-publishing`) | 74 | 0 | 0 |
 | Social listening (`social-listening`) | 35 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **310** | | |
+| **Total** | **314** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 34 option(s); both lists are at the end.
 
@@ -237,7 +237,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_fact_checks_budgets` | Fact check context per AI task (characters) | array | characters | ai / knowledge |  |
 
-## Social publishing (`social-publishing`, 70)
+## Social publishing (`social-publishing`, 74)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -269,6 +269,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_tiktok_shorts_enabled` | TikTok Shorts | boolean |  | social / shorts | checkbox |
 | `presshub_social_instagram_shorts_enabled` | Instagram Reels (Shorts) | boolean |  | social / shorts | checkbox |
 | `presshub_social_facebook_shorts_enabled` | Facebook Reels (Shorts) | boolean |  | social / shorts | checkbox |
+| `presshub_social_tiktok_slides_enabled` | TikTok Photo Slides | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_shorts_enabled` | YouTube Shorts | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_podcast_enabled` | YouTube Podcast Episodes | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_episode_enhanced` | Episodes with Story Images and Captions | boolean |  | social / shorts | checkbox, needs `presshub_social_youtube_podcast_enabled` on |
@@ -279,6 +280,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_youtube_category_id` | YouTube Category | integer | category ID | social / shorts |  |
 | `presshub_social_tiktok_article_shorts_enabled` | Article Shorts | boolean |  | social / shorts | checkbox, needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
 | `presshub_social_tiktok_shorts_count` | Shorts per Podcast | integer | shorts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_slides_words` | Words per Photo Slide | integer | words | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
+| `presshub_social_tiktok_slides_max` | Most Photo Slides per Post | integer | slides | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_shorts_spacing_minutes` | Time between shorts (min) | integer | min | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on, was: Time Between Shorts |
 | `presshub_social_tiktok_shorts_max_words` | Short Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
 | `presshub_social_tiktok_shorts_images` | Story Images per Short | integer | images | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
@@ -299,6 +302,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_prompt_tiktok_shorts_image_moods` | TikTok Shorts: Image Styles per Mood | string |  | social / shorts |  |
 | `presshub_social_prompt_tiktok_shorts_tts_style` | TikTok Shorts: Narration Style | string |  | social / shorts |  |
 | `presshub_social_prompt_tiktok_shorts_music` | TikTok Shorts: Music Prompts | string |  | social / shorts |  |
+| `presshub_social_prompt_tiktok_slides_sounds` | TikTok Photo Slides: Sound Searches | string |  | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_prompt_tiktok_article_short` | Article Shorts: Script Prompt | string |  | social / shorts |  |
 | `presshub_social_prompt_tiktok_shorts` | TikTok Shorts: Script Prompt | string |  | social / shorts |  |
 | `presshub_social_prompt_twitter` | X/Twitter Caption Prompt | string |  | social / prompts |  |

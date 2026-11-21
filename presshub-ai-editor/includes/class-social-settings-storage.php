@@ -281,6 +281,32 @@ class PressHub_Social_Settings_Storage {
             'default'           => false,
         ] );
 
+        // TikTok photo slides (#333): each short also as a TikTok photo post, its script as text.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_slides_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_slides_enabled' ],
+            'default'           => true,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_slides_words', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_slides_words' ],
+            'default'           => self::DEFAULT_TIKTOK_SLIDES_WORDS,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_slides_max', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_slides_max' ],
+            'default'           => self::DEFAULT_TIKTOK_SLIDES_MAX,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_slides_sounds', [
+            'type'              => 'string',
+            'sanitize_callback' => function ( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_slides_sounds' );
+            },
+        ] );
+
         // YouTube: the same shorts as YouTube Shorts, and podcast episodes in a playlist.
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_shorts_enabled', [
             'type'              => 'boolean',
@@ -652,6 +678,14 @@ class PressHub_Social_Settings_Storage {
             }
         }
 
+        if ( false === get_option( 'presshub_social_prompt_tiktok_slides_sounds', false ) ) {
+            try {
+                update_option( 'presshub_social_prompt_tiktok_slides_sounds', PressHub_Social_Prompt_Loader::load( 'social_tiktok_slides_sounds.txt' ) );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to seed TikTok photo slide sound searches: ' . $e->getMessage() );
+            }
+        }
+
         $secret = get_option( 'presshub_social_worker_secret', '' );
         if ( '' === trim( (string) $secret ) ) {
             $generated = function_exists( 'wp_generate_password' )
@@ -797,6 +831,7 @@ class PressHub_Social_Settings_Storage {
         update_option( 'presshub_social_prompt_post_image_style', PressHub_Social_Prompt_Loader::load( 'social_post_image_style.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_music', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_music.txt' ) );
+        update_option( 'presshub_social_prompt_tiktok_slides_sounds', PressHub_Social_Prompt_Loader::load( 'social_tiktok_slides_sounds.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_moods', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_moods.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_tts_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_tts_style.txt' ) );
     }
@@ -1308,6 +1343,60 @@ class PressHub_Social_Settings_Storage {
             return self::get_facebook_shorts_enabled();
         }
         return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Default words of the script on one photo slide. */
+    public const DEFAULT_TIKTOK_SLIDES_WORDS = 30;
+
+    /** Default most slides in one TikTok photo post (TikTok takes up to 35). */
+    public const DEFAULT_TIKTOK_SLIDES_MAX = 10;
+
+    /** Whether each short is also posted to TikTok as a photo post with its script as text (default on). */
+    public static function get_tiktok_slides_enabled(): bool {
+        return in_array( get_option( 'presshub_social_tiktok_slides_enabled', true ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_tiktok_slides_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_tiktok_slides_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_tiktok_slides_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Words of the script on one photo slide (12-60, default 30). */
+    public static function get_tiktok_slides_words(): int {
+        return self::sanitize_tiktok_slides_words( get_option( 'presshub_social_tiktok_slides_words', self::DEFAULT_TIKTOK_SLIDES_WORDS ) );
+    }
+
+    public static function sanitize_tiktok_slides_words( $value ): int {
+        return max( 12, min( 60, (int) $value ) );
+    }
+
+    /** Most slides in one photo post, the title and closing slides included (3-35, default 10). */
+    public static function get_tiktok_slides_max(): int {
+        return self::sanitize_tiktok_slides_max( get_option( 'presshub_social_tiktok_slides_max', self::DEFAULT_TIKTOK_SLIDES_MAX ) );
+    }
+
+    public static function sanitize_tiktok_slides_max( $value ): int {
+        return max( 3, min( 35, (int) $value ) );
+    }
+
+    /**
+     * Sound searches for photo slides, one line per mood ("mood: search phrase"). Seeds
+     * from social_tiktok_slides_sounds.txt if the option does not exist yet. A mood without
+     * a line keeps the sound TikTok adds itself.
+     */
+    public static function get_tiktok_slides_sounds(): string {
+        $val = get_option( 'presshub_social_prompt_tiktok_slides_sounds', false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_slides_sounds.txt' );
+                update_option( 'presshub_social_prompt_tiktok_slides_sounds', $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
+        return is_string( $val ) ? trim( $val ) : '';
     }
 
     /** Whether the shorts also go to YouTube as YouTube Shorts (default off). */
@@ -1974,6 +2063,7 @@ class PressHub_Social_Settings_Storage {
             'presshub_social_prompt_tiktok_shorts_image_moods',
             'presshub_social_prompt_tiktok_shorts_tts_style',
             'presshub_social_prompt_tiktok_shorts_music',
+            'presshub_social_prompt_tiktok_slides_sounds',
             'presshub_social_prompt_tiktok_article_short',
             'presshub_social_prompt_tiktok_shorts',
         ];

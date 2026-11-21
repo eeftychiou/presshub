@@ -733,6 +733,14 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_tiktok_slides_enabled',
+            __( 'TikTok Photo Slides', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_slides_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
+        );
+
+        add_settings_field(
             'presshub_social_youtube_shorts_enabled',
             __( 'YouTube Shorts', 'presshub-social-autopost' ),
             [ $render, 'render_youtube_shorts_enabled_field' ],
@@ -776,6 +784,38 @@ class PressHub_Social_Settings {
                 'max'     => 720,
                 'unit'    => __( 'minutes', 'presshub-social-autopost' ),
                 'desc'    => __( 'The first short is posted when the podcast is published, the next ones this many minutes apart. Shorts from an earlier edition that have not been posted yet are cancelled when the next podcast is published.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_slides_words',
+            __( 'Words per Photo Slide', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_tiktok_slides_words',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SLIDES_WORDS,
+                'min'     => 12,
+                'max'     => 60,
+                'unit'    => __( 'words', 'presshub-social-autopost' ),
+                'desc'    => __( 'How much of the short\'s script goes on one TikTok photo slide. Sentences are kept whole, so a slide can run a little over.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_slides_max',
+            __( 'Most Photo Slides per Post', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_tiktok_slides_max',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SLIDES_MAX,
+                'min'     => 3,
+                'max'     => 35,
+                'unit'    => __( 'slides', 'presshub-social-autopost' ),
+                'desc'    => __( 'Most slides in one TikTok photo post, with the title slide and the closing slide. A longer script puts more words on each slide so it still fits. TikTok takes up to 35.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -1167,6 +1207,19 @@ class PressHub_Social_Settings {
                 'option' => 'presshub_social_prompt_tiktok_shorts_music',
                 'rows'   => 6,
                 'desc'   => __( 'One line per mood, "mood: prompt". Each prompt is sent to Google Lyria to make that mood\'s background tracks (Automation Worker → Generate Music Tracks). The mood names are what the Script Prompt may choose ({moods}); "none" always means no music. A changed line makes that mood\'s tracks again on the next generate.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_tiktok_slides_sounds',
+            __( 'TikTok Photo Slides: Sound Searches', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_slides_sounds',
+                'rows'   => 4,
+                'desc'   => __( 'One line per mood, "mood: search words". The worker types the words of the story\'s mood into TikTok\'s sound search and picks the first sound it offers. A business account is only offered sounds cleared for business use. A mood without a line, or a search with no result, keeps the sound TikTok adds itself.', 'presshub-social-autopost' ),
             ]
         );
 

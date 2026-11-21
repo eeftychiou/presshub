@@ -120,8 +120,8 @@ class SettingsPhase2LayoutTest {
                 $failures[] = "{$key} should be on Shorts & Reels.";
             }
         }
-        if ( 6 !== count( $ids( 'presshub_social_shorts_prompts', 'presshub_social_shorts_prompts_sec' ) ) ) {
-            $failures[] = 'All six Shorts prompts should be in the collapsed Shorts prompts block.';
+        if ( 7 !== count( $ids( 'presshub_social_shorts_prompts', 'presshub_social_shorts_prompts_sec' ) ) ) {
+            $failures[] = 'All seven Shorts prompts (with the photo slide sound searches) should be in the collapsed Shorts prompts block.';
         }
         foreach ( PressHub_Settings_Registry::for_page( 'social' ) as $key => $e ) {
             if ( 0 === strpos( $key, 'presshub_social_tiktok_shorts_' ) && 'shorts' !== $e['tab'] ) {

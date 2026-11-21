@@ -295,6 +295,9 @@ class PressHub_Social_REST_Controller {
         $reels_api     = is_array( $capabilities ) && in_array( 'facebook_reels_api', $capabilities, true )
             && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::facebook_reels_via_api();
         $fb_reels_only = false;
+        // TikTok photo slides go only to a worker that can post them (1.10.0+): an older
+        // worker would post them as a classic TikTok video. They wait in the queue.
+        $slides_ok = is_array( $capabilities ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && in_array( PressHub_Social_TikTok_Shorts::SLIDES_CAPABILITY, $capabilities, true );
         if ( $reels_api && ! in_array( 'facebook', $active_platforms, true ) ) {
             $active_platforms[] = 'facebook';
             $fb_reels_only      = true;
@@ -320,6 +323,13 @@ class PressHub_Social_REST_Controller {
             foreach ( $batch as $candidate ) {
                 if ( $fb_reels_only && 'facebook' === ( $candidate['platform'] ?? '' ) && ! PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) ) {
                     // A browser Facebook post, but this worker has no Facebook session.
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                if ( ! $slides_ok && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_slides_job( $candidate ) ) {
+                    if ( 'Waiting' !== substr( (string) ( $candidate['last_error'] ?? '' ), 0, 7 ) ) {
+                        PressHub_Social_Queue::update_job( (int) $candidate['id'], [ 'last_error' => 'Waiting for a worker that can post TikTok photo slides (worker 1.10.0 or later).' ] );
+                    }
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
@@ -371,7 +381,8 @@ class PressHub_Social_REST_Controller {
         foreach ( $to_claim as $job ) {
             $job_id = (int) $job['id'];
 
-            $is_short = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
+            $is_short  = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
+            $is_slides = $is_short && PressHub_Social_TikTok_Shorts::is_slides_job( $job );
 
             // Atomic: an overlapping claim that already took this job skips it.
             if ( ! PressHub_Social_Queue::claim_for_processing( $job_id ) ) {
@@ -382,7 +393,7 @@ class PressHub_Social_REST_Controller {
             $job = PressHub_Social_Queue::get_job( $job_id ) ?? $job;
 
             // A held episode's "Waiting…" note no longer applies once it is handed out.
-            if ( 'youtube' === ( $job['platform'] ?? '' ) && str_starts_with( (string) ( $job['last_error'] ?? '' ), 'Waiting' ) ) {
+            if ( ( 'youtube' === ( $job['platform'] ?? '' ) || $is_slides ) && str_starts_with( (string) ( $job['last_error'] ?? '' ), 'Waiting' ) ) {
                 PressHub_Social_Queue::update_job( $job_id, [ 'last_error' => '' ] );
                 $job['last_error'] = '';
             }
@@ -452,8 +463,8 @@ class PressHub_Social_REST_Controller {
                 $job = $short;
             }
 
-            // Resolve audio URL if post has podcast audio attached
-            if ( empty( $job['audio_url'] ) && $post_id > 0 ) {
+            // Resolve audio URL if post has podcast audio attached (never for photo slides)
+            if ( ! $is_slides && empty( $job['audio_url'] ) && $post_id > 0 ) {
                 if ( function_exists( 'get_post_meta' ) ) {
                     $audio_meta = get_post_meta( $post_id, '_presshub_audio_url', true );
                     if ( ! empty( $audio_meta ) ) {
@@ -470,7 +481,7 @@ class PressHub_Social_REST_Controller {
 
             // Text-only TikTok articles get a Gemini TTS voice-over (Zero-Silent-Fallback:
             // if narration is enabled and fails, the job fails instead of posting a silent video).
-            if ( 'tiktok' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_TikTok_Narrator' ) ) {
+            if ( ! $is_slides && 'tiktok' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_TikTok_Narrator' ) ) {
                 $narrated = PressHub_Social_TikTok_Narrator::attach_narration( $job );
                 if ( is_wp_error( $narrated ) ) {
                     PressHub_Social_Queue::mark_failed( $job_id, $narrated->get_error_message(), [ 'error_code' => $narrated->get_error_code() ] );
@@ -611,6 +622,13 @@ class PressHub_Social_REST_Controller {
             PressHub_Social_Queue::mark_failed( $job_id, 'A TikTok short test render was reported as published; test renders must not be posted.', $metadata );
         } elseif ( 'published' === $status ) {
             PressHub_Social_Queue::mark_published( $job_id, $external_post_id, $external_post_url, $metadata );
+            if ( ! empty( $metadata['tiktok_slides_note'] ) ) {
+                // The photo post went out without the sound picked for its mood.
+                PressHub_Social_Logger::warning(
+                    sprintf( 'TikTok photo slides (job #%d): %s', $job_id, sanitize_text_field( (string) $metadata['tiktok_slides_note'] ) ),
+                    [ 'job_id' => $job_id, 'post_id' => (int) ( $job['post_id'] ?? 0 ) ]
+                );
+            }
             if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_episode_note'] ) ) {
                 // The enhanced episode was published without something it should have had.
                 PressHub_Social_Logger::warning(

@@ -677,6 +677,17 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_tiktok_slides_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_tiktok_slides_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_tiktok_slides_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_tiktok_slides_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Also post each short (podcast stories and, with Article Shorts on, articles) to TikTok as a photo post: the hook and the script as text over the story images, with no voice, and a TikTok sound found for the story\'s mood (Sound Searches under Prompts). Each photo post goes out halfway between two shorts. The video shorts are not changed. Needs TikTok on the automation engine, the worker in Pull Mode and worker 1.10.0 or later.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
     public function render_youtube_shorts_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
         ?>
