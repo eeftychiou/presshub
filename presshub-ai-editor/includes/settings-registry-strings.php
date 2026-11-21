@@ -662,3 +662,7 @@ __( 'Trending posts per account', 'presshub-ai-editor' );
 __( 'Most posts from one account in a trending roundup, per platform (1 to 10). Default: 1.', 'presshub-ai-editor' );
 __( 'Publish trending roundups from (hour)', 'presshub-ai-editor' );
 __( 'A roundup made before this local hour waits until then, so its social posts go out when people read. 0 publishes at once. Default: 8.', 'presshub-ai-editor' );
+__( 'Quiet hours: from (hour)', 'presshub-ai-editor' );
+__( 'First local hour in which no scheduled trending roundup runs. Refresh now still works. Same as the until hour: no quiet hours. Default: 0.', 'presshub-ai-editor' );
+__( 'Quiet hours: until (hour)', 'presshub-ai-editor' );
+__( 'Local hour at which scheduled trending roundups start again. Default: 6.', 'presshub-ai-editor' );

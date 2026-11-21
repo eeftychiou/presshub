@@ -13,6 +13,9 @@ import { challengeBackoffUntil, clearChallenge, isChallengeError, recordChalleng
 import { parseTikTokItemList, parseXGraphql, PostMetrics, ScannedPost } from '../monitor/parsers';
 import { resolveReaderSession } from '../monitor/scanner';
 import { parseFacebookStories, splitFacebookPayload } from './facebook-parser';
+import { warmUp, warmUpUrl } from '../automation/warm-up';
+
+export { warmUpUrl };
 
 export type TrendingPlatform = 'x' | 'tiktok' | 'facebook';
 
@@ -207,6 +210,9 @@ export const browserTrendingScan: TrendingScanFn = async (plan: TrendingPlan) =>
             skipCdp: true,
             storageState: resolveReaderSession(target.platform)
           });
+          if (await warmUp(connections[target.platform] as ChromeConnection, target.platform)) {
+            WorkerLogger.info('Trending', `${target.platform} home page opened before the searches.`);
+          }
         }
         const got = await scanTrendingPage(connections[target.platform] as ChromeConnection, target);
         posts.push(...got);

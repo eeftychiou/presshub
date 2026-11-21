@@ -63,6 +63,9 @@ function st_reset( array $opts = [] ) {
         'presshub_ai_social_trending_facebook_pages'     => "https://www.facebook.com/philenews",
         'presshub_ai_social_trending_min_engagement'     => 10,
         'gmt_offset'                                     => 2,
+        // Off unless a test sets them, so runs do not depend on the clock.
+        'presshub_ai_social_trending_quiet_from_hour'    => 0,
+        'presshub_ai_social_trending_quiet_until_hour'   => 0,
         'presshub_ai_social_trending_summary_enabled'    => 0,
         // The QA gate on the roundup is tested in PublishGateTest.
         'presshub_ai_qa_include_trending'                => 0,
@@ -724,6 +727,22 @@ $fixed = $T::filter_legacy_facebook_embeds( $legacy );
 st_check( 'legacy: bare Facebook link loses the plugin class, keeps its link', false !== strpos( $fixed, '<div class="presshub-trending-fb-link" data-href="https://www.facebook.com/1786820783453934"' ) && false !== strpos( $fixed, '<a href="https://www.facebook.com/1786820783453934">' ) );
 st_check( 'legacy: reel and posts links untouched', false !== strpos( $fixed, '<div class="fb-video" data-href="https://www.facebook.com/reel/1026139433848847"' ) && false !== strpos( $fixed, '<div class="fb-post" data-href="https://www.facebook.com/VoltCyprus/posts/pfbid0j9"' ) );
 st_check( 'legacy: other content untouched', '<div class="fb-video" data-href="https://www.facebook.com/123"></div>' === $T::filter_legacy_facebook_embeds( '<div class="fb-video" data-href="https://www.facebook.com/123"></div>' ) );
+
+// Quiet hours: no scheduled run overnight, Refresh now still works.
+$day   = 1794614400 - 7200; // 2026-11-14 00:00 local (gmt_offset 2)
+st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 0, 'presshub_ai_social_trending_quiet_until_hour' => 6 ] );
+st_check( 'quiet: 03:00 is quiet', $T::in_quiet_hours( $day + 3 * 3600 ) );
+st_check( 'quiet: 06:00 is not', ! $T::in_quiet_hours( $day + 6 * 3600 ) );
+st_check( 'quiet: 23:59 is not', ! $T::in_quiet_hours( $day + 86399 ) );
+st_check( 'quiet: no scheduled run at 03:00', null === $T::maybe_start_run( $day + 3 * 3600 ) );
+st_check( 'quiet: forced run at 03:00 still starts', null !== $T::maybe_start_run( $day + 3 * 3600, true ) );
+st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 0, 'presshub_ai_social_trending_quiet_until_hour' => 6 ] );
+st_check( 'quiet: scheduled run starts at 06:00', null !== $T::maybe_start_run( $day + 6 * 3600 ) );
+st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 22, 'presshub_ai_social_trending_quiet_until_hour' => 6 ] );
+st_check( 'quiet: window wraps past midnight', $T::in_quiet_hours( $day + 23 * 3600 ) && $T::in_quiet_hours( $day + 2 * 3600 ) && ! $T::in_quiet_hours( $day + 12 * 3600 ) );
+st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 5, 'presshub_ai_social_trending_quiet_until_hour' => 5 ] );
+st_check( 'quiet: equal hours turn it off', ! $T::in_quiet_hours( $day + 5 * 3600 ) );
+st_check( 'quiet: hours clamped', 23 === PressHub_AI_Settings_Storage::sanitize_trending_quiet_hour( 40 ) && 0 === PressHub_AI_Settings_Storage::sanitize_trending_quiet_hour( 'x' ) );
 
 if ( $failures > 0 ) {
     fwrite( STDERR, "{$failures} failure(s)\n" );
