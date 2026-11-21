@@ -112,6 +112,9 @@ class PressHub_Social_TikTok_Shorts {
     private static $last_record_id = 0;
     private static $last_log_id    = 0;
 
+    /** Prompt versions (PressHub_AI_Prompt_Versions refs) of the plan being written. */
+    private static array $prompt_versions = [];
+
     /** What parse_plan() repaired in the last response (empty when nothing). */
     private static $last_repairs = [];
 
@@ -926,6 +929,14 @@ class PressHub_Social_TikTok_Shorts {
             ? self::build_prompt( $post_id, $prompt, '', $count, $max_words, $images, $script )
             : self::build_prompt( $post_id, $prompt, $script, $count, $max_words, $images );
         $sys_prompt  = PressHub_Social_Settings_Storage::get_system_prompt();
+        // 2.81.0: the prompt studio versions the plan is written with.
+        self::$prompt_versions = [];
+        if ( class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
+            self::$prompt_versions = PressHub_AI_Prompt_Versions::clean_refs( [
+                PressHub_AI_Prompt_Versions::ref( $article ? 'presshub_social_prompt_tiktok_article_short' : 'presshub_social_prompt_tiktok_shorts', $prompt ),
+                PressHub_AI_Prompt_Versions::ref( 'presshub_social_prompt_system', $sys_prompt ),
+            ] );
+        }
 
         PressHub_Social_Logger::info( $article
             ? sprintf( 'Generating the short of article post #%d.', $post_id )
@@ -1512,7 +1523,7 @@ class PressHub_Social_TikTok_Shorts {
                 self::$last_log_id    = PressHub_Social_AI_Json::last_log_id();
                 self::$last_record_id = PressHub_AI_API_Client::finish_generation_record( $t0, self::RECORD_KIND_SCRIPT, $client, $sys_prompt, $user_prompt, $result, [
                     'post_id' => $post_id,
-                    'config'  => [ 'action' => 'social_tiktok_shorts', 'platform' => 'shorts' ],
+                    'config'  => [ 'action' => 'social_tiktok_shorts', 'platform' => 'shorts', 'prompt_versions' => self::$prompt_versions ],
                 ] );
             }
         }

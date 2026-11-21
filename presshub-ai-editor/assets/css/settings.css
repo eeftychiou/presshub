@@ -644,3 +644,28 @@ html:has(#presshub-settings-page) { scroll-padding-top: 90px; scroll-padding-bot
 /* #309 (E6): the log folder exposure check in Site & system. */
 .presshub-log-exposure { padding: 10px 12px; margin: 15px 0; }
 .presshub-log-exposure-rule { background: #f6f7f7; padding: 8px; overflow: auto; }
+
+/* Prompt history and changes (2.81.0, assets/js/prompt-versions.js). */
+.presshub-pv-bar { margin: 8px 0 0; }
+.presshub-pv-panel { margin: 8px 0 16px; padding: 12px 14px; border: 1px solid #c3c4c7; border-radius: 4px; background: #fff; max-width: 1100px; }
+.presshub-pv-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.presshub-pv-title { margin: 0 0 8px; font-size: 14px; }
+.presshub-pv-subtitle { margin: 14px 0 6px; font-size: 13px; }
+.presshub-pv-table-wrap { overflow-x: auto; }
+.presshub-pv-table { margin-top: 4px; }
+.presshub-pv-table td, .presshub-pv-table th { vertical-align: top; }
+.presshub-pv-actions .presshub-pv-action { display: inline-block; margin: 0 12px 4px 0; }
+.presshub-pv-current { display: inline-block; padding: 0 6px; border-radius: 3px; background: #f0f6fc; color: #1d2327; border: 1px solid #72aee6; font-size: 11px; }
+.presshub-pv-pick { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.presshub-pv-output { margin-top: 8px; }
+.presshub-pv-text, .presshub-pv-diff { white-space: pre-wrap; word-wrap: break-word; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.6; padding: 10px 12px; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 3px; max-height: 480px; overflow: auto; }
+.presshub-pv-diff del.presshub-pv-del { text-decoration: line-through; color: #8a2424; background: #fcf0f1; }
+.presshub-pv-diff ins.presshub-pv-ins { text-decoration: none; font-weight: 700; color: #00450c; background: #edfaef; }
+.presshub-pv-uses { margin: 0 0 0 18px; list-style: disc; }
+.presshub-records-prompt-filter { margin: 8px 0; }
+@media (max-width: 600px) {
+    .presshub-pv-table thead { display: none; }
+    .presshub-pv-table tr, .presshub-pv-table td { display: block; }
+    .presshub-pv-table td { border-bottom: 0; padding: 2px 8px; }
+    .presshub-pv-table tr { border-bottom: 1px solid #dcdcde; padding: 6px 0; }
+}

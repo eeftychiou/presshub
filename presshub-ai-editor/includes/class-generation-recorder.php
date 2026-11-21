@@ -233,7 +233,12 @@ class PressHub_AI_Generation_Recorder {
                 return null;
             }
 
-            return (int) $wpdb->insert_id;
+            $record_id = (int) $wpdb->insert_id;
+            // 2.81.0: link the record to the prompt versions it used.
+            if ( ! empty( $data['config']['prompt_versions'] ) && class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
+                PressHub_AI_Prompt_Versions::record_uses( $record_id, (array) $data['config']['prompt_versions'] );
+            }
+            return $record_id;
         } catch ( \Throwable $t ) {
             self::log_failure( 'Generation record threw: ' . $t->getMessage(), $trace_id, $kind );
             return null;
@@ -581,6 +586,9 @@ class PressHub_AI_Generation_Recorder {
             : gmdate( 'Y-m-d H:i:s', time() - $seconds );
         $sql     = $wpdb->prepare( "DELETE FROM {$table_name} WHERE created_at < %s", $cutoff );
         $deleted = $wpdb->query( $sql );
+        if ( class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
+            PressHub_AI_Prompt_Versions::prune_uses( $cutoff );
+        }
 
         return is_numeric( $deleted ) ? (int) $deleted : 0;
     }

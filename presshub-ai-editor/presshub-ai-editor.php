@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.80.0
+ * Version: 2.81.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -158,7 +158,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.80.0' );
+define( 'PRESSHUB_AI_VERSION', '2.81.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -241,6 +241,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-podcast-mp3.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
+// 2.81.0: numbered versions of the prompt studio's prompts, linked to the generations that used them.
+require_once PRESSHUB_AI_DIR . 'includes/class-prompt-versions.php';
+PressHub_AI_Prompt_Versions::register_hooks();
 require_once PRESSHUB_AI_DIR . 'includes/class-tts-call-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-tts-rate-limiter.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-inspector.php';
@@ -348,6 +351,7 @@ function presshub_ai_activate() {
     PressHub_AI_Audit_Logger::create_table();
     PressHub_AI_Memory_Store::create_tables();
     PressHub_AI_Generation_Recorder::create_table();
+    PressHub_AI_Prompt_Versions::create_tables();
     PressHub_AI_QA_Review_Store::create_table();
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
