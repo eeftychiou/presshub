@@ -59,6 +59,16 @@ class PressHub_Social_REST_Controller {
 
         register_rest_route(
             self::REST_NAMESPACE,
+            '/worker/facebook/token',
+            [
+                'methods'             => 'POST',
+                'callback'            => [ __CLASS__, 'handle_facebook_token' ],
+                'permission_callback' => [ __CLASS__, 'verify_worker_secret' ],
+            ]
+        );
+
+        register_rest_route(
+            self::REST_NAMESPACE,
             '/worker/complete',
             [
                 'methods'             => 'POST',
@@ -278,6 +288,18 @@ class PressHub_Social_REST_Controller {
             $active_platforms = PressHub_Social_Settings_Storage::ENGINE_PLATFORMS;
         }
 
+        // Facebook Reels through the Graph API need no browser session, only a worker that
+        // says it can upload them. Facebook link posts are API jobs then, so the only
+        // Facebook jobs such a worker gets without a session are Reels.
+        $capabilities  = self::get_param( $request, 'capabilities' );
+        $reels_api     = is_array( $capabilities ) && in_array( 'facebook_reels_api', $capabilities, true )
+            && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::facebook_reels_via_api();
+        $fb_reels_only = false;
+        if ( $reels_api && ! in_array( 'facebook', $active_platforms, true ) ) {
+            $active_platforms[] = 'facebook';
+            $fb_reels_only      = true;
+        }
+
         // A TikTok short is claimed only once its script and audio are prepared in the
         // background, so this request never waits on an LLM or TTS call. Unprepared shorts
         // are passed over (their preparation is rescheduled) and the query looks past them,
@@ -296,6 +318,11 @@ class PressHub_Social_REST_Controller {
                 break;
             }
             foreach ( $batch as $candidate ) {
+                if ( $fb_reels_only && 'facebook' === ( $candidate['platform'] ?? '' ) && ! PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) ) {
+                    // A browser Facebook post, but this worker has no Facebook session.
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
                 if ( 'youtube' === ( $candidate['platform'] ?? '' ) && ! $youtube_ok ) {
                     $skipped[] = (int) $candidate['id'];
                     continue;
@@ -452,6 +479,12 @@ class PressHub_Social_REST_Controller {
                 $job = $narrated;
             }
 
+            // A Facebook Reel says how to post it: through the Graph API (the worker asks for
+            // a Page token right before it uploads) or with the browser session.
+            if ( $is_short && 'facebook' === ( $job['platform'] ?? '' ) ) {
+                $job['facebook_reel'] = [ 'mode' => $reels_api ? 'api' : 'browser' ];
+            }
+
             // A YouTube video gets its title, description and upload settings. The
             // worker asks for an access token right before it uploads.
             if ( 'youtube' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_YouTube' ) ) {
@@ -505,6 +538,34 @@ class PressHub_Social_REST_Controller {
             'access_token' => $token['access_token'],
             'expires_at'   => $token['expires_at'],
             'expires_in'   => max( 0, $token['expires_at'] - time() ),
+        ];
+    }
+
+    /**
+     * Handle POST /presshub-social/v1/worker/facebook/token
+     *
+     * The Facebook Page's ID and a Page access token, asked for by the worker right
+     * before it uploads a Reel through the Graph API.
+     *
+     * @param WP_REST_Request|array $request
+     * @return array|WP_Error
+     */
+    public static function handle_facebook_token( $request ): array|WP_Error {
+        self::update_worker_presence( $request );
+        $page_id = PressHub_Social_Settings_Storage::get_meta_page_id();
+        $token   = PressHub_Social_Settings_Storage::get_meta_access_token();
+        if ( '' === $page_id || '' === $token ) {
+            PressHub_Social_Logger::error( 'Facebook Page token for the worker failed: the Meta Page ID or access token is not set.' );
+            return new WP_Error( 'facebook_not_configured', 'The Meta Page ID or access token is not set.', [ 'status' => 409 ] );
+        }
+        if ( ! class_exists( 'PressHub_Social_Meta_API_Client' ) ) {
+            return new WP_Error( 'facebook_unavailable', 'PressHub_Social_Meta_API_Client is not loaded.', [ 'status' => 500 ] );
+        }
+        return [
+            'ok'            => true,
+            'page_id'       => $page_id,
+            'access_token'  => PressHub_Social_Meta_API_Client::facebook_page_token( $page_id, $token ),
+            'graph_version' => PressHub_Social_Meta_API_Client::GRAPH_API_VERSION,
         ];
     }
 

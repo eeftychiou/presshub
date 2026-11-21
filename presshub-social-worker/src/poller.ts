@@ -12,6 +12,7 @@ import { TrendingClient } from './trending/trending-client';
 import { Mp3Converter } from './media/mp3-converter';
 import { uploadToYouTube, YouTubeUploadMeta, YouTubeUploadOptions, YouTubeUploadResult } from './youtube/uploader';
 import { findUpload, recordUpload } from './youtube/upload-log';
+import { uploadFacebookReel, FacebookReelOptions, FacebookReelResult } from './facebook/reels-uploader';
 
 export interface ClaimedJob {
   id: number | string;
@@ -47,6 +48,11 @@ export interface ClaimedJob {
   };
   /** Set on YouTube jobs by WordPress: what to upload and how (title, description, playlist...). */
   youtube?: YouTubeUploadMeta;
+  /**
+   * Set on Facebook Reel jobs by WordPress: `api` uploads the rendered short through the
+   * Graph API (Page token from WordPress), `browser` posts it with the browser session.
+   */
+  facebook_reel?: { mode?: 'api' | 'browser' };
   /** AI post images for X and Facebook (all of them; media_url is the first). */
   media_urls?: string[];
   specs?: {
@@ -74,6 +80,8 @@ export interface PollerOptions {
   generateEpisodeFn?: (params: GenerateEpisodeOptions) => Promise<EpisodeVideoResult>;
   /** Uploads a rendered video to YouTube (tests inject a fake). */
   youtubeUploadFn?: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
+  /** Uploads a rendered short as a Facebook Reel through the Graph API (tests inject a fake). */
+  facebookReelUploadFn?: (options: FacebookReelOptions) => Promise<FacebookReelResult>;
   /** Tries of a YouTube "published" report (default 5) and the first wait between them (ms). */
   reportTries?: number;
   reportRetryDelayMs?: number;
@@ -116,6 +124,7 @@ export class PressHubPoller {
   private readonly generateShortFn: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
   private readonly generateEpisodeFn: (params: GenerateEpisodeOptions) => Promise<EpisodeVideoResult>;
   private readonly youtubeUploadFn: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
+  private readonly facebookReelUploadFn: (options: FacebookReelOptions) => Promise<FacebookReelResult>;
   private readonly reportTries: number;
   private readonly reportRetryDelayMs: number;
   private readonly reportSleepFn: (ms: number) => Promise<void>;
@@ -150,6 +159,7 @@ export class PressHubPoller {
     this.generateShortFn = options.generateShortFn || generateShortVideo;
     this.generateEpisodeFn = options.generateEpisodeFn || generateEpisodeVideo;
     this.youtubeUploadFn = options.youtubeUploadFn || uploadToYouTube;
+    this.facebookReelUploadFn = options.facebookReelUploadFn || uploadFacebookReel;
     this.reportTries = Math.max(1, options.reportTries ?? 5);
     this.reportRetryDelayMs = Math.max(0, options.reportRetryDelayMs ?? 2000);
     this.reportSleepFn = options.reportSleepFn || ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -210,6 +220,32 @@ export class PressHubPoller {
       }
     }
     WorkerLogger.error('Poller', `[Job #${job.id}] YouTube video ${url} is uploaded, but WordPress could not be told. It is reported again (not re-uploaded) when the job is handed out next.`);
+  }
+
+  /**
+   * Reports a published Facebook Reel, trying a few times: a lost report would leave the
+   * job "processing" with the Reel already on the Page.
+   */
+  private async reportReelPublished(job: ClaimedJob, videoId: string, url: string, note?: string): Promise<void> {
+    const payload = {
+      job_id: job.id,
+      status: 'published' as const,
+      external_post_id: videoId,
+      external_post_url: url,
+      metadata: {
+        facebook_reel_mode: 'api',
+        ...(note ? { facebook_reel_note: note } : {})
+      }
+    };
+    for (let attempt = 1; attempt <= this.reportTries; attempt++) {
+      if (await this.reportComplete(payload)) {
+        return;
+      }
+      if (attempt < this.reportTries) {
+        await this.reportSleepFn(this.reportRetryDelayMs * 2 ** (attempt - 1));
+      }
+    }
+    WorkerLogger.error('Poller', `[Job #${job.id}] Facebook Reel ${url} is published, but WordPress could not be told. It is reported again (not re-uploaded) when the job is handed out next.`);
   }
 
   /**
@@ -352,6 +388,8 @@ export class PressHubPoller {
         },
         body: JSON.stringify({
           sessions,
+          // This worker can post Facebook Reels through the Graph API, without a browser session.
+          capabilities: ['facebook_reels_api'],
           limit: 5
         })
       });
@@ -458,6 +496,18 @@ export class PressHubPoller {
                 metadata: { youtube_error_reason: youtubeHalt.reason }
               });
               failed++;
+              continue;
+            }
+          }
+
+          const reelApi = platform === 'facebook' && Boolean(job.tiktok_short) && !job.test_render && job.facebook_reel?.mode === 'api';
+          if (reelApi) {
+            // Already published on an earlier claim (WordPress never heard back).
+            const done = findUpload(this.uploadLogDir(), this.wpUrl, job.id, job.post_id);
+            if (done && done.kind === 'facebook_reel') {
+              WorkerLogger.warn('Poller', `${jobTag} Already published as ${done.url}; reporting it instead of uploading again.`);
+              await this.reportReelPublished(job, done.videoId, done.url);
+              succeeded++;
               continue;
             }
           }
@@ -620,6 +670,56 @@ export class PressHubPoller {
             } else {
               WorkerLogger.warn('Poller', `${jobTag} No AI image could be downloaded; posting without images.`);
             }
+          }
+
+          if (reelApi) {
+            // Uploaded through the Graph API, not a browser.
+            WorkerLogger.info('Poller', `${jobTag} Uploading the Reel through the Facebook Graph API...`);
+            const remember = (videoId: string, url: string) => {
+              recordUpload(this.uploadLogDir(), this.wpUrl, job.id, {
+                videoId,
+                url,
+                kind: 'facebook_reel',
+                ...(job.post_id !== undefined && job.post_id !== null && String(job.post_id) !== '' ? { postId: String(job.post_id) } : {}),
+                uploadedAt: new Date().toISOString()
+              });
+            };
+            let reel: FacebookReelResult;
+            try {
+              reel = await this.facebookReelUploadFn({
+                wpUrl: this.wpUrl,
+                workerSecret: this.workerSecret,
+                filePath: mediaPath || '',
+                description: copy,
+                fetchFn: this.fetchFn,
+                onPublished: (videoId, url) => remember(videoId, url)
+              });
+            } finally {
+              if (mediaPath) {
+                try { fs.unlinkSync(mediaPath); } catch {}
+              }
+            }
+            if (reel.success && reel.videoId) {
+              await this.reportReelPublished(job, reel.videoId, reel.url || `https://www.facebook.com/reel/${reel.videoId}`, reel.note);
+              succeeded++;
+            } else {
+              if (reel.videoId) {
+                // Refused while processing: forget it, so a new claim uploads it again.
+                try {
+                  recordUpload(this.uploadLogDir(), this.wpUrl, job.id, { videoId: '', url: '', kind: 'facebook_reel', uploadedAt: new Date().toISOString() });
+                } catch {}
+              }
+              const error = reel.error || 'Facebook Reel upload failed';
+              WorkerLogger.warn('Poller', `${jobTag} Facebook Reel upload failed: ${error}`);
+              await this.reportComplete({
+                job_id: job.id,
+                status: 'failed',
+                error,
+                metadata: { facebook_reel_mode: 'api', ...(reel.reason ? { facebook_reel_error_reason: reel.reason } : {}) }
+              });
+              failed++;
+            }
+            continue;
           }
 
           if (platform === 'youtube') {

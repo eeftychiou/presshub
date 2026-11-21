@@ -220,8 +220,26 @@ class PressHub_Social_TikTok_Shorts {
      * Whether shorts can be made with this engine: they are claimed by the local worker,
      * so they need the automation engine in Pull Mode.
      */
-    public static function engine_supported( string $engine ): bool {
-        return 'automation' === $engine && 'pull' === PressHub_Social_Settings_Storage::get_worker_mode();
+    public static function engine_supported( string $engine, string $platform = 'tiktok' ): bool {
+        if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() ) {
+            return false;
+        }
+        if ( 'automation' === $engine ) {
+            return true;
+        }
+        // Facebook Reels on the API engine: the worker renders the short and uploads it
+        // through the Graph API with a Page token from WordPress.
+        return 'facebook' === $platform && 'api' === $engine && self::facebook_reels_via_api();
+    }
+
+    /**
+     * Whether Facebook Reels go through the Graph API: the Facebook engine is API and the
+     * Meta Page ID and access token are set. Otherwise they are posted with the browser.
+     */
+    public static function facebook_reels_via_api(): bool {
+        return 'api' === PressHub_Social_Settings_Storage::get_platform_engine( 'facebook' )
+            && '' !== PressHub_Social_Settings_Storage::get_meta_page_id()
+            && '' !== PressHub_Social_Settings_Storage::get_meta_access_token();
     }
 
     /**
@@ -253,9 +271,9 @@ class PressHub_Social_TikTok_Shorts {
                 PressHub_Social_Logger::warning( sprintf( 'Article Shorts are on but post #%d is posted the classic way: the Article Shorts Script Prompt (presshub_social_prompt_tiktok_article_short) is empty.', $post_id ) );
                 return false;
             }
-            if ( ! self::engine_supported( $engine ) ) {
+            if ( ! self::engine_supported( $engine, $platform ) ) {
                 PressHub_Social_Logger::warning( sprintf(
-                    'Article Shorts are on but post #%d goes to %s the classic way: shorts need the automation engine in Pull Mode (engine: %s, worker mode: %s).',
+                    'Article Shorts are on but post #%d goes to %s the classic way: shorts need Pull Mode and the automation engine (or, for Facebook, the API engine with the Meta Page ID and token) (engine: %s, worker mode: %s).',
                     $post_id,
                     self::platform_label( $platform ),
                     $engine,
@@ -265,9 +283,9 @@ class PressHub_Social_TikTok_Shorts {
             }
             return true;
         }
-        if ( ! self::engine_supported( $engine ) ) {
+        if ( ! self::engine_supported( $engine, $platform ) ) {
             PressHub_Social_Logger::warning( sprintf(
-                '%s shorts are enabled but post #%d is posted as the full podcast: shorts need the automation engine in Pull Mode (engine: %s, worker mode: %s).',
+                '%s shorts are enabled but post #%d is posted as the full podcast: shorts need Pull Mode and the automation engine (or, for Facebook, the API engine with the Meta Page ID and token) (engine: %s, worker mode: %s).',
                 self::platform_label( $platform ),
                 $post_id,
                 $engine,
