@@ -6,7 +6,7 @@
  *   1. plan_speech_requests(): per_turn (unchanged), same_voice, two_voices, the
  *      character cap, and the fallbacks (3 hosts, equal voices, Google Cloud).
  *   2. two_voice_labels() and split_request_seconds().
- *   3. build_gemini_tts_request_body() with labelled dialogue: one part, labels kept.
+ *   3. build_gemini_tts_request_body() with labelled dialogue: one part per line, each with its speaker.
  *   4. synthesize_podcast() end to end in each mode: request count, bodies, timeline.
  *   5. A failed or cut-short joined request is voiced turn by turn; a daily quota error is not.
  *   6. The audio run lock: second job refused, re-entry, release, stale takeover.
@@ -107,8 +107,14 @@ $ms   = [
 $text = "Μαρία: Καλημέρα.\nΝίκος: Γεια σας.";
 $body = PressHub_AI_API_Client::build_gemini_tts_request_body( $text, 'Aoede', true, $ms, 'formal', 1.0, 0.0, 'structured', '', true );
 $parts = $body['contents'][0]['parts'] ?? [];
-sr_check( 'body: one part holding the labelled dialogue', 1 === count( $parts ) && $text === $parts[0]['text'] );
-sr_check( 'body: no per-part speaker tag', ! isset( $parts[0]['speech_metadata']['speaker'] ) && isset( $parts[0]['speech_metadata']['style'] ) );
+// Gemini refuses multi-speaker parts without speech_metadata.speaker (21 Nov), so every
+// labelled line is its own part with its speaker, and the label is not spoken.
+sr_check( 'body: one part per labelled line', 2 === count( $parts ) && 'Καλημέρα.' === ( $parts[0]['text'] ?? '' ) && 'Γεια σας.' === ( $parts[1]['text'] ?? '' ) );
+sr_check( 'body: every part names its speaker', 'Μαρία' === ( $parts[0]['speech_metadata']['speaker'] ?? '' ) && 'Νίκος' === ( $parts[1]['speech_metadata']['speaker'] ?? '' ) && isset( $parts[0]['speech_metadata']['style'] ) );
+$wrapped = PressHub_AI_API_Client::build_gemini_tts_request_body( "Μαρία: Πρώτη γραμμή\nσυνέχεια.\nΝίκος: Δεύτερη.", 'Aoede', true, $ms, 'formal', 1.0, 0.0, 'structured', '', true );
+sr_check( 'body: a line without a label continues the previous speaker', 2 === count( $wrapped['contents'][0]['parts'] ?? [] ) && "Πρώτη γραμμή\nσυνέχεια." === ( $wrapped['contents'][0]['parts'][0]['text'] ?? '' ) );
+$si = PressHub_AI_API_Client::build_gemini_tts_request_body( $text, 'Aoede', true, $ms, 'formal', 1.0, 0.0, 'system_instruction', '', true );
+sr_check( 'body: system_instruction mode keeps one labelled part without metadata', 1 === count( $si['contents'][0]['parts'] ?? [] ) && $text === ( $si['contents'][0]['parts'][0]['text'] ?? '' ) && ! isset( $si['contents'][0]['parts'][0]['speech_metadata'] ) );
 sr_check( 'body: multiSpeakerVoiceConfig names match the labels', 'Μαρία' === ( $body['generationConfig']['speechConfig']['multiSpeakerVoiceConfig']['speakerVoiceConfigs'][0]['speaker'] ?? '' ) );
 $old = PressHub_AI_API_Client::build_gemini_tts_request_body( $text, 'Aoede', true, $ms, 'formal', 1.0, 0.0, 'structured', '' );
 sr_check( 'body: without the flag, the old split parts are unchanged', 2 === count( $old['contents'][0]['parts'] ?? [] ) );
@@ -182,7 +188,9 @@ $res = $run( 'two_voices', '2026-11-23' );
 sr_check( 'e2e two_voices: succeeds', is_array( $res ) && ! empty( $res['success'] ) );
 sr_check( 'e2e two_voices: 1 request', 1 === count( $captured ) );
 $b = $captured[0] ?? [];
-sr_check( 'e2e two_voices: labelled text in one part', 1 === count( $b['contents'][0]['parts'] ?? [] ) && 0 === strpos( (string) ( $b['contents'][0]['parts'][0]['text'] ?? '' ), 'Μαρία: Καλημέρα' ) );
+$e2e_parts = (array) ( $b['contents'][0]['parts'] ?? [] );
+sr_check( 'e2e two_voices: one part per line, each with its speaker', 5 === count( $e2e_parts ) && 0 === count( array_filter( $e2e_parts, static function ( $pt ) { return '' === (string) ( $pt['speech_metadata']['speaker'] ?? '' ); } ) ) );
+sr_check( 'e2e two_voices: labels are not spoken', 0 === strpos( (string) ( $e2e_parts[0]['text'] ?? '' ), 'Καλημέρα' ) && 'Μαρία' === ( $e2e_parts[0]['speech_metadata']['speaker'] ?? '' ) );
 sr_check( 'e2e two_voices: Νίκος is Charon', 'Charon' === ( $b['generationConfig']['speechConfig']['multiSpeakerVoiceConfig']['speakerVoiceConfigs'][1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) );
 $pid = (int) ( $res['post_id'] ?? 0 );
 $timeline = $pid ? get_post_meta( $pid, PressHub_AI_Podcast_Timeline::META_KEY, true ) : null;

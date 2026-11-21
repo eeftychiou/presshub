@@ -1579,7 +1579,7 @@ $job_pull_gate = PressHub_Social_Queue::enqueue( [
     'scheduled_at' => $past_time,
 ] );
 $batch_summary = PressHub_Social_Dispatcher::process_due_queue();
-assert_equals( 1, $batch_summary['skipped'], 'process_due_queue skips automation jobs during cron in pull mode' );
+assert_equals( [], $batch_summary['job_ids'], 'process_due_queue leaves automation jobs to the worker during cron in pull mode' );
 $gate_job_after_cron = PressHub_Social_Queue::get_job( $job_pull_gate );
 assert_equals( 'pending', $gate_job_after_cron['status'], 'Job remains pending after server-side cron' );
 
@@ -1587,6 +1587,21 @@ $disp_res = PressHub_Social_Dispatcher::dispatch_job( $job_pull_gate );
 assert_true( is_wp_error( $disp_res ) && 'pull_mode_queued' === $disp_res->get_error_code(), 'dispatch_job returns pull_mode_queued in pull mode' );
 $gate_job_after_disp = PressHub_Social_Queue::get_job( $job_pull_gate );
 assert_equals( 'pending', $gate_job_after_disp['status'], 'Job remains pending for local worker after dispatch_job' );
+
+// An automation job waiting for the worker never holds up the API jobs behind it,
+// even with a batch of one (21 Nov: worker down, Facebook API posts stuck behind a tweet).
+update_option( 'presshub_social_batch_size', 1 );
+$job_api_behind = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 502,
+    'platform'     => 'facebook',
+    'engine'       => 'api',
+    'post_copy'    => 'Facebook API post behind a worker job',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', strtotime( $past_time . ' UTC' ) + 1 ),
+] );
+$behind_summary = PressHub_Social_Dispatcher::process_due_queue();
+assert_equals( [ (int) $job_api_behind ], $behind_summary['job_ids'], 'process_due_queue reaches an API job queued behind a pending automation job (batch size 1)' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $job_pull_gate )['status'], 'The automation job stays pending for the worker' );
+delete_option( 'presshub_social_batch_size' );
 
 // ----------------------------------------------------------------------
 // Test Suite 19: Copy Regeneration, Published Job Retry & Re-post Operations

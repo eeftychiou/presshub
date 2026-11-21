@@ -584,10 +584,15 @@ class PressHub_Social_Dispatcher {
      * @return array Summary of processed batch.
      */
     public static function process_due_queue(): array {
-        $due_jobs    = PressHub_Social_Queue::get_due_pending_jobs();
         $worker_mode = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_worker_mode' )
             ? PressHub_Social_Settings_Storage::get_worker_mode()
             : 'pull';
+        // In Pull Mode the local worker claims the automation jobs, so the batch is taken
+        // from the API jobs only. Taking the oldest due jobs of any engine let a waiting
+        // automation job (worker down) fill the batch and hold every API post behind it.
+        $due_jobs = 'pull' === $worker_mode
+            ? PressHub_Social_Queue::get_due_pending_jobs( 0, 'api' )
+            : PressHub_Social_Queue::get_due_pending_jobs();
 
         $summary  = [
             'total_due' => count( $due_jobs ),
