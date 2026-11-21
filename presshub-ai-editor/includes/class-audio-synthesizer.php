@@ -1139,6 +1139,12 @@ class PressHub_AI_Audio_Synthesizer {
     const JOINED_MAX_CHARS_PER_SECOND = 40;
 
     /**
+     * 2.76.1: whether Gemini accepts the labelled two-voice request. False since Gemini started
+     * rejecting it (see plan_speech_requests()); tests switch it on to keep the joined path covered.
+     */
+    public static $two_voice_requests_accepted = false;
+
+    /**
      * Label of a host in a two-voice request: the host's name when it is a plain name
      * (letters, digits, spaces, dots, hyphens; up to 40 characters), else SpeakerN.
      *
@@ -1189,6 +1195,14 @@ class PressHub_AI_Audio_Synthesizer {
         $v1 = trim( (string) ( $two_voices[0] ?? '' ) );
         $v2 = trim( (string) ( $two_voices[1] ?? '' ) );
         if ( 'two_voices' === $mode && ( 2 !== $host_count || '' === $v1 || '' === $v2 || $v1 === $v2 ) ) {
+            $mode = 'same_voice';
+        }
+        // 2.76.1: Gemini now rejects the labelled two-voice request ("Multi-speaker generation
+        // requests must specify speech_metadata.speaker for each text part"), so every joined
+        // request failed and was voiced again turn by turn: more requests, not fewer. Per-part
+        // speakers are what caused the 4.18 voice drift, so two_voices plans like same_voice
+        // (single-voice requests only) until a labelled request Gemini accepts is proven live.
+        if ( 'two_voices' === $mode && ! self::$two_voice_requests_accepted ) {
             $mode = 'same_voice';
         }
         $labels   = array_values( $labels );

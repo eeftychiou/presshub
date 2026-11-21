@@ -1579,9 +1579,33 @@ $job_pull_gate = PressHub_Social_Queue::enqueue( [
     'scheduled_at' => $past_time,
 ] );
 $batch_summary = PressHub_Social_Dispatcher::process_due_queue();
-assert_equals( 1, $batch_summary['skipped'], 'process_due_queue skips automation jobs during cron in pull mode' );
+assert_true( ! in_array( $job_pull_gate, $batch_summary['job_ids'], true ), 'process_due_queue leaves automation jobs to the worker during cron in pull mode' );
 $gate_job_after_cron = PressHub_Social_Queue::get_job( $job_pull_gate );
 assert_equals( 'pending', $gate_job_after_cron['status'], 'Job remains pending after server-side cron' );
+
+// 2.76.1: a due automation job waiting for the worker must not take the whole batch from an
+// API job behind it (batch size 1 on presshub.cy left Facebook API posts unsent while the worker was down).
+update_option( 'presshub_social_batch_size', 1 );
+$job_api_behind = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 502,
+    'platform'     => 'facebook',
+    'engine'       => 'api',
+    'post_copy'    => 'API job behind a worker job',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', strtotime( $past_time ) + 10 ),
+] );
+$hol_due = PressHub_Social_Queue::get_due_pending_jobs( 0, null, [], [], 'automation' );
+assert_equals( [ $job_api_behind ], array_map( fn( $j ) => (int) $j['id'], $hol_due ), 'get_due_pending_jobs can leave one engine out' );
+$hol_summary = PressHub_Social_Dispatcher::process_due_queue();
+assert_equals( [ $job_api_behind ], $hol_summary['job_ids'], 'With batch size 1 the cron still reaches the API job behind a due automation job' );
+delete_option( 'presshub_social_batch_size' );
+PressHub_Social_Queue::reset_memory_store();
+$job_pull_gate = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 501,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => 'Queued for Pull Worker',
+    'scheduled_at' => $past_time,
+] );
 
 $disp_res = PressHub_Social_Dispatcher::dispatch_job( $job_pull_gate );
 assert_true( is_wp_error( $disp_res ) && 'pull_mode_queued' === $disp_res->get_error_code(), 'dispatch_job returns pull_mode_queued in pull mode' );
@@ -3633,6 +3657,73 @@ $still_pending_tt = array_values( array_filter(
     static fn( $j ) => 'tiktok' === ( $j['platform'] ?? '' ) && 'pending' === ( $j['status'] ?? '' )
 ) );
 assert_equals( 2, count( $still_pending_tt ), 'cancel_superseded(instagram) leaves TikTok short jobs pending' );
+
+// ----------------------------------------------------------------------
+// Suite: Facebook Reels (Shorts), next to the Facebook link post
+// ----------------------------------------------------------------------
+echo "\n--- Suite: Facebook Reels (Shorts) ---\n";
+
+delete_option( 'presshub_social_facebook_shorts_enabled' );
+assert_false( PressHub_Social_Settings_Storage::get_facebook_shorts_enabled(), 'Facebook Reels are off by default' );
+update_option( 'presshub_social_facebook_shorts_enabled', true );
+$_POST = [ 'unrelated_tab' => '1' ];
+assert_true( PressHub_Social_Settings_Storage::sanitize_facebook_shorts_enabled( null ), 'sanitize_facebook_shorts_enabled keeps the stored value when the box is on another tab' );
+$_POST = [];
+assert_true( in_array( 'facebook', PressHub_Social_TikTok_Shorts::PLATFORMS, true ), 'Facebook is a shorts platform' );
+assert_false( PressHub_Social_TikTok_Shorts::has_classic_fallback( [ 'platform' => 'facebook' ] ), 'A Facebook Reel never falls back to a classic post (the link post is already made)' );
+assert_false( PressHub_Social_TikTok_Shorts::has_classic_fallback( [ 'platform' => 'youtube' ] ), 'A YouTube short never falls back to a classic post' );
+assert_true( PressHub_Social_TikTok_Shorts::has_classic_fallback( [ 'platform' => 'instagram' ] ), 'An Instagram article short still falls back to the classic post' );
+
+$fb_short_post_id = 912;
+$GLOBALS['mock_posts'][ $fb_short_post_id ] = (object) [
+    'ID'           => $fb_short_post_id,
+    'post_title'   => 'Daily Briefing Podcast FB Reels Test',
+    'post_content' => 'Podcast body',
+    'post_status'  => 'publish',
+    'post_type'    => 'post',
+];
+update_post_meta( $fb_short_post_id, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $fb_short_post_id, '_presshub_podcast_script', '[SPEAKER_1]: Welcome to the news.' );
+assert_true( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'automation', 'facebook' ), 'should_split is true for Facebook when Facebook Reels are on in Pull Mode' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'api', 'facebook' ), 'Facebook Reels need the automation engine' );
+
+$fb_link_time = time() + 600;
+$fb_ids       = PressHub_Social_Dispatcher::enqueue_facebook_shorts( $fb_short_post_id, 'automation', null, null, $fb_link_time );
+assert_equals( 2, count( $fb_ids ), 'A podcast gets Shorts per Podcast Facebook Reel jobs' );
+$fb_first = PressHub_Social_Queue::get_job( $fb_ids[0] );
+assert_equals( 'facebook', $fb_first['platform'], 'The Reel job is a Facebook job' );
+assert_true( PressHub_Social_TikTok_Shorts::is_short_job( $fb_first ), 'The Facebook Reel job is a short job' );
+assert_true( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) $fb_first['post_copy'] ), 'The Reel keeps the placeholder until the short\'s own caption fills it' );
+assert_equals(
+    gmdate( 'Y-m-d H:i:s', $fb_link_time + PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60 ),
+    (string) $fb_first['scheduled_at'],
+    'The first Reel follows the link post by the time between shorts'
+);
+
+update_option( 'presshub_social_facebook_shorts_enabled', false );
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_facebook_shorts( $fb_short_post_id, 'automation', null, null, time() ), 'No Reel when Facebook Reels are off' );
+
+// Through the dispatcher: the link post stays and the Reels come after it.
+update_option( 'presshub_social_facebook_shorts_enabled', true );
+update_option( 'presshub_social_engine_facebook', 'automation' );
+$fb_saved_platforms = get_option( 'presshub_social_enabled_platforms', null );
+$fb_saved_sessions  = get_option( 'presshub_social_worker_sessions', null );
+update_option( 'presshub_social_enabled_platforms', [ 'facebook' ] );
+update_option( 'presshub_social_worker_sessions', [ 'facebook' => true ] );
+PressHub_Social_Queue::reset_memory_store();
+$fb_all = PressHub_Social_Dispatcher::enqueue_for_post( $fb_short_post_id, [ 'facebook' ] );
+$fb_jobs  = array_map( [ 'PressHub_Social_Queue', 'get_job' ], $fb_all );
+$fb_links = array_values( array_filter( $fb_jobs, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_short_job( $j ) ) );
+$fb_reels = array_values( array_filter( $fb_jobs, [ 'PressHub_Social_TikTok_Shorts', 'is_short_job' ] ) );
+assert_equals( 1, count( $fb_links ), 'With Facebook Reels on, the Facebook link post is still queued' );
+assert_false( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) ( $fb_links[0]['post_copy'] ?? '' ) ), 'The link post has its own copy, not a short placeholder' );
+assert_equals( 2, count( $fb_reels ), 'The Reels are queued next to the link post' );
+assert_true( strtotime( $fb_reels[0]['scheduled_at'] . ' UTC' ) > strtotime( $fb_links[0]['scheduled_at'] . ' UTC' ), 'The first Reel goes out after the link post' );
+PressHub_Social_Queue::reset_memory_store();
+delete_option( 'presshub_social_engine_facebook' );
+delete_option( 'presshub_social_facebook_shorts_enabled' );
+null === $fb_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $fb_saved_platforms );
+null === $fb_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $fb_saved_sessions );
 
 // Verify wait_for_instagram_container handles IN_PROGRESS -> FINISHED, ERROR, and timeout
 $poll_calls = 0;

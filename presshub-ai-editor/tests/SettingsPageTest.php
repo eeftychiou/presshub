@@ -304,6 +304,8 @@ class SettingsPageTest
             'presshub_ai_editorial_agenda_budgets',
             'presshub_ai_social_trending_max_per_account',
             'presshub_ai_social_trending_share_after_hour',
+            'presshub_ai_social_trending_quiet_from_hour',
+            'presshub_ai_social_trending_quiet_until_hour',
         ];
 
         $missing = array_diff( $expected_options, $registered );

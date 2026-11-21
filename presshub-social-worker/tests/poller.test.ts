@@ -584,6 +584,50 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(mockPoster.mock.calls[0][0].aiGenerated).toBeUndefined();
     });
 
+    test('renders a Facebook Reel short and posts the video, not the AI images', async () => {
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                {
+                  id: 406,
+                  platform: 'facebook',
+                  post_id: 78,
+                  post_title: 'Άρθρο',
+                  post_copy: 'Facebook Reel caption #κύπρος',
+                  audio_url: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-78-1-abcd1234.wav',
+                  video_title: 'Hook',
+                  tiktok_short: { index: 0, count: 1, hook: 'Hook', source: 'article', badge: 'ΑΠΟΨΗ', images: [], segments: [] }
+                }
+              ]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: '/tmp/fb-reel.mp4', width: 1080, height: 1920, duration: 35, captions: 10, images: 0, music: false });
+      const mockPoster = jest.fn().mockResolvedValue({ success: true, platform: 'facebook', externalPostUrl: 'https://www.facebook.com/reel/1234567890' });
+      const poller = new PressHubPoller({
+        wpUrl: 'https://presshub.cy',
+        workerSecret: 'test-secret',
+        fetchFn: mockFetch,
+        posterHandler: mockPoster,
+        generateShortFn: mockGenerateShort
+      });
+
+      const stats = await poller.pollOnce();
+      expect(stats.succeeded).toBe(1);
+      expect(mockGenerateShort).toHaveBeenCalledWith(expect.objectContaining({ hook: 'Hook', badge: 'ΑΠΟΨΗ' }));
+      expect(mockGenerateShort.mock.calls[0][0].endCardLine).toBeUndefined();
+      expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ platform: 'facebook', mediaPath: '/tmp/fb-reel.mp4', copy: 'Facebook Reel caption #κύπρος' }));
+      expect(mockPoster.mock.calls[0][0].mediaPaths).toBeUndefined();
+    });
+
     test('saves a TikTok short test render and never posts it', async () => {
       const fs = require('fs');
       const os = require('os');

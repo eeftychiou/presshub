@@ -1548,7 +1548,7 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 if ( preg_match( "/period_end < '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['period_end'] ?? '' ) >= $m[1] ) return false;
                 }
-                // Prompt versions (PressHub_AI_Prompt_Versions, 2.76.0).
+                // Prompt versions (PressHub_AI_Prompt_Versions, 2.77.0).
                 if ( preg_match( "/prompt_key = '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['prompt_key'] ?? '' ) !== stripslashes( $m[1] ) ) return false;
                 }

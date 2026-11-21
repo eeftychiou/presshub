@@ -788,6 +788,16 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
             'default'           => 8,
         ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_trending_quiet_from_hour', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_trending_quiet_hour' ],
+            'type'              => 'integer',
+            'default'           => 0,
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_trending_quiet_until_hour', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_trending_quiet_hour' ],
+            'type'              => 'integer',
+            'default'           => 6,
+        ] );
 
         // --- Settings API sections and fields ---
         // Only these three sections are printed field by field (by
@@ -4680,6 +4690,22 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_trending_share_after_hour(): int {
         return self::sanitize_trending_share_after_hour( get_option( 'presshub_ai_social_trending_share_after_hour', 8 ) );
+    }
+
+    /** Quiet hours of the trending roundup: a local hour 0–23. */
+    public static function sanitize_trending_quiet_hour( $value ): int {
+        $n = is_numeric( $value ) ? (int) $value : 0;
+        return max( 0, min( 23, $n ) );
+    }
+
+    /** First local hour without scheduled trending runs (default 0, midnight). */
+    public static function get_trending_quiet_from_hour(): int {
+        return self::sanitize_trending_quiet_hour( get_option( 'presshub_ai_social_trending_quiet_from_hour', 0 ) );
+    }
+
+    /** Local hour scheduled trending runs start again (default 6). Equal to the start: no quiet hours. */
+    public static function get_trending_quiet_until_hour(): int {
+        return self::sanitize_trending_quiet_hour( get_option( 'presshub_ai_social_trending_quiet_until_hour', 6 ) );
     }
 
     /**

@@ -725,6 +725,14 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_facebook_shorts_enabled',
+            __( 'Facebook Reels (Shorts)', 'presshub-social-autopost' ),
+            [ $render, 'render_facebook_shorts_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
+        );
+
+        add_settings_field(
             'presshub_social_youtube_shorts_enabled',
             __( 'YouTube Shorts', 'presshub-social-autopost' ),
             [ $render, 'render_youtube_shorts_enabled_field' ],

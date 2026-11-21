@@ -3372,6 +3372,8 @@ class PressHub_AI_Settings_Render {
         $brief_n   = $S::get_social_trending_briefing_count();
         $per_acct  = $S::get_trending_max_per_account();
         $after_h   = $S::get_trending_share_after_hour();
+        $quiet_from  = $S::get_trending_quiet_from_hour();
+        $quiet_until = $S::get_trending_quiet_until_hour();
 
         $state    = class_exists( 'PressHub_AI_Social_Trending' ) ? PressHub_AI_Social_Trending::get_state() : [];
         $fmt      = static function ( $ts ) {
@@ -3473,6 +3475,14 @@ class PressHub_AI_Settings_Render {
             <td>
                 <input type="number" min="0" max="23" name="presshub_ai_social_trending_share_after_hour" id="presshub_ai_social_trending_share_after_hour" value="<?php echo self::esc_attr_safe( (string) $after_h ); ?>" class="small-text" />
                 <p class="description"><?php echo esc_html__( 'A roundup made before this local hour is scheduled for that hour, so its social posts go out when people read. 0 publishes at once. Default: 8.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_quiet_from_hour"><?php echo esc_html__( 'Quiet hours (no roundup runs)', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <?php echo esc_html__( 'From', 'presshub-ai-editor' ); ?> <input type="number" min="0" max="23" name="presshub_ai_social_trending_quiet_from_hour" id="presshub_ai_social_trending_quiet_from_hour" value="<?php echo self::esc_attr_safe( (string) $quiet_from ); ?>" class="small-text" />
+                <label for="presshub_ai_social_trending_quiet_until_hour"><?php echo esc_html__( 'until', 'presshub-ai-editor' ); ?></label> <input type="number" min="0" max="23" name="presshub_ai_social_trending_quiet_until_hour" id="presshub_ai_social_trending_quiet_until_hour" value="<?php echo self::esc_attr_safe( (string) $quiet_until ); ?>" class="small-text" />
+                <p class="description"><?php echo esc_html__( 'Local hours in which no scheduled roundup runs, so the worker does not read X, TikTok and Facebook overnight. The first run after the window happens at the "until" hour. "Refresh now" still works. The same hour twice turns quiet hours off. Default: 0 until 6.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
@@ -3916,7 +3926,7 @@ class PressHub_AI_Settings_Render {
         $choices = [
             'per_turn'   => __( 'One request per turn (best quality)', 'presshub-ai-editor' ),
             'same_voice' => __( 'Join back-to-back lines by the same voice', 'presshub-ai-editor' ),
-            'two_voices' => __( 'Two voices per request (fewest requests)', 'presshub-ai-editor' ),
+            'two_voices' => __( 'Two voices per request (paused: joins lines by the same voice)', 'presshub-ai-editor' ),
         ];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
@@ -3925,7 +3935,7 @@ class PressHub_AI_Settings_Render {
             <?php endforeach; ?>
         </select>
         <p class="description">
-            <?php echo esc_html__( 'A temporary way to stay under a low daily Gemini speech limit. One request per turn sends each line on its own (about 40 requests for an episode). Joining back-to-back lines by the same voice saves a few, and is the big saving with one host. Two voices per request sends a few turns of both hosts at once, with the host names kept in the text so Gemini gives each line the right voice: about 8 to 10 requests for an episode, for the Greek podcast and its translations. It needs two hosts with two different voices; otherwise lines by the same voice are joined. A joined request that fails or comes back cut short is voiced again turn by turn. Listen to an episode before you rely on it, and go back to one request per turn once your Google limit is raised. Google Cloud TTS always uses one request per turn. Default: one request per turn.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'A temporary way to stay under a low daily Gemini speech limit. One request per turn sends each line on its own (about 40 requests for an episode). Joining back-to-back lines by the same voice saves a few, and is the big saving with one host. Two voices per request sends a few turns of both hosts at once, with the host names kept in the text so Gemini gives each line the right voice: about 8 to 10 requests for an episode, for the Greek podcast and its translations. It needs two hosts with two different voices; otherwise lines by the same voice are joined. Paused since 2.76.1: Gemini now rejects these requests, so this choice joins lines by the same voice until a request Gemini accepts is proven. A joined request that fails or comes back cut short is voiced again turn by turn. Listen to an episode before you rely on it, and go back to one request per turn once your Google limit is raised. Google Cloud TTS always uses one request per turn. Default: one request per turn.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

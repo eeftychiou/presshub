@@ -70,7 +70,7 @@ class PressHub_AI_Settings {
                 wp_enqueue_script( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/js/settings-search.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
                 wp_localize_script( 'presshub-settings-search', 'presshubSettingsIndex', PressHub_Settings_Registry::search_payload( PressHub_Settings_Sections::current() ) );
                 wp_enqueue_script( 'presshub-settings-page', PRESSHUB_AI_URL . 'assets/js/settings-page.js', [ 'jquery', 'presshub-ai-admin-js', 'presshub-settings-search' ], PRESSHUB_AI_VERSION, true );
-                // 2.76.0: history, changes and restore for the prompt studio's prompts.
+                // 2.77.0: history, changes and restore for the prompt studio's prompts.
                 if ( class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
                     wp_enqueue_script( 'presshub-prompt-versions', PRESSHUB_AI_URL . 'assets/js/prompt-versions.js', [ 'jquery', 'presshub-ai-admin-js' ], PRESSHUB_AI_VERSION, true );
                     wp_localize_script( 'presshub-prompt-versions', 'presshubPromptVersions', PressHub_AI_Prompt_Versions::script_data() );
