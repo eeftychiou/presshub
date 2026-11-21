@@ -29,6 +29,7 @@ class PressHub_AI_Knowledge_Cuts {
         'editorial_agenda' => 'editorial_agenda_left_out',
         'stakeholders'     => 'stakeholders_left_out',
         'policy_fiches'    => 'policy_fiches_left_out',
+        'fact_checks'      => 'fact_checks_left_out',
         'material'         => 'material_left_out',
     ];
 

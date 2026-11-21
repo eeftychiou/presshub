@@ -2974,6 +2974,7 @@ class PressHub_AI_Settings_Render {
             'presshub_ai_policy_fiches_budgets'    => __( 'Policy fiches', 'presshub-ai-editor' ),
             'presshub_ai_stakeholders_budgets'     => __( 'People fiches', 'presshub-ai-editor' ),
             'presshub_ai_editorial_agenda_budgets' => __( 'Editorial agenda', 'presshub-ai-editor' ),
+            'presshub_ai_fact_checks_budgets'      => __( 'Fact checks', 'presshub-ai-editor' ),
         ];
         $task_names = [
             'briefing_curation'     => __( 'Briefing curation', 'presshub-ai-editor' ),
@@ -2984,6 +2985,7 @@ class PressHub_AI_Settings_Render {
             'social_tiktok_shorts'  => __( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ),
             'generate_image_prompt' => __( 'Image prompt', 'presshub-ai-editor' ),
             'social_copy_'          => __( 'Social copy', 'presshub-ai-editor' ),
+            'social_trending_summary' => __( 'Trending summary', 'presshub-ai-editor' ),
             'seo_'                  => __( 'SEO', 'presshub-ai-editor' ),
         ];
         ?>
@@ -3003,6 +3005,15 @@ class PressHub_AI_Settings_Render {
                 <tr>
                     <th scope="row"><label for="presshub_ai_claim_check_enabled"><?php echo esc_html__( 'Claim checks in curation', 'presshub-ai-editor' ); ?></label></th>
                     <td><?php $this->render_switch_field( 'presshub_ai_claim_check_enabled', __( 'Ask the curator to check claims', 'presshub-ai-editor' ), __( 'Disputed claims are attributed and one-sided coverage is flagged in the briefing. Default: on.', 'presshub-ai-editor' ) ); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_fact_checks_enabled"><?php echo esc_html__( 'Fact checks in AI calls', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_switch_field( 'presshub_ai_fact_checks_enabled', __( 'Note claims a fact-checker found false', 'presshub-ai-editor' ), __( 'When a briefing reports a fact check (for example FactCheck Cyprus finding a photo was altered), it is kept in the editorial memory. Briefings, the podcast, drafts, social posts, Shorts and the Trending roundup that repeat it then say so instead of passing it on as true. Default: on.', 'presshub-ai-editor' ) ); ?>
+                        <p><label for="presshub_ai_fact_check_days"><?php echo esc_html__( 'Fact checks kept for (days)', 'presshub-ai-editor' ); ?></label>
+                            <input type="number" min="1" max="180" name="presshub_ai_fact_check_days" id="presshub_ai_fact_check_days" value="<?php echo self::esc_attr_safe( (string) $S::get_fact_check_days() ); ?>" class="small-text" />
+                            <span class="description"><?php echo esc_html__( '1 to 180 days. Default: 30.', 'presshub-ai-editor' ); ?></span></p>
+                    </td>
                 </tr>
                 <tr>
                     <th scope="row"><label for="presshub_ai_pool_cleanup_enabled"><?php echo esc_html__( 'Clean the article pool', 'presshub-ai-editor' ); ?></label></th>

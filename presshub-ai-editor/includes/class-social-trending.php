@@ -1247,7 +1247,7 @@ class PressHub_AI_Social_Trending {
             }
         }
         $summary  = self::summary_for( $items, $update ? $existing : 0 );
-        $content  = self::build_content( $items, $now, $summary['text'] );
+        $content  = self::build_content( $items, $now, $summary['text'], (array) ( $summary['notes'] ?? [] ) );
         if ( $update ) {
             // A new set of posts is not shown until the QA gate has read it.
             if ( $new_set && class_exists( 'PressHub_AI_Publish_Gate' ) && PressHub_AI_Publish_Gate::applies( 'trending' ) ) {
@@ -1405,15 +1405,17 @@ class PressHub_AI_Social_Trending {
      * @return array{hash:string,text:string,fresh:bool}
      */
     public static function summary_for( array $items, int $post_id ): array {
-        $hash = self::summary_hash( $items );
-        $none = [ 'hash' => $hash, 'text' => '', 'fresh' => false ];
+        $hash  = self::summary_hash( $items );
+        $facts = self::fact_check_signature( $items );
+        $none  = [ 'hash' => $hash, 'text' => '', 'notes' => [], 'facts' => $facts, 'fresh' => false ];
         if ( empty( $items ) || ! PressHub_AI_Settings_Storage::get_social_trending_summary_enabled() ) {
             return $none;
         }
         if ( $post_id > 0 ) {
             $prev = get_post_meta( $post_id, self::META_SUMMARY, true );
-            if ( is_array( $prev ) && $hash === ( $prev['hash'] ?? '' ) && '' !== (string) ( $prev['text'] ?? '' ) ) {
-                return [ 'hash' => $hash, 'text' => (string) $prev['text'], 'fresh' => false ];
+            // Reused while the posts and the fact checks they match stay the same.
+            if ( is_array( $prev ) && $hash === ( $prev['hash'] ?? '' ) && $facts === (string) ( $prev['facts'] ?? '' ) && '' !== (string) ( $prev['text'] ?? '' ) ) {
+                return [ 'hash' => $hash, 'text' => (string) $prev['text'], 'notes' => is_array( $prev['notes'] ?? null ) ? $prev['notes'] : [], 'facts' => $facts, 'fresh' => false ];
             }
         }
         $text = self::generate_summary( $items, $post_id );
@@ -1421,7 +1423,28 @@ class PressHub_AI_Social_Trending {
             self::log( 'warning', 'Social trending: the summary was not written, the roundup is saved without it: ' . $text->get_error_message() );
             return $none;
         }
-        return [ 'hash' => $hash, 'text' => $text, 'fresh' => true ];
+        return [ 'hash' => $hash, 'text' => $text, 'notes' => self::$last_summary_notes, 'facts' => $facts, 'fresh' => true ];
+    }
+
+    /**
+     * Which fact checks in the editorial memory these posts' texts match ('' when
+     * none): a summary is written again when this changes, so a fact check
+     * recorded after the roundup was first written still gets noted.
+     */
+    public static function fact_check_signature( array $items ): string {
+        if ( ! class_exists( 'PressHub_AI_Fact_Checks' ) || ! PressHub_AI_Fact_Checks::is_enabled() ) {
+            return '';
+        }
+        $text = implode( "\n", array_map( static function ( $it ) {
+            return (string) ( $it['text'] ?? '' );
+        }, array_values( $items ) ) );
+        $hits = PressHub_AI_Fact_Checks::find_in_text( $text );
+        if ( empty( $hits ) ) {
+            return '';
+        }
+        return md5( implode( '|', array_map( static function ( $fc ) {
+            return PressHub_AI_Fact_Checks::fold( $fc['claim'] ) . '#' . $fc['verdict'];
+        }, $hits ) ) );
     }
 
     private static function save_summary_meta( int $post_id, array $summary ): void {
@@ -1431,6 +1454,8 @@ class PressHub_AI_Social_Trending {
         update_post_meta( $post_id, self::META_SUMMARY, [
             'hash'         => (string) $summary['hash'],
             'text'         => (string) $summary['text'],
+            'notes'        => (array) ( $summary['notes'] ?? [] ),
+            'facts'        => (string) ( $summary['facts'] ?? '' ),
             'generated_at' => gmdate( 'c' ),
         ] );
     }
@@ -1491,8 +1516,16 @@ class PressHub_AI_Social_Trending {
             '{posts}'     => self::summary_posts_text( $items ),
         ] );
         $sys = 'You are a careful Greek-language news editor. You reply with a single valid JSON object and nothing else.';
+        self::$last_summary_notes = [];
+        $refs = [];
 
         if ( is_callable( self::$summary_caller ) ) {
+            // Tests: add the fact checks here, as call_provider() does.
+            if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+                $sys  = PressHub_AI_Fact_Checks::apply( $sys, $user . "\n" . $sys, 'social_trending_summary' );
+                $refs = (array) ( PressHub_AI_Fact_Checks::last_applied()['refs'] ?? [] );
+                PressHub_AI_Fact_Checks::clear_last_applied();
+            }
             $raw = call_user_func( self::$summary_caller, $sys, $user );
         } else {
             if ( ! class_exists( 'PressHub_AI_API_Client' ) || ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
@@ -1511,6 +1544,8 @@ class PressHub_AI_Social_Trending {
                 $client->set_action( 'social_trending_summary' );
                 $client->suppress_provider_prompt_log = true;
                 $raw = $client->call_provider( $sys, $user, true, [], 0.3, [ 'purpose' => 'social_trending_summary' ] );
+                // The fact checks call_provider() added, before the record consumes them.
+                $refs = class_exists( 'PressHub_AI_Fact_Checks' ) ? (array) ( PressHub_AI_Fact_Checks::last_applied()['refs'] ?? [] ) : [];
             } catch ( Throwable $t ) {
                 $raw = new WP_Error( 'ai_dispatch_exception', $t->getMessage() );
             }
@@ -1526,7 +1561,57 @@ class PressHub_AI_Social_Trending {
         if ( is_wp_error( $raw ) ) {
             return $raw;
         }
-        return self::parse_summary( (string) $raw );
+        $text = self::parse_summary( (string) $raw );
+        if ( ! is_wp_error( $text ) ) {
+            self::$last_summary_notes = self::parse_fact_check_notes( (string) $raw, $refs, $items );
+            if ( ! empty( self::$last_summary_notes ) ) {
+                self::log( 'info', sprintf( 'Social trending: %d post(s) noted with a fact check from the editorial memory.', count( self::$last_summary_notes ) ), [ 'posts' => array_keys( self::$last_summary_notes ) ] );
+            }
+        }
+        return $text;
+    }
+
+    /** Notes of the last generate_summary() call: item key => {text, url}. */
+    public static array $last_summary_notes = [];
+
+    /**
+     * The posts the summary reply says repeat a fact check
+     * ({"fact_checks":[{"post":1,"check":"FC1"}]}), as notes keyed by the
+     * post's item key. Only fact checks that were sent count (an unknown
+     * reference or post number is dropped), and the note is written from
+     * the stored fact check, never from the model's words.
+     *
+     * @param array<string,array> $refs FC reference => fact check, as sent.
+     * @return array<string,array{text:string,url:string}>
+     */
+    public static function parse_fact_check_notes( string $raw, array $refs, array $items ): array {
+        if ( empty( $refs ) || ! class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            return [];
+        }
+        $data  = class_exists( 'PressHub_AI_SEO' ) ? PressHub_AI_SEO::decode_json_object( $raw ) : json_decode( trim( $raw ), true );
+        $list  = is_array( $data ) && is_array( $data['fact_checks'] ?? null ) ? $data['fact_checks'] : [];
+        $items = array_values( $items );
+        $notes = [];
+        foreach ( $list as $row ) {
+            if ( ! is_array( $row ) ) {
+                continue;
+            }
+            $n   = (int) ( $row['post'] ?? 0 );
+            $ref = strtoupper( trim( (string) ( $row['check'] ?? '' ) ) );
+            if ( $n < 1 || $n > count( $items ) || ! isset( $refs[ $ref ] ) ) {
+                continue;
+            }
+            $key = (string) ( $items[ $n - 1 ]['key'] ?? '' );
+            if ( '' === $key || isset( $notes[ $key ] ) ) {
+                continue;
+            }
+            $fc            = $refs[ $ref ];
+            $notes[ $key ] = [
+                'text' => PressHub_AI_Fact_Checks::note_text( $fc ),
+                'url'  => (string) ( $fc['source_url'] ?? '' ),
+            ];
+        }
+        return $notes;
     }
 
     /**
@@ -1695,7 +1780,7 @@ class PressHub_AI_Social_Trending {
      * Block-editor content: intro, then one card (group block) per post with a
      * heading (rank, author, platform badge), the engagement line and the embed.
      */
-    public static function build_content( array $items, int $now, string $summary = '' ): string {
+    public static function build_content( array $items, int $now, string $summary = '', array $notes = [] ): string {
         $platforms = [];
         foreach ( $items as $it ) {
             $platforms[ $it['platform'] ] = self::PLATFORM_LABELS[ $it['platform'] ];
@@ -1740,6 +1825,7 @@ class PressHub_AI_Social_Trending {
                 . "<!-- wp:heading {\"level\":3,\"className\":\"presshub-trending-title\"} -->\n<h3 class=\"wp-block-heading presshub-trending-title\">" . $head . "</h3>\n<!-- /wp:heading -->\n\n"
                 . "<!-- wp:paragraph {\"className\":\"presshub-trending-stats\"} -->\n<p class=\"presshub-trending-stats\">" . esc_html( implode( ' · ', $stats ) ) . "</p>\n<!-- /wp:paragraph -->\n\n"
                 . self::embed_block( $it )
+                . ( isset( $notes[ (string) ( $it['key'] ?? '' ) ] ) && class_exists( 'PressHub_AI_Fact_Checks' ) ? "\n\n" . PressHub_AI_Fact_Checks::note_block( (array) $notes[ (string) $it['key'] ] ) : '' )
                 . "</div>\n<!-- /wp:group -->";
         }
         return implode( "\n\n", $out );
@@ -1825,7 +1911,8 @@ class PressHub_AI_Social_Trending {
             . '.presshub-trending-card .presshub-tiktok-photo-card{margin:0 auto;}'
             . '.presshub-tiktok-photo-card img{max-width:min(100%,420px);height:auto;}'
             . '.presshub-trending-summary{font-size:1.1em;line-height:1.6;border-left:4px solid currentColor;padding:.25rem 0 .25rem 1rem;margin:0 0 1.5rem;}'
-            . '@media (prefers-color-scheme:dark){.presshub-trending-card{border-color:rgba(255,255,255,.15);}}';
+            . '.presshub-trending-factcheck{margin:.75rem 0 0;padding:.6rem .8rem;border-left:4px solid #b32d2e;background:rgba(179,45,46,.08);font-size:.95em;}'
+            . '@media (prefers-color-scheme:dark){.presshub-trending-card{border-color:rgba(255,255,255,.15);}.presshub-trending-factcheck{background:rgba(255,120,120,.12);border-left-color:#ff8a8a;}}';
     }
 
     /* ------------------------------------------------------------------

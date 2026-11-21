@@ -3119,6 +3119,11 @@ class PressHub_AI_API_Client {
         if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
             $sys_prompt = PressHub_AI_Policy_Fiches::apply( $sys_prompt, $policy_material, $this->get_action() );
         }
+        // Fact checks in the editorial memory (claims, photos or videos found false)
+        // that the material repeats; after the fiches, matched on the same material.
+        if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            $sys_prompt = PressHub_AI_Fact_Checks::apply( $sys_prompt, $policy_material, $this->get_action() );
+        }
 
         // Material the caller cut to fit its limits (noted with
         // PressHub_AI_Knowledge_Cuts::clip_material()) belongs to this call.

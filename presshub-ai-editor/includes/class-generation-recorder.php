@@ -344,6 +344,9 @@ class PressHub_AI_Generation_Recorder {
         if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
             PressHub_AI_Policy_Fiches::clear_last_applied();
         }
+        if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            PressHub_AI_Fact_Checks::clear_last_applied();
+        }
         if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
             PressHub_AI_Knowledge_Cuts::clear_last_material();
         }
@@ -411,6 +414,21 @@ class PressHub_AI_Generation_Recorder {
                 }
             }
             PressHub_AI_Policy_Fiches::clear_last_applied();
+        }
+        // Fact checks from the editorial memory (applied after the policy fiches).
+        if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            $facts = PressHub_AI_Fact_Checks::last_applied();
+            if ( is_array( $facts ) ) {
+                $config['fact_checks']       = array_values( (array) $facts['claims'] );
+                $config['fact_checks_chars'] = (int) $facts['chars'];
+                if ( ! empty( $facts['left_out'] ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    $config['fact_checks_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $facts['left_out'] );
+                }
+                if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $facts['original_hash'] ) {
+                    $sys_prompt = $facts['prompt'];
+                }
+            }
+            PressHub_AI_Fact_Checks::clear_last_applied();
         }
         // Material the caller cut to fit its limits (article body, script,
         // fetched pages, URL count): design principle, never silent.
