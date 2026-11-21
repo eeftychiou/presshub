@@ -3844,7 +3844,7 @@ escort
     'group' => 'where',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Facebook Reels (Shorts)',
-    'help' => 'Posts the same short videos to the Facebook Page as Reels, after the usual Facebook link post, which is still made. Default: off.',
+    'help' => 'Posts the same short videos to the Facebook Page as Reels, after the usual Facebook link post, which is still made. With the API engine the worker uploads them through the Graph API (the Meta token needs pages_manage_posts); with the automation engine it uses the browser session. Default: off.',
     'checkbox' => true,
     'secret' => false,
     'type' => 'boolean',

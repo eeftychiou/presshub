@@ -405,11 +405,11 @@ class PressHub_Social_Settings_Render {
                 'link' => __( 'Change Instagram engine', 'presshub-social-autopost' ),
             ];
         }
-        if ( $facebook && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'facebook' ) ) {
+        if ( $facebook && 'api' === PressHub_Social_Settings_Storage::get_platform_engine( 'facebook' ) && ! PressHub_Social_TikTok_Shorts::facebook_reels_via_api() ) {
             $issues[] = [
-                'text' => __( 'Facebook Reels need the automation engine, but Facebook uses another engine.', 'presshub-social-autopost' ),
-                'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_facebook' ),
-                'link' => __( 'Change Facebook engine', 'presshub-social-autopost' ),
+                'text' => __( 'Facebook Reels go through the Graph API with the API engine, but the Meta Page ID or access token is not set.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'credentials', 'presshub_social_meta_page_id' ),
+                'link' => __( 'Set the Meta Page ID and token', 'presshub-social-autopost' ),
             ];
         }
         if ( $youtube && class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason() ) {
@@ -672,7 +672,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_facebook_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_facebook_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Also post each short (podcast stories and, with Article Shorts on, articles) to the Facebook Page as a Reel, with the short\'s own caption. The usual Facebook link post to the article is still made; each Reel follows it by the time between shorts. Needs Facebook enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Also post each short (podcast stories and, with Article Shorts on, articles) to the Facebook Page as a Reel, with the short\'s own caption. The usual Facebook link post to the article is still made; each Reel follows it by the time between shorts. Needs Facebook enabled and the worker in Pull Mode. With the API engine the worker uploads each Reel through the Graph API (the Meta token needs pages_manage_posts); with the automation engine it posts it with the Facebook browser session.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }

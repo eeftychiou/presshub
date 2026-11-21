@@ -530,7 +530,7 @@ __( 'Turns each podcast into short narrated videos for TikTok (and each article 
 __( 'Instagram Reels (Shorts)', 'presshub-ai-editor' );
 __( 'Posts the same short videos to Instagram as Reels. Default: off.', 'presshub-ai-editor' );
 __( 'Facebook Reels (Shorts)', 'presshub-ai-editor' );
-__( 'Posts the same short videos to the Facebook Page as Reels, after the usual Facebook link post, which is still made. Default: off.', 'presshub-ai-editor' );
+__( 'Posts the same short videos to the Facebook Page as Reels, after the usual Facebook link post, which is still made. With the API engine the worker uploads them through the Graph API (the Meta token needs pages_manage_posts); with the automation engine it uses the browser session. Default: off.', 'presshub-ai-editor' );
 __( 'YouTube Shorts', 'presshub-ai-editor' );
 __( 'Uploads the same short videos to YouTube, where every vertical video of three minutes or less is a Short. Needs a connected YouTube channel. Default: off.', 'presshub-ai-editor' );
 __( 'YouTube Podcast Episodes', 'presshub-ai-editor' );
