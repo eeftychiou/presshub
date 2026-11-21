@@ -1548,6 +1548,16 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 if ( preg_match( "/period_end < '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['period_end'] ?? '' ) >= $m[1] ) return false;
                 }
+                // Prompt versions (PressHub_AI_Prompt_Versions, 2.82.0).
+                if ( preg_match( "/prompt_key = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['prompt_key'] ?? '' ) !== stripslashes( $m[1] ) ) return false;
+                }
+                if ( preg_match( "/version_id = (\d+)/", $where, $m ) ) {
+                    if ( (int) ( $row['version_id'] ?? 0 ) !== (int) $m[1] ) return false;
+                }
+                if ( preg_match( "/(?<![A-Za-z0-9_])id IN \(([0-9, ]+)\)/", $where, $m ) ) {
+                    if ( ! in_array( (int) ( $row['id'] ?? 0 ), array_map( 'intval', explode( ',', $m[1] ) ), true ) ) return false;
+                }
                 return true;
             } ) );
         }

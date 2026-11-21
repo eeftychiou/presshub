@@ -153,6 +153,13 @@ class PressHub_AI_News_Curator {
     private static int $last_memory_tokens_estimate = 0;
 
     /**
+     * @internal 2.82.0 - prompt versions the most recent build_prompt() call used.
+     *
+     * @var array<int,array>
+     */
+    private static array $last_prompt_versions = [];
+
+    /**
      * Get the base curation prompt with template placeholders.
      *
      * @return string Base system prompt with placeholders.
@@ -585,6 +592,14 @@ class PressHub_AI_News_Curator {
     }
 
     /**
+     * 2.82.0 - prompt versions (PressHub_AI_Prompt_Versions refs) the most
+     * recent build_prompt() call used; goes on the briefing_text record.
+     */
+    public function last_prompt_versions(): array {
+        return self::$last_prompt_versions;
+    }
+
+    /**
      * Issue #135 - character count of the rendered memory block from the most recent build_prompt() call.
      */
     public function last_memory_chars(): int {
@@ -841,6 +856,12 @@ class PressHub_AI_News_Curator {
         $base_prompt = class_exists( 'PressHub_AI_Settings_Storage' )
             ? PressHub_AI_Settings_Storage::get_curation_prompt()
             : $this->get_default_curation_prompt();
+        // 2.82.0: the prompt studio version this briefing is written with.
+        self::$last_prompt_versions = [];
+        if ( class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
+            $ref = PressHub_AI_Prompt_Versions::ref( 'presshub_ai_briefing_text_prompt', (string) $base_prompt );
+            self::$last_prompt_versions = null !== $ref ? [ $ref ] : [];
+        }
         $base_prompt = apply_filters( 'presshub_ai_curator_system_prompt', $base_prompt );
 
         $has_memory_in_system  = ( false !== strpos( $base_prompt, '{memory_context}' ) );
@@ -1635,6 +1656,7 @@ class PressHub_AI_News_Curator {
                         'preset_id'          => $preset_id,
                         'edition'            => $edition,
                         'articles_placement' => $this->last_articles_placement(),
+                        'prompt_versions'    => $this->last_prompt_versions(),
                     ]
                 ), $gen_injected[1] ),
                 'inputs'        => [

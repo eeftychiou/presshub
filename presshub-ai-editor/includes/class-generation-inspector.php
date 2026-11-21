@@ -355,6 +355,11 @@ class PressHub_AI_Generation_Inspector {
         if ( in_array( $status, [ 'success', 'error' ], true ) ) {
             $filters['status'] = $status;
         }
+        // 2.82.0: only the generations that used one prompt version.
+        $prompt_version = isset( $input['prompt_version'] ) && is_scalar( $input['prompt_version'] ) ? (int) $input['prompt_version'] : 0;
+        if ( $prompt_version > 0 ) {
+            $filters['prompt_version'] = $prompt_version;
+        }
         return $filters;
     }
 
@@ -384,6 +389,15 @@ class PressHub_AI_Generation_Inspector {
         if ( isset( $filters['status'] ) ) {
             $where[] = $wpdb->prepare( 'status = %s', $filters['status'] );
         }
+        if ( isset( $filters['prompt_version'] ) ) {
+            $ids = class_exists( 'PressHub_AI_Prompt_Versions' )
+                ? PressHub_AI_Prompt_Versions::record_ids_for_version( (int) $filters['prompt_version'], max( 1, (int) $limit ) )
+                : [];
+            if ( empty( $ids ) ) {
+                return [];
+            }
+            $where[] = 'id IN (' . implode( ',', array_map( 'intval', $ids ) ) . ')';
+        }
 
         $sql  = 'SELECT ' . self::LIGHT_COLUMNS . ', config_json FROM ' . $table;
         $sql .= $where ? ' WHERE ' . implode( ' AND ', $where ) : '';
@@ -397,6 +411,7 @@ class PressHub_AI_Generation_Inspector {
             unset( $row['config_json'] );
             $row          = self::normalize_light_row( $row );
             $row['model'] = (string) ( $config['model'] ?? '' );
+            $row['prompt_versions'] = isset( $config['prompt_versions'] ) && is_array( $config['prompt_versions'] ) ? $config['prompt_versions'] : [];
             $rows[]       = $row;
         }
         return $rows;
@@ -660,6 +675,9 @@ class PressHub_AI_Generation_Inspector {
         if ( isset( $config['editorial_agenda_version'] ) ) {
             $knowledge[ __( 'Editorial agenda', 'presshub-ai-editor' ) ] = 'v' . (int) $config['editorial_agenda_version'] . ' (' . (int) ( $config['editorial_agenda_chars'] ?? 0 ) . ' chars)';
         }
+        // 2.82.0: the prompt studio versions the generation was written with.
+        $prompt_rows = self::prompt_version_rows( $config );
+
         // Design principle: every cut a context limit made is shown with the call.
         $cuts = [];
         if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
@@ -718,10 +736,51 @@ class PressHub_AI_Generation_Inspector {
         $usage_rows[ __( 'Articles truncated (count or per-article cap)', 'presshub-ai-editor' ) ] = $articles_truncated;
 
         return self::section_heading( __( 'Generation', 'presshub-ai-editor' ) ) . self::kv_table( $general )
+            . ( empty( $prompt_rows ) ? '' : self::section_heading( __( 'Prompt versions used', 'presshub-ai-editor' ) ) . self::kv_table( $prompt_rows ) )
             . self::section_heading( __( 'Request settings (as resolved)', 'presshub-ai-editor' ) ) . self::kv_table( $settings )
             . ( empty( $knowledge ) ? '' : self::section_heading( __( 'Editorial knowledge sent', 'presshub-ai-editor' ) ) . self::kv_table( $knowledge ) )
             . ( empty( $cuts ) ? '' : self::section_heading( __( 'Left out because of limits', 'presshub-ai-editor' ) ) . self::kv_table( $cuts ) )
             . self::section_heading( __( 'Usage and truncation', 'presshub-ai-editor' ) ) . self::kv_table( $usage_rows );
+    }
+
+    /**
+     * "v3 · History and changes" rows for the prompt versions on a record's
+     * config (2.82.0). The link opens the prompt's history in Settings for
+     * users who may edit that prompt.
+     */
+    private static function prompt_version_rows( array $config ): array {
+        if ( empty( $config['prompt_versions'] ) || ! class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
+            return [];
+        }
+        $rows = [];
+        foreach ( PressHub_AI_Prompt_Versions::clean_refs( $config['prompt_versions'] ) as $ref ) {
+            $key   = $ref['key'];
+            $label = PressHub_AI_Prompt_Versions::is_tracked( $key ) ? PressHub_AI_Prompt_Versions::label( $key ) : ( '' !== $ref['label'] ? $ref['label'] : $key );
+            /* translators: %d: prompt version number */
+            $html  = esc_html( sprintf( __( 'v%d', 'presshub-ai-editor' ), $ref['version'] ) );
+            if ( PressHub_AI_Prompt_Versions::is_tracked( $key ) && current_user_can( PressHub_AI_Prompt_Versions::capability_for( $key ) ) ) {
+                $html .= ' · <a href="' . esc_url( PressHub_AI_Prompt_Versions::history_url( $key, $ref['version_id'] ) ) . '">'
+                    . esc_html__( 'Text, history and changes', 'presshub-ai-editor' ) . '</a>';
+            }
+            $html .= ' · <a href="' . esc_url( PressHub_AI_Prompt_Versions::records_url( $ref['version_id'] ) ) . '">'
+                . esc_html__( 'Other generations with this version', 'presshub-ai-editor' ) . '</a>';
+            $rows[ $label ] = [ 'html' => $html ];
+        }
+        return $rows;
+    }
+
+    /** Short "Curator v3, System v1" line for the records list (2.82.0). */
+    private static function prompt_versions_cell( array $config ): string {
+        if ( empty( $config['prompt_versions'] ) || ! class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
+            return '—';
+        }
+        $parts = [];
+        foreach ( PressHub_AI_Prompt_Versions::clean_refs( $config['prompt_versions'] ) as $ref ) {
+            $label   = PressHub_AI_Prompt_Versions::is_tracked( $ref['key'] ) ? PressHub_AI_Prompt_Versions::label( $ref['key'] ) : $ref['label'];
+            $parts[] = '<a href="' . esc_url( PressHub_AI_Prompt_Versions::records_url( $ref['version_id'] ) ) . '" title="' . esc_attr( $label ) . '">'
+                . esc_html( $label . ' v' . $ref['version'] ) . '</a>';
+        }
+        return empty( $parts ) ? '—' : implode( '<br />', $parts );
     }
 
     /** "a, b (1234 chars)" for a list of injected fiches. */
@@ -1155,7 +1214,20 @@ class PressHub_AI_Generation_Inspector {
         foreach ( [ 'success', 'error' ] as $status ) {
             $html .= '<option value="' . esc_attr( $status ) . '"' . ( ( $filters['status'] ?? '' ) === $status ? ' selected="selected"' : '' ) . '>' . esc_html( $status ) . '</option>';
         }
-        $html .= '</select></label> <button type="submit" class="button">' . esc_html__( 'Filter', 'presshub-ai-editor' ) . '</button></form>';
+        $html .= '</select></label> ';
+        if ( isset( $filters['prompt_version'] ) ) {
+            $html .= '<input type="hidden" name="prompt_version" value="' . esc_attr( (string) $filters['prompt_version'] ) . '" />';
+        }
+        $html .= '<button type="submit" class="button">' . esc_html__( 'Filter', 'presshub-ai-editor' ) . '</button></form>';
+        if ( isset( $filters['prompt_version'] ) && class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
+            $version = PressHub_AI_Prompt_Versions::get( (int) $filters['prompt_version'] );
+            $clear   = add_query_arg( array_merge( array_diff_key( $filters, [ 'prompt_version' => 1 ] ), [ 'page' => self::PAGE_SLUG ] ), $base );
+            $html   .= '<p class="presshub-records-prompt-filter">' . ( null === $version
+                ? esc_html__( 'Showing generations that used a prompt version that no longer exists.', 'presshub-ai-editor' )
+                /* translators: 1: prompt name, 2: version number */
+                : esc_html( sprintf( __( 'Showing generations that used %1$s v%2$d.', 'presshub-ai-editor' ), PressHub_AI_Prompt_Versions::label( $version['prompt_key'] ), $version['version'] ) ) )
+                . ' <a href="' . esc_url( $clear ) . '">' . esc_html__( 'Show all generations', 'presshub-ai-editor' ) . '</a></p>';
+        }
 
         if ( $record_id > 0 ) {
             $selected = self::get_light_row( $record_id );
@@ -1172,13 +1244,14 @@ class PressHub_AI_Generation_Inspector {
             $html .= '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Date', 'presshub-ai-editor' ) . '</th><th>'
                 . esc_html__( 'Kind', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'Edition', 'presshub-ai-editor' ) . '</th><th>'
                 . esc_html__( 'Status', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'Post', 'presshub-ai-editor' ) . '</th><th>'
-                . esc_html__( 'Model', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'Inspect', 'presshub-ai-editor' ) . '</th></tr></thead><tbody>';
+                . esc_html__( 'Model', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'Prompt version', 'presshub-ai-editor' ) . '</th><th>'
+                . esc_html__( 'Inspect', 'presshub-ai-editor' ) . '</th></tr></thead><tbody>';
             foreach ( $rows as $row ) {
                 $open_url = add_query_arg( array_merge( $filters, [ 'page' => self::PAGE_SLUG, 'record_id' => $row['id'] ] ), $base );
                 $html    .= '<tr><td>' . esc_html( '' !== $row['briefing_date'] ? $row['briefing_date'] : $row['created_at'] ) . '</td><td>'
                     . esc_html( self::kind_label( $row['kind'] ) ) . '</td><td>' . self::cell( $row['edition'] ) . '</td><td>'
                     . esc_html( $row['status'] ) . '</td><td>' . self::post_link_html( (int) $row['post_id'] ) . '</td><td>'
-                    . self::cell( $row['model'] ) . '</td><td><a href="' . esc_url( $open_url ) . '">'
+                    . self::cell( $row['model'] ) . '</td><td>' . self::prompt_versions_cell( [ 'prompt_versions' => $row['prompt_versions'] ?? [] ] ) . '</td><td><a href="' . esc_url( $open_url ) . '">'
                     . esc_html( sprintf( __( 'Open #%d', 'presshub-ai-editor' ), $row['id'] ) ) . '</a></td></tr>';
             }
             $html .= '</tbody></table>';
