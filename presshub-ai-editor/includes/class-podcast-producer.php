@@ -64,7 +64,7 @@ class PressHub_AI_Podcast_Producer {
     private static int $last_memory_tokens_estimate = 0;
 
     /**
-     * @internal 2.77.0 - prompt versions the most recent build_dialogue_prompt() call used.
+     * @internal 2.79.0 - prompt versions the most recent build_dialogue_prompt() call used.
      *
      * @var array<int,array>
      */
@@ -195,7 +195,7 @@ class PressHub_AI_Podcast_Producer {
     }
 
     /**
-     * 2.77.0 - prompt versions (PressHub_AI_Prompt_Versions refs) the most
+     * 2.79.0 - prompt versions (PressHub_AI_Prompt_Versions refs) the most
      * recent build_dialogue_prompt() call used; goes on the podcast_script record.
      */
     public function last_prompt_versions(): array {
@@ -397,7 +397,7 @@ class PressHub_AI_Podcast_Producer {
             throw new InvalidArgumentException( sprintf( __( 'No dialogue prompt configured for style "%1$s" and %2$d presenter(s). Please configure the prompt in PressHub -> Settings -> Daily Briefing Hub -> Podcast script.', 'presshub-ai-editor' ), $style, $host_count ) );
         }
 
-        // 2.77.0: the prompt studio version this script is written with.
+        // 2.79.0: the prompt studio version this script is written with.
         self::$last_prompt_versions = [];
         if ( class_exists( 'PressHub_AI_Prompt_Versions' ) ) {
             $ref = PressHub_AI_Prompt_Versions::ref(

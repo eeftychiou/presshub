@@ -1,6 +1,6 @@
 <?php
 /**
- * PromptVersionsTest (2.77.0) - prompt studio history.
+ * PromptVersionsTest (2.79.0) - prompt studio history.
  *
  * Covers:
  *   1. A saved prompt becomes a numbered version; an unchanged save adds none;

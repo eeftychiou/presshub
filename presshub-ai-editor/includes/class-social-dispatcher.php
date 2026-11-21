@@ -316,7 +316,9 @@ class PressHub_Social_Dispatcher {
         }
         $start = $link_time + PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
         $ids   = [];
-        foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $start, false, 'facebook' ) as $short_job ) {
+        // A Reel is always the worker's job (it renders the video), also when the link post
+        // goes through the API: the worker then uploads it through the Graph API.
+        foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $post_id, 'automation', $media_url, $media_type, $start, false, 'facebook' ) as $short_job ) {
             $job_id = PressHub_Social_Queue::enqueue( $short_job );
             if ( is_wp_error( $job_id ) ) {
                 PressHub_Social_Logger::error( sprintf( 'Failed to enqueue Facebook Reel for post #%d: %s', $post_id, $job_id->get_error_message() ) );

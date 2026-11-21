@@ -20,7 +20,7 @@
  * colour alone.
  *
  * @package PressHub_AI_Editor
- * @since 2.77.0
+ * @since 2.79.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

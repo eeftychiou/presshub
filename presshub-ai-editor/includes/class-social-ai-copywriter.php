@@ -250,7 +250,7 @@ class PressHub_Social_AI_Copywriter {
                 if ( method_exists( $client, 'set_action' ) ) {
                     $client->set_action( 'social_copy_' . $platform );
                 }
-                // 2.77.0: the generation record names the prompt versions used.
+                // 2.79.0: the generation record names the prompt versions used.
                 if ( class_exists( 'PressHub_AI_Prompt_Versions' ) && property_exists( $client, 'generation_record_config' ) ) {
                     $client->generation_record_config = [
                         'prompt_versions' => PressHub_AI_Prompt_Versions::clean_refs( [

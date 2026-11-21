@@ -1,5 +1,5 @@
 /**
- * PressHub → Settings: prompt history (2.77.0).
+ * PressHub → Settings: prompt history (2.79.0).
  *
  * Every prompt studio textarea listed in window.presshubPromptVersions.prompts
  * gets a "History and changes" button. Its panel lists the kept versions of

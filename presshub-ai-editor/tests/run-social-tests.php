@@ -3685,7 +3685,66 @@ $GLOBALS['mock_posts'][ $fb_short_post_id ] = (object) [
 update_post_meta( $fb_short_post_id, '_presshub_briefing_type', 'podcast' );
 update_post_meta( $fb_short_post_id, '_presshub_podcast_script', '[SPEAKER_1]: Welcome to the news.' );
 assert_true( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'automation', 'facebook' ), 'should_split is true for Facebook when Facebook Reels are on in Pull Mode' );
-assert_false( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'api', 'facebook' ), 'Facebook Reels need the automation engine' );
+update_option( 'presshub_social_engine_facebook', 'api' );
+delete_option( 'presshub_social_meta_page_id' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'api', 'facebook' ), 'Facebook Reels on the API engine need the Meta Page ID and token' );
+update_option( 'presshub_social_meta_page_id', '1234567890' );
+update_option( 'presshub_social_meta_access_token', 'user-token-abc' );
+assert_true( PressHub_Social_TikTok_Shorts::facebook_reels_via_api(), 'Facebook Reels go through the Graph API with the API engine and Meta set up' );
+assert_true( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'api', 'facebook' ), 'should_split is true for Facebook on the API engine with Meta set up' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'api', 'instagram' ), 'The API engine still makes no Instagram Reels' );
+$fb_api_ids = PressHub_Social_Dispatcher::enqueue_facebook_shorts( $fb_short_post_id, 'api', null, null, time() );
+assert_equals( 'automation', PressHub_Social_Queue::get_job( $fb_api_ids[0] )['engine'] ?? '', 'A Reel queued for the API engine is a worker job' );
+
+// The claim: a worker that can upload Reels through the API gets them without a Facebook
+// session, with mode api; a browser Facebook post is not handed to it.
+PressHub_Social_Queue::reset_memory_store();
+$fb_ready_meta = [ 'tiktok_short' => [
+    'index'   => 0,
+    'count'   => 1,
+    'hook'    => 'Reel hook',
+    'caption' => 'Reel caption #news',
+    'images'  => [],
+    'audio'   => [ 'audio_url' => 'https://example.com/uploads/reel.wav', 'segments' => [ [ 'speaker' => 1, 'text' => 'Hi', 'start' => 0, 'end' => 1 ] ] ],
+] ];
+$fb_reel_job = PressHub_Social_Queue::enqueue( [
+    'post_id' => $fb_short_post_id, 'platform' => 'facebook', 'engine' => 'automation', 'post_copy' => PressHub_Social_TikTok_Shorts::placeholder_copy( 0, 1 ),
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'status' => 'pending', 'metadata' => $fb_ready_meta,
+] );
+$fb_browser_job = PressHub_Social_Queue::enqueue( [
+    'post_id' => $fb_short_post_id, 'platform' => 'facebook', 'engine' => 'automation', 'post_copy' => 'A browser link post',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'status' => 'pending',
+] );
+$fb_req = new WP_REST_Request( 'POST', '/worker/claim' );
+$fb_req->set_param( 'sessions', [ 'facebook' => false, 'tiktok' => true ] );
+$fb_req->set_param( 'limit', 5 );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $fb_req )['jobs'] ), 'A worker without a Facebook session or the Reels API capability gets no Facebook job' );
+$fb_req->set_param( 'capabilities', [ 'facebook_reels_api' ] );
+$fb_claimed = PressHub_Social_REST_Controller::handle_claim( $fb_req )['jobs'];
+assert_equals( [ (int) $fb_reel_job ], array_map( fn( $j ) => (int) $j['id'], $fb_claimed ), 'A Reels API worker without a Facebook session gets the Reel, not the browser post' );
+assert_equals( 'api', $fb_claimed[0]['facebook_reel']['mode'] ?? '', 'The claimed Reel says to upload it through the Graph API' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $fb_browser_job )['status'] ?? '', 'The browser Facebook post stays queued' );
+PressHub_Social_Queue::update_job( (int) $fb_reel_job, [ 'status' => 'pending' ] );
+update_option( 'presshub_social_engine_facebook', 'automation' );
+$fb_req->set_param( 'sessions', [ 'facebook' => true ] );
+$fb_browser_claim = PressHub_Social_REST_Controller::handle_claim( $fb_req )['jobs'];
+$fb_browser_reel  = array_values( array_filter( $fb_browser_claim, fn( $j ) => (int) $j['id'] === (int) $fb_reel_job ) );
+assert_equals( 'browser', $fb_browser_reel[0]['facebook_reel']['mode'] ?? '', 'On the automation engine the Reel is posted with the browser session' );
+assert_equals( 2, count( $fb_browser_claim ), 'A worker with a Facebook session gets the browser post too' );
+PressHub_Social_Queue::reset_memory_store();
+
+// The Page token for the worker's upload.
+PressHub_Social_Meta_API_Client::set_http_get( fn( $url ) => [ 'access_token' => 'page-token-xyz', 'id' => '1234567890' ] );
+$fb_tok = PressHub_Social_REST_Controller::handle_facebook_token( new WP_REST_Request( 'POST', '/worker/facebook/token' ) );
+assert_equals( '1234567890', $fb_tok['page_id'] ?? '', 'The Facebook token route gives the Page ID' );
+assert_equals( 'page-token-xyz', $fb_tok['access_token'] ?? '', 'The Facebook token route gives the Page token, not the stored token' );
+assert_equals( PressHub_Social_Meta_API_Client::GRAPH_API_VERSION, $fb_tok['graph_version'] ?? '', 'The Facebook token route gives the Graph API version' );
+PressHub_Social_Meta_API_Client::set_http_get( null );
+delete_option( 'presshub_social_meta_access_token' );
+$fb_tok_err = PressHub_Social_REST_Controller::handle_facebook_token( new WP_REST_Request( 'POST', '/worker/facebook/token' ) );
+assert_true( is_wp_error( $fb_tok_err ) && 409 === ( $fb_tok_err->get_error_data()['status'] ?? 0 ), 'The Facebook token route refuses (409) without a Meta token' );
+delete_option( 'presshub_social_meta_page_id' );
+delete_option( 'presshub_social_engine_facebook' );
 
 $fb_link_time = time() + 600;
 $fb_ids       = PressHub_Social_Dispatcher::enqueue_facebook_shorts( $fb_short_post_id, 'automation', null, null, $fb_link_time );
