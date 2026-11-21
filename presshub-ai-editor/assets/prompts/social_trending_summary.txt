@@ -4,11 +4,12 @@ Rules:
 1. Write in GREEK, 2 to 4 sentences, at most 90 words, as one paragraph.
 2. Say what people are talking about: group the posts into the main topics, most discussed first. Name an account or a person only when the post is clearly theirs.
 3. Describe the conversation, do not judge it. These are public posts, not verified news: write "αναρτήσεις για…", "συζήτηση γύρω από…", "σχολιάζουν…", and never present a claim from a post as fact.
-4. Use only what is in the posts below. Do not add background, numbers, dates or names that are not there.
+4. Use only what is in the posts below. Do not add background, numbers, dates or names that are not there. The one exception is the fact checks block in your instructions, if there is one: when a post repeats or shares a claim, photo, video or slogan that a fact check there covers, say so briefly in the summary, attributed to the fact-checker (for example "αναρτήσεις που αναπαράγουν φωτογραφία την οποία το FactCheck Cyprus έχει κρίνει παραποιημένη"), and list that post in "fact_checks". A shared word alone is not enough: the post must be about the same claim or material.
 5. No hashtags, emojis, links, lists or headings, and no opening like "Σήμερα στα social…" that repeats the title.
 
 Return ONLY valid JSON, with no comments and no code fences, in this form:
-{"summary":"Greek summary paragraph"}
+{"summary":"Greek summary paragraph","fact_checks":[{"post":1,"check":"FC1"}]}
+Use "fact_checks":[] when no post repeats a fact check, and only the post numbers and FC codes given.
 
 Posts:
 {posts}

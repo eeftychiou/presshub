@@ -14,11 +14,11 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
 | Daily Briefing (`daily-briefing`) | 81 | 0 | 0 |
-| Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
+| Editorial knowledge (`editorial-knowledge`) | 17 | 0 | 0 |
 | Social publishing (`social-publishing`) | 70 | 0 | 0 |
 | Social listening (`social-listening`) | 35 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **307** | | |
+| **Total** | **310** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 34 option(s); both lists are at the end.
 
@@ -215,7 +215,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_podcast_show_notes_enabled` | Podcast show notes | integer |  | ai / briefing | checkbox |
 | `presshub_ai_podcast_lead_enabled` | Podcast lead story text | integer |  | ai / briefing | checkbox |
 
-## Editorial knowledge (`editorial-knowledge`, 14)
+## Editorial knowledge (`editorial-knowledge`, 17)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -227,12 +227,15 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_policy_fiches_enabled` | Policy fiches in AI calls | integer |  | ai / knowledge | checkbox, needs `presshub_ai_memory_enabled` on |
 | `presshub_ai_stakeholders_enabled` | People fiches in AI calls | integer |  | ai / knowledge | checkbox, needs `presshub_ai_memory_enabled` on |
 | `presshub_ai_claim_check_enabled` | Claim checks in curation | integer |  | ai / knowledge | checkbox |
+| `presshub_ai_fact_checks_enabled` | Fact checks in AI calls | integer |  | ai / knowledge | checkbox, needs `presshub_ai_memory_enabled` on |
+| `presshub_ai_fact_check_days` | Fact checks kept for (days) | integer | days | ai / knowledge | needs `presshub_ai_fact_checks_enabled` on |
 | `presshub_ai_pool_cleanup_enabled` | Clean the article pool | integer |  | ai / knowledge | checkbox |
 | `presshub_ai_pool_max_age_hours` | Oldest article kept (h) | integer | h | ai / knowledge | needs `presshub_ai_pool_cleanup_enabled` on |
 | `presshub_ai_pool_duplicate_similarity` | Duplicate similarity (0.1–1) | number | ratio | ai / knowledge | needs `presshub_ai_pool_cleanup_enabled` on |
 | `presshub_ai_policy_fiches_budgets` | Policy fiche context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_stakeholders_budgets` | People fiche context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters | ai / knowledge |  |
+| `presshub_ai_fact_checks_budgets` | Fact check context per AI task (characters) | array | characters | ai / knowledge |  |
 
 ## Social publishing (`social-publishing`, 70)
 
@@ -400,6 +403,8 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_editorial_agenda_budgets` | `presshub_ai_editorial_agenda_budgets` |
 | `presshub_ai_enable_llm_extractor` | code only |
 | `presshub_ai_enable_social_meta` | code only |
+| `presshub_ai_fact_checks_budgets` | code only |
+| `presshub_ai_fact_checks_enabled` | code only |
 | `presshub_ai_fetch_source_urls` | `presshub_ai_fetch_urls` |
 | `presshub_ai_harvest_max_links_per_source` | code only |
 | `presshub_ai_harvest_min_rss_words` | code only |

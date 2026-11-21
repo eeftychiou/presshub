@@ -651,6 +651,9 @@ class PressHub_AI_Generation_Inspector {
         if ( isset( $config['policy_fiches'] ) ) {
             $knowledge[ __( 'Policy fiches', 'presshub-ai-editor' ) ] = self::knowledge_line( $config['policy_fiches'], $config['policy_fiches_chars'] ?? 0 );
         }
+        if ( isset( $config['fact_checks'] ) ) {
+            $knowledge[ __( 'Fact checks', 'presshub-ai-editor' ) ] = self::knowledge_line( $config['fact_checks'], $config['fact_checks_chars'] ?? 0 );
+        }
         if ( isset( $config['stakeholders'] ) ) {
             $knowledge[ __( 'People fiches', 'presshub-ai-editor' ) ] = self::knowledge_line( $config['stakeholders'], $config['stakeholders_chars'] ?? 0 );
         }
@@ -664,6 +667,7 @@ class PressHub_AI_Generation_Inspector {
                 'editorial_agenda' => __( 'Editorial agenda', 'presshub-ai-editor' ),
                 'stakeholders'     => __( 'People fiches', 'presshub-ai-editor' ),
                 'policy_fiches'    => __( 'Policy fiches', 'presshub-ai-editor' ),
+                'fact_checks'      => __( 'Fact checks', 'presshub-ai-editor' ),
                 'material'         => __( 'Material', 'presshub-ai-editor' ),
             ];
             foreach ( PressHub_AI_Knowledge_Cuts::CONFIG_KEYS as $kind => $key ) {
