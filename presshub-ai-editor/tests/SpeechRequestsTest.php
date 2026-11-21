@@ -61,6 +61,14 @@ $p = $S::plan_speech_requests( $turns, 'same_voice', 1500, $voice_of, 2, 'gemini
 sr_check( 'same_voice: back-to-back lines by one voice share a request', 3 === count( $p ) && [ 0, 1 ] === $p[0]['turns'] );
 sr_check( 'same_voice: joined text, no labels, whitespace flattened', "Καλημέρα σας.\n\nΣήμερα έχουμε τρία θέματα." === $p[0]['text'] && null === $p[0]['speakers'] );
 
+// 2.76.1: Gemini rejects the labelled two-voice request, so by default two_voices plans like
+// same_voice (single-voice requests only, never a multi-speaker body).
+$p = $S::plan_speech_requests( $turns, 'two_voices', 1500, $voice_of, 2, 'gemini', $labels, $tv );
+sr_check( 'two_voices (default, 2.76.1): plans like same_voice', 3 === count( $p ) && [ 0, 1 ] === $p[0]['turns'] );
+sr_check( 'two_voices (default, 2.76.1): no multi-speaker request', 0 === count( array_filter( $p, static function ( $r ) { return null !== $r['speakers']; } ) ) );
+
+// The joined two-voice path stays covered for when Gemini accepts a labelled request again.
+$S::$two_voice_requests_accepted = true;
 $p = $S::plan_speech_requests( $turns, 'two_voices', 1500, $voice_of, 2, 'gemini', $labels, $tv );
 sr_check( 'two_voices: the whole list in one request', 1 === count( $p ) && [ 0, 1, 2, 3 ] === $p[0]['turns'] );
 sr_check( 'two_voices: labelled lines', "Μαρία: Καλημέρα σας.\nΜαρία: Σήμερα έχουμε τρία θέματα.\nΝίκος: Ας ξεκινήσουμε.\nΜαρία: Πρώτο θέμα." === $p[0]['text'] );
