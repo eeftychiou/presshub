@@ -64,6 +64,16 @@
  * search for the story's mood (sound_query()). Only a worker that announces the
  * `tiktok_photo_slides` capability gets these jobs. Slides never fall back to a classic post.
  *
+ * Daily brief (Podcast Shorts Format `presshub_social_tiktok_shorts_format` = brief, the
+ * default): a podcast post gets ONE video per shorts platform instead of Shorts per Podcast,
+ * marked `metadata.tiktok_short.brief`: about two minutes (`presshub_social_tiktok_brief_max_words`)
+ * covering the day's top stories, written by its own prompt (`presshub_social_prompt_tiktok_brief`)
+ * as an intro, one part per story (each with its own image description) and an outro
+ * (parse_brief()). The plan keeps where each story starts in the script (`stories`), so at
+ * claim time brief_image_sequence() orders the images to follow the voice: each ~4 second
+ * image slot of the worker shows the image of the story being read. A brief gets no photo
+ * slides. Articles are not affected. Format "stories" keeps one short per story.
+ *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
  *
@@ -101,6 +111,26 @@ class PressHub_Social_TikTok_Shorts {
 
     /** Capability a worker announces at claim time when it can post photo slides. */
     public const SLIDES_CAPABILITY = 'tiktok_photo_slides';
+
+    /** Most stories kept from a daily brief plan (the prompt asks for 6 to 8). */
+    public const BRIEF_MAX_STORIES = 10;
+
+    /**
+     * A brief script over its word cap by more than this factor is rejected: the brief
+     * must stay under YouTube's three-minute limit for Shorts (a short is 1.5x).
+     */
+    public const BRIEF_WORDS_TOLERANCE = 1.2;
+
+    /** On-screen badge of a daily brief video. */
+    public const BRIEF_BADGE = 'ΕΝΗΜΕΡΩΣΗ';
+
+    /**
+     * The worker's image timing for a short (presshub-social-worker/src/media/short-video.ts):
+     * slots of about SLOT_SECONDS over the voice plus TAIL_SECONDS, slot n showing image
+     * n modulo the image count. brief_image_sequence() fills one image per slot.
+     */
+    public const WORKER_SLOT_SECONDS = 4.0;
+    public const WORKER_TAIL_SECONDS = 1.0;
 
     /** Prefix of the placeholder copy set at enqueue time. */
     public const PLACEHOLDER_PREFIX = '[TikTok short ';
@@ -374,13 +404,17 @@ class PressHub_Social_TikTok_Shorts {
      */
     public static function build_jobs( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time, bool $test = false, string $platform = 'tiktok', ?string $copy = null ): array {
         $article = self::SOURCE_ARTICLE === self::source_type( $post_id );
-        $count   = $article ? 1 : PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
+        $brief   = ! $article && PressHub_Social_Settings_Storage::get_tiktok_brief_enabled();
+        $count   = ( $article || $brief ) ? 1 : PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
         $spacing = $test ? 0 : PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
         $jobs    = [];
         for ( $i = 0; $i < $count; $i++ ) {
             $meta = [ 'index' => $i, 'count' => $count ];
             if ( $article ) {
                 $meta['source'] = self::SOURCE_ARTICLE;
+            }
+            if ( $brief ) {
+                $meta['brief'] = true;
             }
             if ( $test ) {
                 $meta['test'] = true;
@@ -503,6 +537,10 @@ class PressHub_Social_TikTok_Shorts {
         if ( self::SOURCE_ARTICLE === $source && ( ! PressHub_Social_Settings_Storage::get_tiktok_article_shorts_enabled() || '' === PressHub_Social_Settings_Storage::get_tiktok_article_short_prompt() ) ) {
             return false;
         }
+        // A podcast's daily brief is one video; it is not posted again as photo slides.
+        if ( self::SOURCE_ARTICLE !== $source && PressHub_Social_Settings_Storage::get_tiktok_brief_enabled() ) {
+            return false;
+        }
         if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() || 'automation' !== $engine ) {
             if ( ! $log ) {
                 return false;
@@ -530,6 +568,9 @@ class PressHub_Social_TikTok_Shorts {
      */
     public static function build_slides_jobs( int $post_id, int $start_time, ?string $copy = null ): array {
         $article = self::SOURCE_ARTICLE === self::source_type( $post_id );
+        if ( ! $article && PressHub_Social_Settings_Storage::get_tiktok_brief_enabled() ) {
+            return []; // The daily brief gets no photo slides.
+        }
         $count   = $article ? 1 : PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
         $spacing = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
         $offset  = (int) floor( $spacing / 2 );
@@ -697,6 +738,12 @@ class PressHub_Social_TikTok_Shorts {
         if ( self::SOURCE_ARTICLE === ( $short['source'] ?? '' ) ) {
             $job['tiktok_short']['source'] = self::SOURCE_ARTICLE;
             $job['tiktok_short']['badge']  = self::article_badge( (int) ( $job['post_id'] ?? 0 ) );
+        } elseif ( ! empty( $short['brief'] ) ) {
+            $job['tiktok_short']['badge'] = self::BRIEF_BADGE;
+            $sequence                     = self::brief_image_sequence( $short );
+            if ( ! empty( $sequence ) ) {
+                $job['tiktok_short']['images'] = $sequence;
+            }
         }
         $job['tiktok_short'] = array_merge( $job['tiktok_short'], self::music_for( $short, $job_id ) );
         return $job;
@@ -831,18 +878,21 @@ class PressHub_Social_TikTok_Shorts {
             return;
         }
 
-        // The plan covers as many stories as jobs were queued, whatever the live setting says now.
+        // The plan covers as many stories as jobs were queued, and the format they were
+        // queued in, whatever the live settings say now.
         $count = 0;
+        $brief = false;
         foreach ( $all as $j ) {
             $meta  = self::decode_metadata( $j['metadata'] ?? null )[ self::JOB_META_KEY ];
             $count = max( $count, (int) ( $meta['count'] ?? 0 ), (int) $meta['index'] + 1 );
+            $brief = $brief || ! empty( $meta['brief'] );
         }
 
         if ( function_exists( 'set_time_limit' ) ) {
             @set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- background cron; TTS is paced by the shared rate limiter.
         }
 
-        $plan = self::get_plan( $post_id, $count );
+        $plan = self::get_plan( $post_id, $count, $brief );
         if ( is_wp_error( $plan ) ) {
             self::handle_failures( $post_id, array_map( fn( $j ) => [ $j, $plan ], $pending ) );
             return;
@@ -921,6 +971,11 @@ class PressHub_Social_TikTok_Shorts {
                 $prepared['script'] = $short['script'];
             } else {
                 $prepared['audio'] = $audio;
+            }
+            if ( ! empty( $short['brief'] ) ) {
+                $prepared['brief']   = true;
+                $prepared['stories'] = $short['stories'];
+                $prepared['words']   = (int) $short['words'];
             }
             $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], $prepared );
             PressHub_Social_Queue::update_job( $job_id, [
@@ -1081,30 +1136,41 @@ class PressHub_Social_TikTok_Shorts {
      * Keyed by a hash of the podcast script, the prompt, the requested count, the word
      * cap and the host count, so a regenerated podcast or an edited prompt makes a new plan.
      *
+     * @param bool $brief Write the podcast's daily brief (one multi-story video) instead
+     *                    of one short per story. Ignored for an article.
      * @return array{hash:string,shorts:array}|WP_Error
      */
-    public static function get_plan( int $post_id, int $count ) {
+    public static function get_plan( int $post_id, int $count, bool $brief = false ) {
         $source = self::source_type( $post_id );
         if ( '' === $source ) {
             return new WP_Error( 'tiktok_short_no_script', sprintf( 'post #%d is neither a podcast post with a script nor an article with text.', $post_id ) );
         }
         $article = self::SOURCE_ARTICLE === $source;
+        $brief   = $brief && ! $article;
 
-        $prompt = $article ? PressHub_Social_Settings_Storage::get_tiktok_article_short_prompt() : PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt();
+        if ( $brief ) {
+            $prompt = PressHub_Social_Settings_Storage::get_tiktok_brief_prompt();
+        } else {
+            $prompt = $article ? PressHub_Social_Settings_Storage::get_tiktok_article_short_prompt() : PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt();
+        }
         if ( '' === $prompt ) {
-            $option = $article ? 'presshub_social_prompt_tiktok_article_short' : 'presshub_social_prompt_tiktok_shorts';
+            $option = $brief ? 'presshub_social_prompt_tiktok_brief' : ( $article ? 'presshub_social_prompt_tiktok_article_short' : 'presshub_social_prompt_tiktok_shorts' );
             PressHub_Social_Logger::error( sprintf( 'TikTok shorts prompt is empty (%s).', $option ) );
             return new WP_Error( 'missing_tiktok_shorts_prompt', sprintf( 'the TikTok shorts prompt (%s) is empty. Restore it in PressHub → Social settings → Prompts.', $option ) );
         }
 
-        $count     = $article ? 1 : max( 1, $count );
+        $count     = ( $article || $brief ) ? 1 : max( 1, $count );
         if ( ! $article && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
             // The podcast script is sent whole: drop an earlier article's note.
             PressHub_AI_Knowledge_Cuts::forget_material( 'social_tiktok_shorts' );
         }
         $script    = $article ? self::article_text( $post_id, true ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
-        $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
+        $max_words = $brief ? PressHub_Social_Settings_Storage::get_tiktok_brief_max_words() : PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
+        if ( $brief ) {
+            // One image per story; Story Images per Short at 0 keeps the branded background.
+            $images = $images > 0 ? self::BRIEF_MAX_STORIES : 0;
+        }
         // An article's prompt also gets its title, category and excerpt: editing those
         // without touching the text makes a new plan too.
         $article_key = '';
@@ -1114,7 +1180,7 @@ class PressHub_Social_TikTok_Shorts {
                 . '|' . self::primary_category( $post_id )
                 . '|' . ( $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '' );
         }
-        $hash      = hash( 'sha256', $script . $article_key . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() );
+        $hash      = hash( 'sha256', $script . $article_key . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() . ( $brief ? '|brief' : '' ) );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
@@ -1130,9 +1196,13 @@ class PressHub_Social_TikTok_Shorts {
             : self::build_prompt( $post_id, $prompt, $script, $count, $max_words, $images );
         $sys_prompt  = PressHub_Social_Settings_Storage::get_system_prompt();
 
-        PressHub_Social_Logger::info( $article
-            ? sprintf( 'Generating the short of article post #%d.', $post_id )
-            : sprintf( 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
+        if ( $brief ) {
+            PressHub_Social_Logger::info( sprintf( 'Generating the daily brief video of podcast post #%d.', $post_id ) );
+        } else {
+            PressHub_Social_Logger::info( $article
+                ? sprintf( 'Generating the short of article post #%d.', $post_id )
+                : sprintf( 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
+        }
 
         // A response the plan cannot use (broken JSON, a script over the cap, an empty
         // answer) is asked for once more, with the reason, before the preparation fails.
@@ -1155,7 +1225,11 @@ class PressHub_Social_TikTok_Shorts {
                     return $raw;
                 }
 
-                $shorts = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count, $max_words, $images );
+                if ( is_wp_error( $raw ) ) {
+                    $shorts = $raw;
+                } else {
+                    $shorts = $brief ? self::parse_brief( (string) $raw, $max_words, $images ) : self::parse_plan( (string) $raw, $count, $max_words, $images );
+                }
                 if ( ! is_wp_error( $shorts ) ) {
                     if ( ! empty( self::$last_repairs ) ) {
                         $note = PressHub_Social_AI_Json::note_repair( self::$last_record_id, self::$last_repairs );
@@ -1301,6 +1375,177 @@ class PressHub_Social_TikTok_Shorts {
             ];
         }
         return $shorts;
+    }
+
+    /**
+     * Parse and validate the LLM's JSON plan of a daily brief: one short whose script is
+     * the intro, each story's part and the outro, joined in that order.
+     *
+     * @param int $max_words   Word cap of the whole script; over BRIEF_WORDS_TOLERANCE x the cap is rejected.
+     * @param int $image_count Image descriptions kept (one per story, in story order).
+     * @return array|WP_Error A one-item list like parse_plan(), plus `brief` => true,
+     *                        `stories` (each story's `topic`, `visual` and the spoken word
+     *                        where it starts, `from`, and ends, `to`) and `words` (the
+     *                        script's spoken words before any YouTube closing line).
+     */
+    public static function parse_brief( string $raw, int $max_words, int $image_count ) {
+        self::$last_repairs = [];
+        $fixes   = [];
+        $error   = null;
+        $decoded = PressHub_Social_AI_Json::decode( $raw, $fixes, $error );
+        if ( null === $decoded ) {
+            return new WP_Error( 'tiktok_short_invalid_json', (string) $error );
+        }
+        self::$last_repairs = $fixes;
+        $item = is_array( $decoded['shorts'] ?? null ) ? ( array_values( $decoded['shorts'] )[0] ?? null ) : $decoded;
+        if ( ! is_array( $item ) ) {
+            return new WP_Error( 'tiktok_short_invalid_json', 'the AI response has no "shorts" list with the brief.' );
+        }
+        $hook    = trim( (string) ( $item['hook'] ?? '' ) );
+        $caption = trim( (string) preg_replace( '/[ \t]*\b(?:https?:\/\/|www\.)\S+/iu', '', (string) ( $item['caption'] ?? '' ) ) );
+        if ( '' === $hook || '' === $caption ) {
+            return new WP_Error( 'tiktok_short_invalid_json', 'the brief is missing its hook or caption.' );
+        }
+        $raw_stories = is_array( $item['stories'] ?? null ) ? array_values( $item['stories'] ) : [];
+        if ( count( $raw_stories ) < 2 ) {
+            return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'the brief has %d stories; it needs at least 2, each with its own "script".', count( $raw_stories ) ) );
+        }
+
+        $speaker_line = '/\[\s*SPEAKER_[12]\s*\]\s*:/iu';
+        $word_count   = static function ( string $part ) use ( $speaker_line ): int {
+            return count( preg_split( '/\s+/u', trim( (string) preg_replace( $speaker_line, ' ', $part ) ), -1, PREG_SPLIT_NO_EMPTY ) ?: [] );
+        };
+        $parts   = [];
+        $stories = [];
+        $visuals = [];
+        $words   = 0;
+        $intro   = trim( (string) ( $item['intro'] ?? '' ) );
+        if ( '' !== $intro ) {
+            $parts[] = $intro;
+            $words  += $word_count( $intro );
+        }
+        foreach ( array_slice( $raw_stories, 0, self::BRIEF_MAX_STORIES ) as $i => $story ) {
+            $script = is_array( $story ) ? trim( (string) ( $story['script'] ?? '' ) ) : '';
+            if ( '' === $script ) {
+                return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'story %d of the brief has no script.', $i + 1 ) );
+            }
+            $visual = trim( (string) preg_replace( '/\s+/u', ' ', is_string( $story['visual'] ?? null ) ? $story['visual'] : '' ) );
+            $visual = mb_substr( $visual, 0, 600 );
+            if ( '' !== $visual && count( $visuals ) < max( 0, $image_count ) ) {
+                $visuals[] = $visual;
+            } else {
+                $visual = '';
+            }
+            $count     = $word_count( $script );
+            $stories[] = [
+                'topic'  => trim( (string) ( $story['topic'] ?? '' ) ),
+                'visual' => $visual,
+                'from'   => $words,
+                'to'     => $words + $count,
+            ];
+            $parts[] = $script;
+            $words  += $count;
+        }
+        $outro = trim( (string) ( $item['outro'] ?? '' ) );
+        if ( '' !== $outro ) {
+            $parts[] = $outro;
+            $words  += $word_count( $outro );
+        }
+        $script = implode( "\n", $parts );
+        if ( ! preg_match( $speaker_line, $script ) || preg_match( '/\[\s*SPEAKER_(?![12]\s*\])[^\]]*\]/iu', $script ) ) {
+            return new WP_Error( 'tiktok_short_invalid_json', 'the brief script must use only [SPEAKER_1]: and [SPEAKER_2]: lines.' );
+        }
+        if ( $max_words > 0 && $words > (int) ceil( $max_words * self::BRIEF_WORDS_TOLERANCE ) ) {
+            return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'the brief script has %d words, over the %d-word cap.', $words, $max_words ) );
+        }
+        // Same closing line as the shorts on YouTube; it only changes the outro.
+        if ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() ) {
+            $script = PressHub_Social_YouTube::youtube_cta( $script );
+        }
+        $topic = trim( (string) ( $item['topic'] ?? '' ) );
+        return [ [
+            'topic'   => '' !== $topic ? $topic : $hook,
+            'hook'    => $hook,
+            'script'  => $script,
+            'caption' => PressHub_Social_AI_Copywriter::ensure_hashtags( $caption, self::DEFAULT_HASHTAGS ),
+            'visuals' => $visuals,
+            'mood'    => PressHub_Social_TikTok_Music::normalize_mood( $item['mood'] ?? '' ),
+            'brief'   => true,
+            'stories' => $stories,
+            'words'   => $words,
+        ] ];
+    }
+
+    /**
+     * The image URLs of a prepared daily brief, one per image slot of the worker, so the
+     * video shows each story's image while that story is read. Where a story starts is
+     * found from its first spoken word (`stories[].from` out of `words`) on the voice's
+     * turn timings, by word position inside the turn. The intro shows the first story's
+     * image; a story without an image keeps the one before. Empty when there is nothing
+     * to order (no images, stories or timings): the images are then used as they are.
+     *
+     * @return string[]
+     */
+    public static function brief_image_sequence( array $short ): array {
+        $by_prompt = [];
+        foreach ( (array) ( $short['images'] ?? [] ) as $image ) {
+            if ( is_array( $image ) && '' !== (string) ( $image['url'] ?? '' ) ) {
+                $by_prompt[ (string) ( $image['prompt'] ?? '' ) ] = (string) $image['url'];
+            }
+        }
+        $segments = array_values( array_filter( (array) ( $short['audio']['segments'] ?? [] ), 'is_array' ) );
+        $stories  = array_values( array_filter( (array) ( $short['stories'] ?? [] ), 'is_array' ) );
+        $words    = (int) ( $short['words'] ?? 0 );
+        if ( empty( $by_prompt ) || empty( $segments ) || empty( $stories ) || $words <= 0 ) {
+            return [];
+        }
+
+        // Spoken words of each turn, to place a word of the script in time.
+        $turns = [];
+        $said  = 0;
+        foreach ( $segments as $segment ) {
+            $n       = count( preg_split( '/\s+/u', trim( (string) ( $segment['text'] ?? '' ) ), -1, PREG_SPLIT_NO_EMPTY ) ?: [] );
+            $turns[] = [ 'from' => $said, 'n' => $n, 'start' => (float) ( $segment['start'] ?? 0 ), 'end' => (float) ( $segment['end'] ?? 0 ) ];
+            $said   += $n;
+        }
+        if ( $said <= 0 ) {
+            return [];
+        }
+        $time_of = static function ( int $word ) use ( $turns, $said, $words ): float {
+            $w = $word * $said / $words; // The turns can count a few words differently.
+            foreach ( $turns as $turn ) {
+                if ( $turn['n'] > 0 && $w < $turn['from'] + $turn['n'] ) {
+                    return $turn['start'] + max( 0.0, $w - $turn['from'] ) / $turn['n'] * ( $turn['end'] - $turn['start'] );
+                }
+            }
+            return (float) end( $turns )['end'];
+        };
+
+        $starts = []; // [ start time, url ] of each story that has an image.
+        foreach ( $stories as $story ) {
+            $url = $by_prompt[ (string) ( $story['visual'] ?? '' ) ] ?? '';
+            if ( '' !== $url ) {
+                $starts[] = [ $time_of( (int) ( $story['from'] ?? 0 ) ), $url ];
+            }
+        }
+        if ( empty( $starts ) ) {
+            return [];
+        }
+
+        $total    = (float) end( $turns )['end'] + self::WORKER_TAIL_SECONDS;
+        $slots    = max( 1, (int) round( $total / self::WORKER_SLOT_SECONDS ) );
+        $sequence = [];
+        for ( $i = 0; $i < $slots; $i++ ) {
+            $t   = ( $i + 0.5 ) * $total / $slots;
+            $url = $starts[0][1];
+            foreach ( $starts as [ $start, $story_url ] ) {
+                if ( $start <= $t ) {
+                    $url = $story_url;
+                }
+            }
+            $sequence[] = $url;
+        }
+        return $sequence;
     }
 
     /**
@@ -1511,14 +1756,26 @@ class PressHub_Social_TikTok_Shorts {
      * @return array{hash:string,images:array<int,array{url:string,id:int,prompt:string}>}
      */
     private static function images_hash( array $short ): string {
-        $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
+        $count   = self::image_count( $short );
         $visuals = array_slice( (array) ( $short['visuals'] ?? [] ), 0, $count );
         $style   = self::image_style_for( (string) ( $short['mood'] ?? '' ) );
         return hash( 'sha256', $count . '|' . $style . '|' . implode( "\n", $visuals ) );
     }
 
+    /**
+     * Story images made for a short: Story Images per Short, or for a daily brief one per
+     * story that has an image description (none when Story Images per Short is 0).
+     */
+    private static function image_count( array $short ): int {
+        $count = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
+        if ( ! empty( $short['brief'] ) ) {
+            return $count > 0 ? count( (array) ( $short['visuals'] ?? [] ) ) : 0;
+        }
+        return $count;
+    }
+
     private static function get_images( array $job, array $short, int $post_id ): array {
-        $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
+        $count   = self::image_count( $short );
         $visuals = array_slice( (array) ( $short['visuals'] ?? [] ), 0, $count );
         $style   = self::image_style_for( (string) ( $short['mood'] ?? '' ) );
         $hash    = self::images_hash( $short );

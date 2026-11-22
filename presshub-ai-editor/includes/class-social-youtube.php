@@ -1013,6 +1013,22 @@ class PressHub_Social_YouTube {
     public static function short_image_groups( int $post_id ): array {
         $groups = [];
         foreach ( self::short_jobs( $post_id ) as [ , $short ] ) {
+            // A daily brief covers many stories in one short: each story's image is its own group.
+            if ( ! empty( $short['brief'] ) && ! empty( $short['stories'] ) && is_array( $short['images'] ?? null ) ) {
+                $by_prompt = [];
+                foreach ( $short['images'] as $image ) {
+                    if ( is_array( $image ) && '' !== (string) ( $image['url'] ?? '' ) ) {
+                        $by_prompt[ (string) ( $image['prompt'] ?? '' ) ] = (string) $image['url'];
+                    }
+                }
+                foreach ( array_values( (array) $short['stories'] ) as $k => $story ) {
+                    $url = is_array( $story ) ? ( $by_prompt[ (string) ( $story['visual'] ?? '' ) ] ?? '' ) : '';
+                    if ( '' !== $url && ! isset( $groups[ $k ] ) ) {
+                        $groups[ $k ] = [ 'index' => $k, 'topic' => trim( (string) ( $story['topic'] ?? '' ) ), 'urls' => [ $url ] ];
+                    }
+                }
+                continue;
+            }
             $index = (int) ( $short['index'] ?? -1 );
             if ( $index < 0 || empty( $short['images'] ) || ! is_array( $short['images'] ) ) {
                 continue;
