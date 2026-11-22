@@ -141,7 +141,7 @@ class PressHub_Social_TikTok_Shorts {
     /** Extra stories a podcast's plan asks for when stories were already told, to replace repeats. */
     const SPARE_STORIES = 2;
 
-    /** Most stories kept from a daily brief plan (the prompt asks for 6 to 8). */
+    /** Most stories kept from a daily brief plan (the prompt asks for the 3-4 main ones). */
     public const BRIEF_MAX_STORIES = 10;
 
     /**

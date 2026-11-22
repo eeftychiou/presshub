@@ -1995,9 +1995,22 @@ class PressHub_Social_Settings_Storage {
      * Seeds from social_tiktok_brief.txt if the option does not exist yet; an emptied
      * prompt fails the brief (Zero-Silent-Fallback), it never falls back to another prompt.
      */
+    /**
+     * sha256 of earlier default Daily Brief prompts (trimmed, LF line endings). A stored
+     * prompt that still equals one was never edited, so it is replaced by the current
+     * default; an edited prompt is kept.
+     */
+    private const LEGACY_TIKTOK_BRIEF_PROMPT_HASHES = [
+        'bd9e3d5cd3516c56c7e51571a15579943e7781be951692510f398ef2b65975de', // v2.82: 6 to 8 stories (2.85.0 asks for the 3-4 main ones).
+    ];
+
+    public static function is_legacy_tiktok_brief_prompt( string $prompt ): bool {
+        return in_array( hash( 'sha256', trim( str_replace( "\r\n", "\n", $prompt ) ) ), self::LEGACY_TIKTOK_BRIEF_PROMPT_HASHES, true );
+    }
+
     public static function get_tiktok_brief_prompt(): string {
         $val = get_option( 'presshub_social_prompt_tiktok_brief', false );
-        if ( false === $val ) {
+        if ( false === $val || ( is_string( $val ) && self::is_legacy_tiktok_brief_prompt( $val ) ) ) {
             try {
                 $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_brief.txt' );
                 update_option( 'presshub_social_prompt_tiktok_brief', $val );
