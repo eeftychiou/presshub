@@ -575,6 +575,7 @@ export class PressHubPoller {
                 photoPost: true,
                 soundQuery: typeof sl.sound_query === 'string' ? sl.sound_query : '',
                 sessionsDir: this.sessionsDir,
+                stateDir: this.uploadLogDir(),
                 // The story images are AI-generated: TikTok requires the label.
                 aiGenerated: true
               });
