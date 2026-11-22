@@ -843,6 +843,38 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_tiktok_full_podcast_enabled',
+            __( 'TikTok Full Podcast', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_full_podcast_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_story_posts',
+            __( 'TikTok Story Posts', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_tiktok_story_posts',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_STORY_POSTS,
+                'min'     => 0,
+                'max'     => 5,
+                'unit'    => __( 'posts', 'presshub-social-autopost' ),
+                'desc'    => __( 'With Podcast Shorts Format on Daily brief, how many of each podcast\'s top stories also go to TikTok as their own post of 30-60 seconds, after the brief and the Time Between Shorts apart. Each story is checked by the social post gate first, so a story already posted is not posted again. 0 posts none.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_story_posts_format',
+            __( 'TikTok Story Post Format', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_story_posts_format_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec'
+        );
+
+        add_settings_field(
             'presshub_social_tiktok_shorts_spacing_minutes',
             __( 'Time Between Shorts', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
