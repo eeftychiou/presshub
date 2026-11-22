@@ -195,6 +195,12 @@ class PressHub_Social_Dispatcher {
             // YouTube only gets videos: the shorts (as YouTube Shorts) and, for a podcast
             // post, the full episode for the podcast playlist. Anything else is not posted there.
             if ( 'youtube' === $platform ) {
+                // Social post gate, before the episode's AI description and the shorts.
+                $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                    continue;
+                }
                 $yt_shorts = self::shorts_wanted( $post_id, 'youtube', $engine );
                 if ( $yt_shorts ) {
                     $short_targets['youtube'] = $engine;
@@ -225,17 +231,24 @@ class PressHub_Social_Dispatcher {
             // TikTok and Instagram get the shorts instead of their usual post. They are queued
             // with the other platforms' shorts after this loop, on one story schedule.
             if ( $platform_shorts ) {
+                // Social post gate, before any caption or plan is made: an article's short
+                // tells its one story, checked now; a podcast's stories are checked when planned.
+                $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                    continue;
+                }
                 $short_targets[ $platform ] = $engine;
                 continue;
             }
 
-            // Social post gate, before any AI copy or images are made for the post. A
-            // Facebook link post that is stopped still lets the post's Reels be planned:
-            // their stories are checked when they are planned.
+            // Social post gate, before any AI copy or images are made for the post.
             $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
             if ( '' !== $gate_reason ) {
                 PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
-                if ( 'facebook' === $platform && self::shorts_wanted( $post_id, 'facebook', $engine ) ) {
+                // An article's Reel tells the same story and is stopped with it; a podcast's
+                // Reels are checked story by story when planned.
+                if ( 'facebook' === $platform && ! PressHub_Social_Post_Gate::single_story( $post_id ) && self::shorts_wanted( $post_id, 'facebook', $engine ) ) {
                     $short_targets['facebook'] = $engine;
                 }
                 continue;

@@ -57,12 +57,16 @@ class PressHub_Social_Post_Gate {
     /** Memory stories per date, for one request. */
     private static array $memory_cache = [];
 
+    /** Untagged fallbacks of posts whose tag call failed, for one request (not kept on the post, so a later request asks again). */
+    private static array $tag_fallbacks = [];
+
     public static function set_ai_caller( ?callable $caller ): void {
         self::$ai_caller = $caller;
     }
 
     public static function reset_cache(): void {
-        self::$memory_cache = [];
+        self::$memory_cache  = [];
+        self::$tag_fallbacks = [];
     }
 
     /**
@@ -103,18 +107,16 @@ class PressHub_Social_Post_Gate {
 
     /**
      * Whether a post may be queued on a platform: '' or the reason. A single-story post
-     * is tagged first (see tag_post()); a post with no tag passes.
+     * is tagged first (see tag_post()); a post with no tag passes the story ledger, and
+     * the other checks still run.
      */
     public static function check_post( int $post_id, string $platform ): string {
         $tag = self::tag_post( $post_id );
-        if ( null === $tag ) {
-            return '';
-        }
         return self::check( [
             'stage'    => 'queue',
             'post_id'  => $post_id,
             'platform' => $platform,
-            'stories'  => [ $tag ],
+            'stories'  => null === $tag ? [] : [ $tag ],
         ] );
     }
 
@@ -182,6 +184,9 @@ class PressHub_Social_Post_Gate {
         if ( is_array( $kept ) && isset( $kept['story_key'] ) ) {
             return $kept;
         }
+        if ( isset( self::$tag_fallbacks[ $post_id ] ) ) {
+            return self::$tag_fallbacks[ $post_id ];
+        }
         $title = self::post_title( $post_id );
         $tag   = [ 'story_key' => 'post-' . $post_id, 'topic' => $title, 'whats_new' => '', 'dev_hash' => '' ];
         if ( ! $ask ) {
@@ -192,7 +197,10 @@ class PressHub_Social_Post_Gate {
             $memory = self::memory( $post_id );
             $asked  = self::ask_tag( $post_id, $title, $told, $memory );
             if ( null === $asked ) {
-                return $tag; // Logged; the post goes out untagged rather than not at all.
+                // Logged; the post goes out untagged rather than not at all, and the other
+                // platforms of this request do not ask again.
+                self::$tag_fallbacks[ $post_id ] = $tag;
+                return $tag;
             }
             $tag = array_merge( $tag, $asked );
             $key = PressHub_Social_Story_Check::key( $tag['story_key'] );
@@ -273,16 +281,42 @@ class PressHub_Social_Post_Gate {
         }
         $told   = null === $told ? PressHub_Social_Story_Check::told( $post_id, $platforms ) : $told;
         $memory = null === $memory ? self::memory( $post_id ) : $memory;
-        return PressHub_Social_Story_Check::find_repeats( $plan, $told, $memory );
+        return self::repeats_on_every_platform( $plan, $told, $memory, $platforms );
+    }
+
+    /**
+     * One plan serves every platform of a post, so a planned story is left out only when
+     * it is a repeat on each of them; a story still blocked on some platform is stopped
+     * there by check_job() when it goes out. Without platforms, the told list is one.
+     */
+    private static function repeats_on_every_platform( array $plan, array $told, array $memory, array $platforms ): array {
+        $platforms = array_values( array_unique( array_filter( array_map( 'strval', $platforms ) ) ) );
+        if ( count( $platforms ) < 2 ) {
+            return PressHub_Social_Story_Check::find_repeats( $plan, $told, $memory );
+        }
+        $common = null;
+        foreach ( $platforms as $platform ) {
+            $on       = array_values( array_filter( $told, fn( $e ) => $platform === ( $e['platform'] ?? '' ) ) );
+            $repeats  = PressHub_Social_Story_Check::find_repeats( $plan, $on, $memory );
+            $by_place = [];
+            foreach ( $repeats as $r ) {
+                $by_place[ $r['short'] . '|' . ( null === $r['story'] ? '-' : $r['story'] ) ] = $r;
+            }
+            $common = null === $common ? $by_place : array_intersect_key( $common, $by_place );
+            if ( empty( $common ) ) {
+                return [];
+            }
+        }
+        return array_values( (array) $common );
     }
 
     /**
      * Why a daily brief's or podcast's plan need not be asked for at all: every story of
-     * its edition's memory digest is blocked on these platforms even if it had news
+     * its edition's memory digest is blocked on every one of these platforms even if it had news
      * (resolved, posted the most times, or no development since it was told). '' when a
      * plan is worth asking for, or the digest is not there yet.
      */
-    public static function edition_blocked( int $post_id, array $told, array $memory ): string {
+    public static function edition_blocked( int $post_id, array $told, array $memory, array $platforms = [] ): string {
         if ( empty( $told ) || ! PressHub_Social_Story_Check::enabled() ) {
             return '';
         }
@@ -296,7 +330,7 @@ class PressHub_Social_Post_Gate {
             $plan[] = [ 'story_key' => $key, 'topic' => $memory[ $key ]['title'] ?? $key, 'whats_new' => '?' ];
         }
         $plan    = PressHub_Social_Story_Check::annotate( $plan, $memory );
-        $repeats = PressHub_Social_Story_Check::find_repeats( $plan, $told, $memory );
+        $repeats = self::repeats_on_every_platform( $plan, $told, $memory, $platforms );
         if ( count( $repeats ) < count( $plan ) ) {
             return '';
         }

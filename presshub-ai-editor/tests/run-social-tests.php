@@ -4447,6 +4447,57 @@ $pg_article( 974, 'Άλλη είδηση' );
 assert_equals( '', PressHub_Social_Post_Gate::check_post( 974, 'twitter' ), 'A failed story tag never stops a post' );
 assert_equals( 'post-974', PressHub_Social_Post_Gate::tag_post( 974, false )['story_key'] ?? '', 'The post keeps its untagged key' );
 
+// A failed tag call is not repeated for the post's other platforms in the same request.
+$pg_fail_calls = 0;
+PressHub_Social_Post_Gate::set_ai_caller( function () use ( &$pg_fail_calls ) {
+    $pg_fail_calls++;
+    return new WP_Error( 'down', 'provider down' );
+} );
+$pg_article( 975, 'Ακόμη μία είδηση' );
+PressHub_Social_Post_Gate::check_post( 975, 'twitter' );
+PressHub_Social_Post_Gate::check_post( 975, 'facebook' );
+assert_equals( 1, $pg_fail_calls, 'A failed story tag is asked for once per request' );
+assert_equals( '', get_post_meta( 975, PressHub_Social_Post_Gate::POST_META, true ), 'A failed story tag is not kept on the post, so a later request asks again' );
+
+// Other checks run at the queue stage even for a post with no story tag (gate off).
+update_option( 'presshub_social_story_repeat_hours', 0 );
+$pg_block_all = fn( array $checks ) => $checks + [ 'hold' => fn( array $c ) => 'queue' === $c['stage'] ? 'held for review' : '' ];
+add_filter( 'presshub_social_post_gate_checks', $pg_block_all );
+assert_equals( 'held for review', PressHub_Social_Post_Gate::check_post( 975, 'twitter' ), 'A custom check runs at the queue stage with no story tag' );
+remove_filter( 'presshub_social_post_gate_checks', $pg_block_all );
+delete_option( 'presshub_social_story_repeat_hours' );
+
+// One plan serves every platform: a story told on one platform only is kept for the others.
+$pg_told = [ [ 'key' => 'fuel-prices', 'topic' => 'Fuel', 'hook' => '', 'whats_new' => '', 'dev_hash' => '', 'platform' => 'facebook', 'post_id' => 1, 'job_id' => 1, 'when' => time() - 60, 'format' => 'post', 'status' => 'published' ] ];
+$pg_plan_one = [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => '' ] ];
+assert_equals( [], PressHub_Social_Post_Gate::check_stories( 990, $pg_plan_one, [ 'tiktok', 'facebook' ], $pg_told, [] ), 'A story told on one platform stays in a plan that serves others too' );
+assert_equals( 1, count( PressHub_Social_Post_Gate::check_stories( 990, $pg_plan_one, [ 'facebook' ], $pg_told, [] ) ), 'A story told on the only planned platform is left out' );
+$pg_told[] = array_merge( $pg_told[0], [ 'platform' => 'tiktok', 'job_id' => 2 ] );
+assert_equals( 1, count( PressHub_Social_Post_Gate::check_stories( 990, $pg_plan_one, [ 'tiktok', 'facebook' ], $pg_told, [] ) ), 'A story told on every planned platform is left out' );
+
+// An article's short is stopped at the queue, before its caption and plan are made.
+update_option( 'presshub_social_enabled_platforms', [ 'tiktok' ] );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+$rp_told_job( 976, 'tiktok', [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices' ] );
+$pg_plan_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$pg_plan_calls ) {
+    $pg_plan_calls++;
+    return '{}';
+} );
+PressHub_Social_Post_Gate::set_ai_caller( fn() => json_encode( [ 'story_key' => 'fuel-prices', 'whats_new' => '' ] ) );
+$pg_copy_calls = 0;
+$pg_article( 977, 'Τιμές καυσίμων ξανά' );
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_for_post( 977, [ 'tiktok' ] ), 'An article short of a repeated story is not queued' );
+assert_equals( 0, $pg_copy_calls + $pg_plan_calls, 'No caption or plan AI call is made for it' );
+$pg_blocked = PressHub_Social_Queue::query_jobs( [ 'post_id' => 977, 'limit' => 5 ] );
+assert_true( 1 === count( $pg_blocked ) && 'cancelled' === $pg_blocked[0]['status'], 'The stopped short shows in the queue as cancelled' );
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+delete_option( 'presshub_social_tiktok_shorts_enabled' );
+delete_option( 'presshub_social_engine_tiktok' );
+update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook' ] );
+
 // Out: checked again at claim and dispatch against what went out since, with no AI call.
 PressHub_Social_Queue::reset_memory_store();
 $pg_short = PressHub_Social_Queue::enqueue( [ 'post_id' => 980, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'c', 'status' => 'pending',
@@ -4537,7 +4588,7 @@ PressHub_Social_Post_Gate::reset_cache();
 
 PressHub_Social_Post_Gate::set_ai_caller( null );
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
-foreach ( [ 970, 971, 972, 973, 974 ] as $pg_id ) {
+foreach ( [ 970, 971, 972, 973, 974, 975, 977 ] as $pg_id ) {
     unset( $GLOBALS['POSTS_STORE'][ $pg_id ], $GLOBALS['test_posts'][ $pg_id ] );
 }
 delete_option( 'presshub_social_engine_twitter' );

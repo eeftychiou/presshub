@@ -1267,7 +1267,7 @@ class PressHub_Social_TikTok_Shorts {
         // Social post gate, before the plan's AI call: a podcast whose edition has nothing
         // that may go out again is not planned at all.
         if ( $check && ! $article ) {
-            $blocked = PressHub_Social_Post_Gate::edition_blocked( $post_id, $told, $memory );
+            $blocked = PressHub_Social_Post_Gate::edition_blocked( $post_id, $told, $memory, $platforms );
             if ( '' !== $blocked ) {
                 return new WP_Error( PressHub_Social_Post_Gate::BLOCKED_CODE, $blocked );
             }
