@@ -643,7 +643,7 @@ class PressHub_Social_Ajax_Handlers {
 
         $dispatch_message = '';
         if ( $dispatch_now ) {
-            $dispatch_result = PressHub_Social_Dispatcher::dispatch_job( $new_job_id );
+            $dispatch_result = PressHub_Social_Dispatcher::dispatch_job( $new_job_id, false );
             if ( is_wp_error( $dispatch_result ) ) {
                 $dispatch_message = sprintf( __( ' (Warning: dispatch encountered: %s)', 'presshub-social-autopost' ), $dispatch_result->get_error_message() );
             }

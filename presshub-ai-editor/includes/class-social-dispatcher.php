@@ -246,11 +246,8 @@ class PressHub_Social_Dispatcher {
             $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
             if ( '' !== $gate_reason ) {
                 PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
-                // An article's Reel tells the same story and is stopped with it; a podcast's
-                // Reels are checked story by story when planned.
-                if ( 'facebook' === $platform && ! PressHub_Social_Post_Gate::single_story( $post_id ) && self::shorts_wanted( $post_id, 'facebook', $engine ) ) {
-                    $short_targets['facebook'] = $engine;
-                }
+                // The post's Reels are stopped with its link post: an article's Reel tells the
+                // same story, and any other post is only stopped here by another check.
                 continue;
             }
 
@@ -601,7 +598,8 @@ class PressHub_Social_Dispatcher {
     /**
      * Dispatch an individual social job immediately.
      *
-     * @param int $job_id
+     * @param int  $job_id
+     * @param bool $gate False skips the social post gate (a job reposted by hand).
      * @return bool|WP_Error True on success, WP_Error on failure.
      */
     public static function dispatch_job( int $job_id, bool $gate = true ): bool|WP_Error {

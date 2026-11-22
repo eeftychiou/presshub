@@ -619,7 +619,7 @@ class PressHub_AI_Help_Admin {
         );
 
         $html .= self::h3( __( 'The social post gate', 'presshub-ai-editor' ) );
-        $html .= self::p( __( 'Every post on every platform passes the same gate, at three points, each before money or AI calls are spent on the next step. A post it stops stays in the Social Queue as cancelled, with "Not posted:" and the reason. A post reposted by hand from the queue skips the gate.', 'presshub-ai-editor' ) );
+        $html .= self::p( __( 'Every post on every platform passes the same gate, at three points, each before money or AI calls are spent on the next step. A post it stops stays in the Social Queue as cancelled, with "Not posted:" and the reason. Re-post in the Social Queue skips the gate; Retry and Dispatch now check it again.', 'presshub-ai-editor' ) );
         $html .= self::ol( [
             __( 'When the post is queued: before any AI copy, caption, image or shorts plan. An article is first tagged with its story (one small AI call with the Social copy model, made only when something was posted inside Story Window).', 'presshub-ai-editor' ),
             __( 'When shorts are planned: a podcast whose stories may not go out again gets no plan call. Otherwise the plan sees what was posted, and a story that repeats on every planned platform is left out before any voice, images or render.', 'presshub-ai-editor' ),
