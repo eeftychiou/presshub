@@ -21,8 +21,11 @@
  * Checks: `presshub_social_post_gate_checks` filters the list (name => callable that
  * takes the context array and returns '' to pass or the reason). The first check is the
  * story ledger (PressHub_Social_Story_Check), with Story Window and Most Posts per Story
- * per Platform in Social settings → General → Social post gate. A job reposted by hand
- * from the Social Queue skips the gate (`metadata.gate_bypass`).
+ * per Platform in Settings → Social publishing → Platforms → Social post gate. A job reposted by hand
+ * from the Social Queue skips the gate (`metadata.gate_bypass`); Retry and Dispatch now check it
+ * again. At the queue and plan stages, other posts' waiting jobs count as told (so two
+ * posts queued close together do not both tell a story); if such a job later fails, the
+ * story is not queued again for the post that was stopped.
  *
  * @package PressHub_AI_Editor
  */
@@ -209,6 +212,28 @@ class PressHub_Social_Post_Gate {
         }
         update_post_meta( $post_id, self::POST_META, $tag );
         return $tag;
+    }
+
+    /**
+     * An article plan with the article's kept story tag as each short's story_key (and
+     * its whats_new when the plan names none), so all of the article's posts carry one key. Unchanged when the post has
+     * no kept tag.
+     */
+    public static function apply_post_tag( int $post_id, array $shorts ): array {
+        $kept = get_post_meta( $post_id, self::POST_META, true );
+        if ( ! is_array( $kept ) || '' === (string) ( $kept['story_key'] ?? '' ) ) {
+            return $shorts;
+        }
+        foreach ( $shorts as $i => $short ) {
+            if ( is_array( $short ) && empty( $short['brief'] ) ) {
+                $shorts[ $i ]['story_key'] = (string) $kept['story_key'];
+                // A new fact the plan names (e.g. after a retry) wins over the kept one.
+                if ( '' === trim( (string) ( $short['whats_new'] ?? '' ) ) ) {
+                    $shorts[ $i ]['whats_new'] = (string) ( $kept['whats_new'] ?? '' );
+                }
+            }
+        }
+        return $shorts;
     }
 
     /** {story_key, whats_new} from the AI, or null (logged) when it failed. */

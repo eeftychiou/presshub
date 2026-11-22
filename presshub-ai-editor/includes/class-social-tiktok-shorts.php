@@ -1173,6 +1173,8 @@ class PressHub_Social_TikTok_Shorts {
         $platform = (string) ( $job['platform'] ?? 'tiktok' );
         $metadata = self::decode_metadata( $job['metadata'] ?? null );
         unset( $metadata[ self::JOB_META_KEY ] );
+        // The classic post keeps the post's story tag, so the ledger and the gate see it.
+        $metadata = PressHub_Social_Post_Gate::with_story( $post_id, $metadata ) ?? $metadata;
         $metadata['tiktok_short_fallback'] = [
             'error'      => $error->get_error_message(),
             'error_code' => $error->get_error_code(),
@@ -1396,6 +1398,10 @@ class PressHub_Social_TikTok_Shorts {
                         PressHub_Social_Logger::warning( sprintf( 'TikTok shorts plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
                     }
                     if ( $check ) {
+                        if ( $article ) {
+                            // One story key per article: the tag its other posts got when queued.
+                            $shorts = PressHub_Social_Post_Gate::apply_post_tag( $post_id, $shorts );
+                        }
                         $shorts  = PressHub_Social_Story_Check::annotate( $shorts, $memory );
                         $repeats = PressHub_Social_Post_Gate::check_stories( $post_id, $shorts, $platforms, $told, $memory );
                         if ( ! empty( $repeats ) && $attempt < self::PLAN_ATTEMPTS ) {

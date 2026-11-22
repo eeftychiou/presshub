@@ -5,7 +5,10 @@
  * A read-only page that explains the editorial knowledge features (editorial
  * agenda, policy fiches, people fiches, editorial memory): what each one does,
  * which AI tasks receive it, how it changes the output, user stories, when to
- * use the agenda and when a policy fiche, and the limits of each.
+ * use the agenda and when a policy fiche, and the limits of each. It also has
+ * the social posts matrix (2.84.0): what each kind of post becomes on each
+ * platform, under which settings, and the social post gate, with the site's
+ * live settings beside it (docs/social-posts-matrix.md has the same matrix).
  *
  * Accuracy rules:
  *  - The "which task gets what" table is built from the live budgets
@@ -77,7 +80,7 @@ class PressHub_AI_Help_Admin {
     public static function build_page(): string {
         $html  = '<div class="wrap presshub-help" id="presshub-help-page">';
         $html .= '<h1>' . esc_html( PressHub_Admin_Menu::page_title( __( 'Help', 'presshub-ai-editor' ) ) ) . '</h1>';
-        $html .= self::p( __( 'How the editorial knowledge features work: the editorial agenda, policy fiches, people fiches and editorial memory. Each one adds text to the instructions PressHub sends to the AI. This page explains what each one adds, to which AI tasks, how it changes what PressHub writes, and where it stops working.', 'presshub-ai-editor' ), 'presshub-help-lead' );
+        $html .= self::p( __( 'How the editorial knowledge features work: the editorial agenda, policy fiches, people fiches and editorial memory. Each one adds text to the instructions PressHub sends to the AI. This page explains what each one adds, to which AI tasks, how it changes what PressHub writes, and where it stops working. Its last section shows what each kind of post becomes on each social platform.', 'presshub-ai-editor' ), 'presshub-help-lead' );
         $html .= self::toc();
         $html .= self::section_status();
         $html .= self::section_overview();
@@ -88,6 +91,7 @@ class PressHub_AI_Help_Admin {
         $html .= self::section_memory();
         $html .= self::section_limitations();
         $html .= self::section_where();
+        $html .= self::section_social();
         return $html . '</div>';
     }
 
@@ -103,6 +107,7 @@ class PressHub_AI_Help_Admin {
             'memory'     => __( 'Editorial memory', 'presshub-ai-editor' ),
             'limits'     => __( 'Limitations', 'presshub-ai-editor' ),
             'where'      => __( 'Where to change things and check what was sent', 'presshub-ai-editor' ),
+            'social'     => __( 'Social posts: what is made, where and when', 'presshub-ai-editor' ),
         ];
     }
 
@@ -559,6 +564,72 @@ class PressHub_AI_Help_Admin {
         $html  = self::table( [ __( 'To…', 'presshub-ai-editor' ), __( 'Go to', 'presshub-ai-editor' ) ], $rows, true );
         $html .= self::p( __( 'Every briefing, podcast and other AI call has a generation record. Its "Editorial knowledge sent" section lists the agenda version, the people and the policy fiches (with their versions) that went into that call, and the system prompt shows them exactly as sent. When an output surprises you, start there: it tells you whether the AI ignored a fiche or never received it.', 'presshub-ai-editor' ) );
         return self::section( 'where', $html );
+    }
+
+    // ------------------------------------------------------------------
+    // Social posts matrix (2.84.0)
+    // ------------------------------------------------------------------
+
+    private static function section_social(): string {
+        $e    = 'esc_html';
+        $html = self::p( __( 'Every published post goes to each active platform as one format. The format depends on the kind of post and on the settings below. Every post then passes the social post gate before anything is made for it. A video or slides never replace the Facebook link post, or a podcast\'s post on X; they come on top of it. Only an article\'s X post can carry its short instead of its image (X Video Posts).', 'presshub-ai-editor' ) );
+
+        $html .= self::h3( __( 'What each kind of post becomes', 'presshub-ai-editor' ) );
+        $html .= self::p( __( 'Read a cell left to right: the first part whose condition holds is what the post gets. "Shorts on" means that platform\'s Shorts switch is on and its engine can post video.', 'presshub-ai-editor' ), 'description' );
+        $html .= self::table(
+            [ __( 'Platform', 'presshub-ai-editor' ), __( 'Article (also trending roundups)', 'presshub-ai-editor' ), __( 'Written daily brief', 'presshub-ai-editor' ), __( 'Podcast', 'presshub-ai-editor' ) ],
+            [
+                [ $e( 'X' ), $e( __( 'Post with link. With X Video Posts and Article Shorts on, it carries the article short instead of its image (the image post if the short cannot be made).', 'presshub-ai-editor' ) ), $e( __( 'Post with link', 'presshub-ai-editor' ) ), $e( __( 'Post with link. Plus the daily brief video if X Video Posts are on and the format is daily brief (not posted when longer than 2 minutes 20 seconds).', 'presshub-ai-editor' ) ) ],
+                [ $e( 'Facebook' ), $e( __( 'Link post. Plus 1 Reel if Facebook Reels and Article Shorts are on.', 'presshub-ai-editor' ) ), $e( __( 'Link post only.', 'presshub-ai-editor' ) ), $e( __( 'Link post. Plus Reels if Facebook Reels are on: the daily brief video (browser engine only; the API takes Reels up to 90 seconds) or one Reel per story.', 'presshub-ai-editor' ) ) ],
+                [ $e( 'Instagram' ), $e( __( '1 Reel if Instagram Reels and Article Shorts are on; otherwise the classic image card.', 'presshub-ai-editor' ) ), $e( __( 'Nothing.', 'presshub-ai-editor' ) ), $e( __( 'Reels if Instagram Reels are on: the daily brief video or one per story; otherwise the classic image card.', 'presshub-ai-editor' ) ) ],
+                [ $e( 'TikTok' ), $e( __( '1 short if TikTok Shorts and Article Shorts are on; otherwise photo slides if Photo Slides and Article Shorts are on; otherwise the classic video card.', 'presshub-ai-editor' ) ), $e( __( 'Nothing.', 'presshub-ai-editor' ) ), $e( __( 'If TikTok Shorts are on: the daily brief video, or one short per story. Otherwise photo slides (one-short-per-story format only, Photo Slides on). Otherwise the classic post with the full podcast.', 'presshub-ai-editor' ) ) ],
+                [ $e( 'YouTube' ), $e( __( '1 YouTube Short if YouTube Shorts and Article Shorts are on; otherwise nothing.', 'presshub-ai-editor' ) ), $e( __( 'Nothing.', 'presshub-ai-editor' ) ), $e( __( 'The full episode (and its English and Turkish versions) if Podcast Episodes are on. Plus the daily brief video, or one short per story, if YouTube Shorts are on.', 'presshub-ai-editor' ) ) ],
+            ],
+            true
+        );
+        $html .= self::ul( [
+            __( 'Podcast Shorts Format decides between one daily brief video of about two minutes and one short per story (Shorts per Podcast of them).', 'presshub-ai-editor' ),
+            __( 'A story never goes to TikTok as both a video and photo slides: slides only go out where TikTok gets no video of the post.', 'presshub-ai-editor' ),
+            __( 'The written daily brief gets no video: its podcast, published after it, tells the same stories in video.', 'presshub-ai-editor' ),
+            __( 'Shorts, Reels, the daily brief video and photo slides need Pull Mode and the automation engine (Facebook Reels can also use the API engine with the Meta Page ID and token). When the engine cannot post video, the post falls back to its classic post and the log says why.', 'presshub-ai-editor' ),
+        ] );
+
+        $html .= self::h3( __( 'On this site now', 'presshub-ai-editor' ) );
+        $on    = static function ( bool $v ): string {
+            return $v ? esc_html__( 'On', 'presshub-ai-editor' ) : esc_html__( 'Off', 'presshub-ai-editor' );
+        };
+        $s     = 'PressHub_Social_Settings_Storage';
+        $html .= self::table(
+            [ __( 'Setting', 'presshub-ai-editor' ), __( 'Now', 'presshub-ai-editor' ) ],
+            [
+                [ $e( __( 'Active platforms', 'presshub-ai-editor' ) ), $e( implode( ', ', $s::get_enabled_platforms() ) ) ],
+                [ $e( __( 'Worker mode', 'presshub-ai-editor' ) ), $e( $s::get_worker_mode() ) ],
+                [ $e( __( 'TikTok Shorts', 'presshub-ai-editor' ) ), $on( $s::get_tiktok_shorts_enabled() ) ],
+                [ $e( __( 'Instagram Reels (Shorts)', 'presshub-ai-editor' ) ), $on( $s::get_instagram_shorts_enabled() ) ],
+                [ $e( __( 'Facebook Reels (Shorts)', 'presshub-ai-editor' ) ), $on( $s::get_facebook_shorts_enabled() ) ],
+                [ $e( __( 'X Video Posts', 'presshub-ai-editor' ) ), $on( $s::get_twitter_shorts_enabled() ) ],
+                [ $e( __( 'YouTube Shorts', 'presshub-ai-editor' ) ), $on( $s::get_youtube_shorts_enabled() ) ],
+                [ $e( __( 'YouTube Podcast Episodes', 'presshub-ai-editor' ) ), $on( $s::get_youtube_podcast_enabled() ) ],
+                [ $e( __( 'Article Shorts', 'presshub-ai-editor' ) ), $on( $s::get_tiktok_article_shorts_enabled() ) ],
+                [ $e( __( 'TikTok Photo Slides', 'presshub-ai-editor' ) ), $on( $s::get_tiktok_slides_enabled() ) ],
+                [ $e( __( 'Podcast Shorts Format', 'presshub-ai-editor' ) ), $s::get_tiktok_brief_enabled() ? esc_html__( 'Daily brief video', 'presshub-ai-editor' ) : esc_html( sprintf( /* translators: %d: shorts per podcast */ __( 'One short per story (%d per podcast)', 'presshub-ai-editor' ), $s::get_tiktok_shorts_count() ) ) ],
+                [ $e( __( 'Story Window', 'presshub-ai-editor' ) ), $s::get_story_repeat_hours() > 0 ? esc_html( sprintf( /* translators: %d: hours */ __( '%d hours', 'presshub-ai-editor' ), $s::get_story_repeat_hours() ) ) : esc_html__( 'Off', 'presshub-ai-editor' ) ],
+                [ $e( __( 'Most Posts per Story per Platform', 'presshub-ai-editor' ) ), $e( (string) $s::get_story_max_posts() ) ],
+            ],
+            true
+        );
+
+        $html .= self::h3( __( 'The social post gate', 'presshub-ai-editor' ) );
+        $html .= self::p( __( 'Every post on every platform passes the same gate, at three points, each before money or AI calls are spent on the next step. A post it stops stays in the Social Queue as cancelled, with "Not posted:" and the reason. Re-post in the Social Queue skips the gate; Retry and Dispatch now check it again.', 'presshub-ai-editor' ) );
+        $html .= self::ol( [
+            __( 'When the post is queued: before any AI copy, caption, image or shorts plan. An article is first tagged with its story (one small AI call with the Social copy model, made only when something was posted inside Story Window).', 'presshub-ai-editor' ),
+            __( 'When shorts are planned: a podcast whose stories may not go out again gets no plan call. Otherwise the plan sees what was posted, and a story that repeats on every planned platform is left out before any voice, images or render.', 'presshub-ai-editor' ),
+            __( 'When the post goes out: the worker claim and API sending check again, with no AI call, against what was posted since.', 'presshub-ai-editor' ),
+        ] );
+        $html .= self::p( __( 'Its first check is the story ledger: inside Story Window, a story a platform already posted goes out there again only with a real new development, and then it leads with it. A story the editorial memory marks resolved is not retold, and no story goes out more than Most Posts per Story per Platform times on one platform in the window. A daily brief video is stopped only when fewer than two of its stories are left.', 'presshub-ai-editor' ) );
+        $html .= self::p( __( 'Change these in Settings → Social publishing (Platforms: Social post gate; Shorts & Reels: the formats).', 'presshub-ai-editor' ) )
+            . '<p>' . self::link( PressHub_Settings_Sections::url( 'social-publishing' ), __( 'Settings → Social publishing', 'presshub-ai-editor' ) ) . '</p>';
+        return self::section( 'social', $html );
     }
 
     // ------------------------------------------------------------------

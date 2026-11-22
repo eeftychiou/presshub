@@ -4615,6 +4615,20 @@ delete_option( 'presshub_social_tiktok_shorts_enabled' );
 delete_option( 'presshub_social_engine_tiktok' );
 update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook' ] );
 
+// An article's short takes the story key its other posts got, so the article has one key.
+update_post_meta( 978, PressHub_Social_Post_Gate::POST_META, [ 'story_key' => 'fuel-prices', 'topic' => 'Fuel', 'whats_new' => 'New figures', 'dev_hash' => '' ] );
+$pg_applied = PressHub_Social_Post_Gate::apply_post_tag( 978, [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-cost-rise', 'whats_new' => '' ] ] );
+assert_true( 'fuel-prices' === $pg_applied[0]['story_key'] && 'New figures' === $pg_applied[0]['whats_new'], 'An article short carries the article\'s kept story tag' );
+assert_equals( 'other', PressHub_Social_Post_Gate::apply_post_tag( 979, [ [ 'story_key' => 'other' ] ] )[0]['story_key'], 'Without a kept tag the plan keeps its own key' );
+assert_equals( 'Plan fact', PressHub_Social_Post_Gate::apply_post_tag( 978, [ [ 'story_key' => 'x', 'whats_new' => 'Plan fact' ] ] )[0]['whats_new'], 'A new fact the plan names is kept' );
+$pg_fb_id = PressHub_Social_Queue::enqueue( [ 'post_id' => 978, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Caption ready', 'status' => 'pending',
+    'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 1 ] ] ] );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Λεζάντα #news' );
+PressHub_Social_TikTok_Shorts::fallback_to_classic( PressHub_Social_Queue::get_job( $pg_fb_id ), new WP_Error( 'x', 'render failed' ) );
+$pg_fb_meta = json_decode( (string) PressHub_Social_Queue::get_job( $pg_fb_id )['metadata'], true );
+assert_equals( 'fuel-prices', $pg_fb_meta['story']['story_key'] ?? '', 'A short that falls back to the classic post keeps the story tag' );
+delete_post_meta( 978, PressHub_Social_Post_Gate::POST_META );
+
 // Out: checked again at claim and dispatch against what went out since, with no AI call.
 PressHub_Social_Queue::reset_memory_store();
 $pg_short = PressHub_Social_Queue::enqueue( [ 'post_id' => 980, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'c', 'status' => 'pending',
