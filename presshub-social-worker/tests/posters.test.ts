@@ -29,7 +29,9 @@ import {
   typeTikTokCaption,
   fitInstagramCaption,
   INSTAGRAM_REEL_CAPTION_MAX_BYTES,
-  waitForTwitterVideo
+  waitForTwitterVideo,
+  TWITTER_UPLOAD_PROGRESS_SELECTOR,
+  TWITTER_VIDEO_READY_SELECTOR
 } from '../src/automation/posters';
 import { ChromeConnection } from '../src/automation/browser-helper';
 import { markSessionInvalid, clearSessionInvalid, verifySession } from '../src/automation/session-manager';
@@ -1972,17 +1974,25 @@ describe('fitInstagramCaption', () => {
 });
 
 describe('waitForTwitterVideo', () => {
-  const fakeScope = (states: Array<{ ariaDisabled: string | null; progress: number }>) => {
+  type State = { ariaDisabled: string | null; progress: number; ready?: boolean; counter?: number };
+  const fakeScope = (states: State[]) => {
     let i = 0;
     const current = () => states[Math.min(i, states.length - 1)];
     const button = {
       getAttribute: async (name: string) => (name === 'aria-disabled' ? current().ariaDisabled : null),
       count: async () => 1
     };
+    const selectors: string[] = [];
     return {
-      locator: (sel: string) => (sel.includes('progressbar')
-        ? { count: async () => current().progress }
-        : { filter: () => ({ filter: () => ({ first: () => button }) }) }),
+      selectors,
+      locator: (sel: string) => {
+        selectors.push(sel);
+        if (sel === TWITTER_UPLOAD_PROGRESS_SELECTOR) return { count: async () => current().progress };
+        if (sel === TWITTER_VIDEO_READY_SELECTOR) return { count: async () => (current().ready ? 1 : 0) };
+        // A bare progress bar outside the attachment, like X's character counter ring.
+        if (sel === '[role="progressbar"]') return { count: async () => current().counter ?? 0 };
+        return { filter: () => ({ filter: () => ({ first: () => button }) }) };
+      },
       page: { waitForTimeout: async () => { i++; }, locator: () => ({}) }
     };
   };
@@ -1999,5 +2009,29 @@ describe('waitForTwitterVideo', () => {
   test('fails when X never finishes the upload', async () => {
     const scope = fakeScope([{ ariaDisabled: 'true', progress: 1 }]);
     await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).rejects.toThrow('X did not finish uploading the video');
+  });
+
+  test('only counts progress bars inside the attachment, never the character counter', async () => {
+    const scope = fakeScope([{ ariaDisabled: null, progress: 0, counter: 1 }]);
+    await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).resolves.toBeGreaterThanOrEqual(0);
+    expect(scope.selectors).not.toContain('[role="progressbar"]');
+    expect(TWITTER_UPLOAD_PROGRESS_SELECTOR.split(',').every((s) => s.trim().startsWith('[data-testid="attachments"]'))).toBe(true);
+  });
+
+  test('X saying "<file>: Ready" ends the wait even while a bar is still shown', async () => {
+    const scope = fakeScope([{ ariaDisabled: null, progress: 1, ready: true }]);
+    await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).resolves.toBeGreaterThanOrEqual(0);
+  });
+
+  test('a ready video still waits for Post to be enabled', async () => {
+    const scope = fakeScope([{ ariaDisabled: 'true', progress: 0, ready: true }]);
+    await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).rejects.toThrow('X did not finish uploading the video');
+  });
+
+  test('the ready selector matches X\'s ready line for a video file', () => {
+    const body = TWITTER_VIDEO_READY_SELECTOR.replace(/^text=\//, '').replace(/\/i$/, '');
+    const re = new RegExp(body, 'i');
+    expect(re.test('b7dcf243bba90d90e94bfab66cf1d766.mp4: Ready')).toBe(true);
+    expect(re.test('short.mp4: Uploading (45%)')).toBe(false);
   });
 });

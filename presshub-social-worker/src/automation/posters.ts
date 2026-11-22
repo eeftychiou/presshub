@@ -301,9 +301,20 @@ export function sanitizeTwitterCopy(copy: string, maxWeightedChars: number = TWI
 export const TWITTER_VIDEO_UPLOAD_TIMEOUT_MS = 300_000;
 
 /**
+ * The upload progress bar of an attachment. Only bars inside the attachment count: the
+ * composer's character counter ring and the timeline's video players behind the composer
+ * are progress bars too, and counting them kept every video post waiting until it failed.
+ */
+export const TWITTER_UPLOAD_PROGRESS_SELECTOR = '[data-testid="attachments"] [role="progressbar"], [data-testid="attachments"] [aria-valuenow]';
+
+/** X's own "done" line under an attached video, e.g. "clip.mp4: Ready". */
+export const TWITTER_VIDEO_READY_SELECTOR = 'text=/\\.(mp4|mov|m4v|webm):\\s*Ready\\b/i';
+
+/**
  * Waits until X has uploaded and processed an attached video: the composer's Post button
- * is enabled and no upload progress bar is left. X keeps Post disabled while it uploads, so
- * posting earlier would do nothing (or, worse, post the text alone through a fallback).
+ * is enabled and either X says the video is ready ("<file>: Ready") or no attachment upload
+ * bar is left. X keeps Post disabled while it uploads, so posting earlier would do nothing
+ * (or, worse, post the text alone through a fallback).
  * Returns the milliseconds waited; throws when the video is not ready in time.
  */
 export async function waitForTwitterVideo(page: any, scope: any, timeoutMs: number = TWITTER_VIDEO_UPLOAD_TIMEOUT_MS, pollMs: number = 1000): Promise<number> {
@@ -313,12 +324,14 @@ export async function waitForTwitterVideo(page: any, scope: any, timeoutMs: numb
     .filter({ hasNotText: 'New Post' })
     .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"], [data-testid="SideNav_NewTweet_Button"]') })
     .first();
-  const progress = scope.locator('[role="progressbar"], [data-testid="attachments"] [aria-valuenow]');
+  const progress = scope.locator(TWITTER_UPLOAD_PROGRESS_SELECTOR);
+  const ready = scope.locator(TWITTER_VIDEO_READY_SELECTOR);
   let lastLog = 0;
   while (Date.now() - started < timeoutMs) {
     const ariaDisabled = await button.getAttribute('aria-disabled').catch(() => null);
     const disabled = await button.getAttribute('disabled').catch(() => null);
-    const uploading = await progress.count().then((c: number) => c > 0).catch(() => false);
+    const isReady = await ready.count().then((c: number) => c > 0).catch(() => false);
+    const uploading = !isReady && await progress.count().then((c: number) => c > 0).catch(() => false);
     if (ariaDisabled !== 'true' && disabled === null && !uploading && (await button.count().catch(() => 0)) > 0) {
       return Date.now() - started;
     }
