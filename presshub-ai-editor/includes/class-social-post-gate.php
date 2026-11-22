@@ -21,7 +21,7 @@
  * Checks: `presshub_social_post_gate_checks` filters the list (name => callable that
  * takes the context array and returns '' to pass or the reason). The first check is the
  * story ledger (PressHub_Social_Story_Check), with Story Window and Most Posts per Story
- * per Platform in Social settings → General → Social post gate. A job reposted by hand
+ * per Platform in Settings → Social publishing → Platforms → Social post gate. A job reposted by hand
  * from the Social Queue skips the gate (`metadata.gate_bypass`).
  *
  * @package PressHub_AI_Editor
