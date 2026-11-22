@@ -2,7 +2,8 @@ import { SessionManager, Platform } from './automation/session-manager';
 import { dispatchBrowserPost, PosterHandler, PostResult } from './automation/posters';
 import { generateCard, CardResult } from './media/card-generator';
 import { generateVideo, VideoResult } from './media/video-generator';
-import { generateShortVideo, ShortSegment, ShortVideoResult, GenerateShortOptions, siteEndCardLine, YOUTUBE_SHORT_MAX_SECONDS } from './media/short-video';
+import { generateShortVideo, ShortSegment, ShortVideoResult, GenerateShortOptions, siteEndCardLine, YOUTUBE_SHORT_MAX_SECONDS, CardSpan } from './media/short-video';
+import { PostCard } from './media/post-card';
 import { generateEpisodeVideo, GenerateEpisodeOptions, EpisodeVideoResult } from './media/episode-video';
 import { generatePhotoSlides, GeneratePhotoSlidesOptions, PhotoSlidesResult, removePhotoSlides } from './media/photo-slides';
 import { WorkerLogger } from './logger';
@@ -52,6 +53,10 @@ export interface ClaimedJob {
     badge?: string;
     /** X: longest video the account may post, in seconds (default TWITTER_VIDEO_MAX_SECONDS). */
     max_seconds?: number;
+    /** Trending roundup: the social media posts the voice talks about, drawn as post cards. */
+    cards?: PostCard[];
+    /** When each card is on screen, in seconds of the voice track. */
+    card_spans?: CardSpan[];
   };
   /**
    * Set on TikTok photo slide jobs (#333): a short's hook and script as text on photo
@@ -661,7 +666,8 @@ export class PressHubPoller {
               // One end line for every platform: the site's name, true everywhere,
               // where "link in bio" was true only on TikTok and Instagram.
               endCardLine: siteEndCardLine(this.wpUrl),
-              outputDir: this.outputDir
+              outputDir: this.outputDir,
+              ...postCardOptions(short)
             };
             // A story is rendered once and reused by its other platforms; a test
             // render is always made fresh, since it is moved away for review.
@@ -1095,6 +1101,22 @@ export function platformLabel(platform: string): string {
 }
 
 /** Badge of a short: the site's own badge (an article's category), else ΕΙΔΗΣΗ n/N. */
+/**
+ * The post cards of a trending roundup short, checked: cards with a platform, and spans
+ * with a card that exists and an end after the start. Empty for any other short.
+ */
+export function postCardOptions(short: { cards?: unknown; card_spans?: unknown }): Pick<GenerateShortOptions, 'postCards' | 'cardSpans'> {
+  const cards = Array.isArray(short.cards) ? short.cards.filter((c: any) => c && typeof c === 'object' && typeof c.platform === 'string') as PostCard[] : [];
+  if (cards.length !== (Array.isArray(short.cards) ? short.cards.length : 0)) {
+    // A broken entry would shift the card numbers the spans use.
+    return {};
+  }
+  const spans = (Array.isArray(short.card_spans) ? short.card_spans : [])
+    .map((s: any) => ({ card: Number(s?.card), start: Number(s?.start), end: Number(s?.end) }))
+    .filter((s) => Number.isInteger(s.card) && s.card >= 0 && s.card < cards.length && Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start);
+  return cards.length && spans.length ? { postCards: cards, cardSpans: spans } : {};
+}
+
 export function shortBadge(short: { index: number; count: number; badge?: string }): string {
   if (typeof short.badge === 'string' && short.badge.trim() !== '') {
     return short.badge.trim();

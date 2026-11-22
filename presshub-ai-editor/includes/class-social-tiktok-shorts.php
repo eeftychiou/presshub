@@ -927,6 +927,12 @@ class PressHub_Social_TikTok_Shorts {
         if ( self::SOURCE_ARTICLE === ( $short['source'] ?? '' ) ) {
             $job['tiktok_short']['source'] = self::SOURCE_ARTICLE;
             $job['tiktok_short']['badge']  = self::article_badge( (int) ( $job['post_id'] ?? 0 ) );
+            // Trending roundup: the posts as cards, on screen while the voice talks about them.
+            $spans = class_exists( 'PressHub_Social_Trending_Short' ) ? PressHub_Social_Trending_Short::card_spans( $short ) : [];
+            if ( ! empty( $spans ) ) {
+                $job['tiktok_short']['cards']      = array_values( (array) $short['post_cards'] );
+                $job['tiktok_short']['card_spans'] = $spans;
+            }
         } elseif ( ! empty( $short['brief'] ) ) {
             $job['tiktok_short']['badge'] = self::BRIEF_BADGE;
             $sequence                     = self::brief_image_sequence( $short );
@@ -1231,6 +1237,12 @@ class PressHub_Social_TikTok_Shorts {
                 $prepared['story_key'] = (string) ( $short['story_key'] ?? '' );
                 $prepared['whats_new'] = (string) ( $short['whats_new'] ?? '' );
                 $prepared['dev_hash']  = (string) ( $short['dev_hash'] ?? '' );
+                // Trending roundup: the posts shown as cards while the voice talks about them.
+                if ( ! empty( $short['post_refs'] ) && ! empty( $short['post_cards'] ) ) {
+                    $prepared['post_cards']   = $short['post_cards'];
+                    $prepared['post_refs']    = $short['post_refs'];
+                    $prepared['script_words'] = (int) ( $short['script_words'] ?? 0 );
+                }
             }
             $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], $prepared );
             PressHub_Social_Queue::update_job( $job_id, [
@@ -1445,6 +1457,11 @@ class PressHub_Social_TikTok_Shorts {
                 . '|' . self::primary_category( $post_id )
                 . '|' . ( $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '' );
         }
+        // A trending roundup's plan also says which of its posts the script talks about.
+        $trending  = $article && class_exists( 'PressHub_Social_Trending_Short' ) ? PressHub_Social_Trending_Short::items( $post_id ) : [];
+        if ( ! empty( $trending ) ) {
+            $article_key .= '|trending:' . PressHub_Social_Trending_Short::signature( $trending );
+        }
         $hash      = hash( 'sha256', $script . $article_key . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() . ( $brief ? '|brief' : '' ) . ( $story_posts ? '|story_posts' : '' ) );
 
         $stored = get_post_meta( $post_id, $plan_meta, true );
@@ -1493,6 +1510,14 @@ class PressHub_Social_TikTok_Shorts {
         if ( '' !== $block ) {
             $user_prompt .= "\n\n" . $block;
         }
+        if ( ! empty( $trending ) ) {
+            try {
+                $user_prompt .= "\n\n" . PressHub_Social_Trending_Short::prompt_block( $trending );
+            } catch ( \Throwable $e ) {
+                $trending = [];
+                PressHub_Social_Logger::warning( sprintf( 'Trending short of post #%d: the posts block could not be built (%s); the short shows its story images only.', $post_id, $e->getMessage() ) );
+            }
+        }
         $sys_prompt  = PressHub_Social_Settings_Storage::get_system_prompt();
 
         if ( $brief ) {
@@ -1534,6 +1559,9 @@ class PressHub_Social_TikTok_Shorts {
                     if ( ! empty( self::$last_repairs ) ) {
                         $note = PressHub_Social_AI_Json::note_repair( self::$last_record_id, self::$last_repairs );
                         PressHub_Social_Logger::warning( sprintf( 'TikTok shorts plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
+                    }
+                    if ( ! empty( $trending ) ) {
+                        $shorts = PressHub_Social_Trending_Short::attach_plan( $shorts, (string) $raw, $trending, $post_id );
                     }
                     if ( $check ) {
                         if ( $article ) {
@@ -1868,26 +1896,11 @@ class PressHub_Social_TikTok_Shorts {
             return [];
         }
 
-        // Spoken words of each turn, to place a word of the script in time.
-        $turns = [];
-        $said  = 0;
-        foreach ( $segments as $segment ) {
-            $n       = count( preg_split( '/\s+/u', trim( (string) ( $segment['text'] ?? '' ) ), -1, PREG_SPLIT_NO_EMPTY ) ?: [] );
-            $turns[] = [ 'from' => $said, 'n' => $n, 'start' => (float) ( $segment['start'] ?? 0 ), 'end' => (float) ( $segment['end'] ?? 0 ) ];
-            $said   += $n;
-        }
-        if ( $said <= 0 ) {
+        $time_of = self::word_timer( $segments, $words );
+        if ( null === $time_of ) {
             return [];
         }
-        $time_of = static function ( int $word ) use ( $turns, $said, $words ): float {
-            $w = $word * $said / $words; // The turns can count a few words differently.
-            foreach ( $turns as $turn ) {
-                if ( $turn['n'] > 0 && $w < $turn['from'] + $turn['n'] ) {
-                    return $turn['start'] + max( 0.0, $w - $turn['from'] ) / $turn['n'] * ( $turn['end'] - $turn['start'] );
-                }
-            }
-            return (float) end( $turns )['end'];
-        };
+        $turns = $segments;
 
         $starts = []; // [ start time, url ] of each story that has an image.
         foreach ( $stories as $story ) {
@@ -1900,7 +1913,7 @@ class PressHub_Social_TikTok_Shorts {
             return [];
         }
 
-        $total    = (float) end( $turns )['end'] + self::WORKER_TAIL_SECONDS;
+        $total    = (float) ( end( $turns )['end'] ?? 0 ) + self::WORKER_TAIL_SECONDS;
         $slots    = max( 1, (int) round( $total / self::WORKER_SLOT_SECONDS ) );
         $sequence = [];
         for ( $i = 0; $i < $slots; $i++ ) {
@@ -1914,6 +1927,38 @@ class PressHub_Social_TikTok_Shorts {
             $sequence[] = $url;
         }
         return $sequence;
+    }
+
+    /**
+     * A function giving the time (seconds of the voice) at which a word of the script is
+     * spoken, from the voice's turn timings: `$word` out of `$words` spoken words, placed
+     * by its position inside its turn. Null when there are no timings to go by.
+     *
+     * @return (callable(int): float)|null
+     */
+    public static function word_timer( array $segments, int $words ): ?callable {
+        $turns = [];
+        $said  = 0;
+        foreach ( $segments as $segment ) {
+            if ( ! is_array( $segment ) ) {
+                continue;
+            }
+            $n       = count( preg_split( '/\s+/u', trim( (string) ( $segment['text'] ?? '' ) ), -1, PREG_SPLIT_NO_EMPTY ) ?: [] );
+            $turns[] = [ 'from' => $said, 'n' => $n, 'start' => (float) ( $segment['start'] ?? 0 ), 'end' => (float) ( $segment['end'] ?? 0 ) ];
+            $said   += $n;
+        }
+        if ( $said <= 0 || $words <= 0 ) {
+            return null;
+        }
+        return static function ( int $word ) use ( $turns, $said, $words ): float {
+            $w = $word * $said / $words; // The turns can count a few words differently.
+            foreach ( $turns as $turn ) {
+                if ( $turn['n'] > 0 && $w < $turn['from'] + $turn['n'] ) {
+                    return $turn['start'] + max( 0.0, $w - $turn['from'] ) / $turn['n'] * ( $turn['end'] - $turn['start'] );
+                }
+            }
+            return (float) end( $turns )['end'];
+        };
     }
 
     /**

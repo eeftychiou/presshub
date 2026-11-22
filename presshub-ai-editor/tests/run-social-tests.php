@@ -503,6 +503,7 @@ require_once $base_dir . '/includes/class-social-image-library.php';
 require_once $base_dir . '/includes/class-social-post-images.php';
 require_once $base_dir . '/includes/class-social-tiktok-shorts.php';
 require_once $base_dir . '/includes/class-social-story-check.php';
+require_once $base_dir . '/includes/class-social-trending-short.php';
 require_once $base_dir . '/includes/class-social-post-gate.php';
 require_once $base_dir . '/includes/class-social-tiktok-music.php';
 require_once $base_dir . '/includes/class-podcast-timeline.php';

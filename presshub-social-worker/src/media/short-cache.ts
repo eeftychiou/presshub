@@ -37,7 +37,9 @@ export function shortRenderKey(opts: GenerateShortOptions): string {
     musicUrl: opts.musicUrl || '',
     musicPath: opts.musicPath || '',
     musicVolume: opts.musicVolume ?? null,
-    endCardLine: opts.endCardLine || ''
+    endCardLine: opts.endCardLine || '',
+    postCards: opts.postCards || [],
+    cardSpans: opts.cardSpans || []
   };
   return crypto.createHash('sha256').update(JSON.stringify(inputs)).digest('hex').slice(0, 32);
 }
