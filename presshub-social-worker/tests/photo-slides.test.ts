@@ -10,7 +10,7 @@ import {
   SLIDE_WIDTH,
   SLIDE_HEIGHT
 } from '../src/media/photo-slides';
-import { parseTikTokVideoHref, tiktokPostUrl, TIKTOK_SOUND_BUTTON_RE, TIKTOK_PHOTOS_TAB_RE, isOriginalSound, postTikTok } from '../src/automation/posters';
+import { parseTikTokVideoHref, tiktokPostUrl, TIKTOK_SOUND_BUTTON_RE, TIKTOK_PHOTOS_TAB_RE, isOriginalSound, postTikTok, chooseTikTokSound, readRecentTikTokSounds, recordTikTokSound, asTikTokPhotoUrl, TIKTOK_RECENT_SOUNDS } from '../src/automation/posters';
 import { PressHubPoller, ClaimedJob } from '../src/poller';
 
 const TEST_DIR = path.resolve(__dirname, 'tmp-photo-slides-test');
@@ -113,6 +113,35 @@ describe('TikTok photo post helpers', () => {
     expect(TIKTOK_SOUND_BUTTON_RE.test('Post')).toBe(false);
   });
 
+  test('the sound is one of the top tracks, not one used recently', () => {
+    const top = ['Moment Of Reflection', 'Calm Piano', 'Soft Hope', 'Quiet Morning', 'Still Water'];
+    expect(chooseTikTokSound(top, [], () => 0)).toBe(0);
+    expect(chooseTikTokSound(top, [], () => 0.99)).toBe(4);
+    expect(chooseTikTokSound(top, ['moment of reflection'], () => 0)).toBe(1);
+    expect(chooseTikTokSound(top, ['Calm Piano', 'Moment Of Reflection'], () => 0.5)).toBe(3);
+    // All used: the one used longest ago.
+    expect(chooseTikTokSound(top, ['Still Water', 'Calm Piano', 'Quiet Morning', 'Moment Of Reflection', 'Soft Hope'], () => 0)).toBe(2);
+    expect(chooseTikTokSound([], ['x'])).toBe(-1);
+  });
+
+  test('recent sounds are remembered, newest first and capped', () => {
+    const dir = path.join(TEST_DIR, `sounds-${Math.random().toString(16).slice(2)}`);
+    expect(readRecentTikTokSounds(dir)).toEqual([]);
+    recordTikTokSound(dir, 'A');
+    recordTikTokSound(dir, 'B');
+    recordTikTokSound(dir, 'a');
+    expect(readRecentTikTokSounds(dir)).toEqual(['a', 'B']);
+    for (let i = 0; i < 20; i++) recordTikTokSound(dir, `S${i}`);
+    expect(readRecentTikTokSounds(dir)).toHaveLength(TIKTOK_RECENT_SOUNDS);
+    expect(readRecentTikTokSounds(dir)[0]).toBe('S19');
+    expect(readRecentTikTokSounds(undefined)).toEqual([]);
+  });
+
+  test('a photo post is linked as /photo/', () => {
+    expect(asTikTokPhotoUrl('https://www.tiktok.com/@presshub.cy/video/7710864748400643350')).toBe('https://www.tiktok.com/@presshub.cy/photo/7710864748400643350');
+    expect(asTikTokPhotoUrl('https://www.tiktok.com/@presshub.cy')).toBe('https://www.tiktok.com/@presshub.cy');
+  });
+
   test('a photo post without images fails before any browser starts', async () => {
     await expect(postTikTok({ platform: 'tiktok', copy: 'x', photoPost: true, mediaPaths: [path.join(TEST_DIR, 'none.jpg')] })).rejects.toThrow('at least one image');
   });
@@ -184,7 +213,7 @@ describe('Poller with TikTok photo slides', () => {
     expect(stats).toEqual({ claimed: 1, succeeded: 1, failed: 0 });
     expect(rendered[0]).toMatchObject({ hook: 'Hook one', badge: 'ΕΙΔΗΣΗ 1/3', slides: ['Πρώτη πρόταση.'], imageUrls: ['https://presshub.test/img.png'], maxSlides: 10 });
     expect(rendered[0].endCardLine).toContain('presshub.test');
-    expect(posted[0]).toMatchObject({ platform: 'tiktok', copy: 'Λεζάντα #news', photoPost: true, soundQuery: 'emotional piano', aiGenerated: true });
+    expect(posted[0]).toMatchObject({ platform: 'tiktok', copy: 'Λεζάντα #news', photoPost: true, soundQuery: 'emotional piano', aiGenerated: true, stateDir: path.resolve(TEST_DIR) });
     expect(posted[0].mediaPaths).toHaveLength(3);
     expect(reports[0]).toMatchObject({ job_id: 90, status: 'published', external_post_url: 'https://www.tiktok.com/@a/photo/12345678901' });
     expect(fs.existsSync(slideDir)).toBe(false);
