@@ -301,6 +301,26 @@ class PressHub_Social_Settings_Storage {
             'default'           => self::DEFAULT_TIKTOK_BRIEF_MAX_WORDS,
         ] );
 
+        // TikTok in daily brief mode (2.85.0): the full podcast, and single-story posts that
+        // are each a video short or photo slides, next to the brief.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_full_podcast_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_full_podcast_enabled' ],
+            'default'           => true,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_story_posts', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_story_posts' ],
+            'default'           => self::DEFAULT_TIKTOK_STORY_POSTS,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_story_posts_format', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_story_posts_format' ],
+            'default'           => self::DEFAULT_TIKTOK_STORY_POSTS_FORMAT,
+        ] );
+
         // Social post gate (2.84.0, PressHub_Social_Post_Gate): the story ledger's window, and
         // how often one story may go out on one platform inside it.
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_story_repeat_hours', [
@@ -1604,6 +1624,48 @@ class PressHub_Social_Settings_Storage {
 
     public static function sanitize_tiktok_brief_max_words( $value ): int {
         return max( 150, min( 380, (int) $value ) );
+    }
+
+    /**
+     * TikTok Full Podcast: in daily brief mode, TikTok also gets the whole podcast as one
+     * video (the classic TikTok podcast post), next to the brief. Default on.
+     */
+    public static function get_tiktok_full_podcast_enabled(): bool {
+        return in_array( get_option( 'presshub_social_tiktok_full_podcast_enabled', true ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_tiktok_full_podcast_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_tiktok_full_podcast_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_tiktok_full_podcast_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /**
+     * TikTok Story Posts: in daily brief mode, how many single-story posts of 30-60 seconds
+     * each podcast also gets on TikTok (0-5, default 3; 0 turns them off).
+     */
+    public const DEFAULT_TIKTOK_STORY_POSTS = 3;
+
+    public static function get_tiktok_story_posts(): int {
+        return self::sanitize_tiktok_story_posts( get_option( 'presshub_social_tiktok_story_posts', self::DEFAULT_TIKTOK_STORY_POSTS ) );
+    }
+
+    public static function sanitize_tiktok_story_posts( $value ): int {
+        return max( 0, min( 5, (int) $value ) );
+    }
+
+    /** TikTok Story Post Format: each story post is picked at random, or always one kind. */
+    public const TIKTOK_STORY_POSTS_FORMATS = [ 'random', 'video', 'slides' ];
+    public const DEFAULT_TIKTOK_STORY_POSTS_FORMAT = 'random';
+
+    public static function get_tiktok_story_posts_format(): string {
+        return self::sanitize_tiktok_story_posts_format( get_option( 'presshub_social_tiktok_story_posts_format', self::DEFAULT_TIKTOK_STORY_POSTS_FORMAT ) );
+    }
+
+    public static function sanitize_tiktok_story_posts_format( $value ): string {
+        $value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+        return in_array( $value, self::TIKTOK_STORY_POSTS_FORMATS, true ) ? $value : self::DEFAULT_TIKTOK_STORY_POSTS_FORMAT;
     }
 
     /**

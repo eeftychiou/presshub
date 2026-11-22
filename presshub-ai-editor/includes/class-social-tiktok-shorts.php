@@ -78,6 +78,17 @@
  * image slot of the worker shows the image of the story being read. A brief gets no photo
  * slides. Articles are not affected. Format "stories" keeps one short per story.
  *
+ * TikTok story posts and full podcast (2.85.0): with the daily brief, TikTok also gets the
+ * full podcast (`presshub_social_tiktok_full_podcast_enabled`, the classic TikTok post, queued
+ * by the dispatcher half a spacing after the brief) and TikTok Story Posts
+ * (`presshub_social_tiktok_story_posts`, default 3): "instant news" posts of one story each,
+ * each a video short or photo slides (`presshub_social_tiktok_story_posts_format`: random,
+ * video, slides). They are marked `metadata.tiktok_short.story_post`, queued by
+ * build_story_post_jobs(), and planned with the Shorts Script Prompt in their own plan
+ * (STORY_POSTS_PLAN_META), apart from the brief's. Their stories go through the story ledger
+ * on TikTok like any short, so a story told by an earlier post is replaced or left out; the
+ * same podcast's brief and full podcast never block them.
+ *
  * Story repeats (2.84.0, PressHub_Social_Story_Check): get_plan() shows the AI the stories
  * already posted on the post's platforms and the editorial memory's stories, every plan
  * story carries `story_key` and `whats_new`, and a story that repeats what was told without a
@@ -105,6 +116,9 @@ class PressHub_Social_TikTok_Shorts {
 
     /** Post meta holding the generated plan of shorts for a podcast post. */
     public const PLAN_META = '_presshub_tiktok_shorts';
+
+    /** Post meta: the plan of a podcast's TikTok story posts (2.85.0), apart from its brief's. */
+    public const STORY_POSTS_PLAN_META = '_presshub_tiktok_story_posts_plan';
 
     /** Job metadata key marking a short job and holding its prepared short. */
     public const JOB_META_KEY = 'tiktok_short';
@@ -612,6 +626,97 @@ class PressHub_Social_TikTok_Shorts {
         return $jobs;
     }
 
+    /** Whether a job is one of a podcast's TikTok story posts (2.85.0). */
+    public static function is_story_post_job( array $job ): bool {
+        if ( ! self::is_short_job( $job ) ) {
+            return false;
+        }
+        return ! empty( self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ]['story_post'] );
+    }
+
+    /**
+     * Whether TikTok also gets the full podcast next to the daily brief: the switch is on,
+     * the post is a podcast and Podcast Shorts Format is the daily brief.
+     */
+    public static function full_podcast_wanted( int $post_id ): bool {
+        return PressHub_Social_Settings_Storage::get_tiktok_full_podcast_enabled()
+            && PressHub_Social_Settings_Storage::get_tiktok_brief_enabled()
+            && '' !== self::source_type( $post_id )
+            && self::SOURCE_ARTICLE !== self::source_type( $post_id );
+    }
+
+    /**
+     * Whether a podcast post gets TikTok story posts: TikTok Story Posts above 0, the post
+     * is a podcast, Podcast Shorts Format is the daily brief (with one short per story the
+     * stories are already posted one by one), and TikTok goes through the worker.
+     */
+    public static function story_posts_wanted( int $post_id, string $engine ): bool {
+        if ( PressHub_Social_Settings_Storage::get_tiktok_story_posts() <= 0 || ! PressHub_Social_Settings_Storage::get_tiktok_brief_enabled() ) {
+            return false;
+        }
+        $source = self::source_type( $post_id );
+        if ( '' === $source || self::SOURCE_ARTICLE === $source ) {
+            return false;
+        }
+        if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() || 'automation' !== $engine ) {
+            PressHub_Social_Logger::warning( sprintf(
+                'TikTok Story Posts are on but podcast post #%d gets none: they need Pull Mode and the TikTok automation engine (engine: %s, worker mode: %s).',
+                $post_id,
+                $engine,
+                PressHub_Social_Settings_Storage::get_worker_mode()
+            ) );
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * The format of story post $index: TikTok Story Post Format, with "random" picking a
+     * video short or photo slides for each post.
+     */
+    public static function story_post_format( int $index ): string {
+        $format = PressHub_Social_Settings_Storage::get_tiktok_story_posts_format();
+        if ( 'random' === $format ) {
+            $format = random_int( 0, 1 ) ? 'slides' : 'video';
+        }
+        if ( function_exists( 'apply_filters' ) ) {
+            $format = (string) apply_filters( 'presshub_social_tiktok_story_post_format', $format, $index );
+        }
+        return 'slides' === $format ? self::FORMAT_SLIDES : 'video';
+    }
+
+    /**
+     * The TikTok story post jobs of a podcast post (2.85.0): TikTok Story Posts jobs of one
+     * story each, the first one Time Between Shorts after $start_time (the brief's slot) and
+     * the next ones the same spacing apart. Their text is the plan's caption, filled in at
+     * claim time.
+     *
+     * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().
+     */
+    public static function build_story_post_jobs( int $post_id, int $start_time ): array {
+        $count   = PressHub_Social_Settings_Storage::get_tiktok_story_posts();
+        $spacing = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+        $jobs    = [];
+        for ( $i = 0; $i < $count; $i++ ) {
+            $meta = [ 'index' => $i, 'count' => $count, 'story_post' => true ];
+            if ( self::FORMAT_SLIDES === self::story_post_format( $i ) ) {
+                $meta['format'] = self::FORMAT_SLIDES;
+            }
+            $jobs[] = [
+                'post_id'      => $post_id,
+                'platform'     => 'tiktok',
+                'engine'       => 'automation',
+                'post_copy'    => self::placeholder_copy( $i, $count ),
+                'media_url'    => null,
+                'media_type'   => null,
+                'scheduled_at' => gmdate( 'Y-m-d H:i:s', $start_time + ( ( $i + 1 ) * $spacing ) ),
+                'status'       => 'pending',
+                'metadata'     => [ self::JOB_META_KEY => $meta ],
+            ];
+        }
+        return $jobs;
+    }
+
     /**
      * The script of a short cut into slide texts: speaker tags removed, whole sentences
      * grouped to about $words words each. When that makes more than $max slides, each
@@ -908,6 +1013,50 @@ class PressHub_Social_TikTok_Shorts {
             return;
         }
 
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- background cron; TTS is paced by the shared rate limiter.
+        }
+
+        $date = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
+        if ( '' === $date ) {
+            $date = function_exists( 'get_the_date' ) ? (string) get_the_date( 'Y-m-d', $post_id ) : '';
+        }
+        if ( '' === $date ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        // A podcast's daily brief and its TikTok story posts (2.85.0) are two plans: each
+        // group of jobs gets its own plan, voices and images.
+        $groups = [];
+        foreach ( $all as $j ) {
+            $groups[ self::job_group( $j ) ][] = $j;
+        }
+        $failures = [];
+        foreach ( $groups as $group => $group_all ) {
+            $group_pending = array_values( array_filter( $pending, fn( $j ) => self::job_group( $j ) === $group ) );
+            if ( ! empty( $group_pending ) ) {
+                $failures = array_merge( $failures, self::prepare_group( $post_id, $group_all, $group_pending, 'story_posts' === $group, $date ) );
+            }
+        }
+
+        self::handle_failures( $post_id, $failures );
+    }
+
+    /** The plan a short job belongs to: the brief, the TikTok story posts, or the shorts. */
+    private static function job_group( array $job ): string {
+        $meta = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? [];
+        if ( ! empty( $meta['story_post'] ) ) {
+            return 'story_posts';
+        }
+        return ! empty( $meta['brief'] ) ? 'brief' : 'shorts';
+    }
+
+    /**
+     * Prepare one plan's jobs: the plan, then each pending job's audio and images.
+     *
+     * @return array<int, array{0: array, 1: WP_Error}> Jobs whose preparation failed.
+     */
+    private static function prepare_group( int $post_id, array $all, array $pending, bool $story_posts, string $date ): array {
         // The plan covers as many stories as jobs were queued, and the format they were
         // queued in, whatever the live settings say now.
         $count = 0;
@@ -918,29 +1067,16 @@ class PressHub_Social_TikTok_Shorts {
             $brief = $brief || ! empty( $meta['brief'] );
         }
 
-        if ( function_exists( 'set_time_limit' ) ) {
-            @set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- background cron; TTS is paced by the shared rate limiter.
-        }
-
         $platforms = array_values( array_unique( array_map( fn( $j ) => (string) ( $j['platform'] ?? '' ), $all ) ) );
-        $plan      = self::get_plan( $post_id, $count, $brief, $platforms );
+        $plan      = self::get_plan( $post_id, $count, $brief, $platforms, $story_posts );
         if ( is_wp_error( $plan ) && PressHub_Social_Post_Gate::BLOCKED_CODE === $plan->get_error_code() ) {
             foreach ( $pending as $job ) {
                 PressHub_Social_Post_Gate::block_job( (int) $job['id'], $plan->get_error_message() );
             }
-            return;
+            return [];
         }
         if ( is_wp_error( $plan ) ) {
-            self::handle_failures( $post_id, array_map( fn( $j ) => [ $j, $plan ], $pending ) );
-            return;
-        }
-
-        $date = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
-        if ( '' === $date ) {
-            $date = function_exists( 'get_the_date' ) ? (string) get_the_date( 'Y-m-d', $post_id ) : '';
-        }
-        if ( '' === $date ) {
-            $date = gmdate( 'Y-m-d' );
+            return array_map( fn( $j ) => [ $j, $plan ], $pending );
         }
 
         $audio_by_index  = [];
@@ -1030,10 +1166,10 @@ class PressHub_Social_TikTok_Shorts {
             PressHub_Social_Queue::update_job( $job_id, [
                 'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
             ] );
-            PressHub_Social_Logger::info( sprintf( '%s %d/%d prepared for job #%d (post #%d): "%s"', $slides_job ? 'TikTok photo slides' : 'TikTok short', $index + 1, count( $plan['shorts'] ), $job_id, $post_id, $short['hook'] ) );
+            PressHub_Social_Logger::info( sprintf( '%s %d/%d prepared for job #%d (post #%d): "%s"', ( $story_posts ? 'TikTok story post, ' : '' ) . ( $slides_job ? 'TikTok photo slides' : 'TikTok short' ), $index + 1, count( $plan['shorts'] ), $job_id, $post_id, $short['hook'] ) );
         }
 
-        self::handle_failures( $post_id, $failures );
+        return $failures;
     }
 
     /**
@@ -1192,13 +1328,15 @@ class PressHub_Social_TikTok_Shorts {
      * @return array{hash:string,shorts:array,skipped?:array}|WP_Error `skipped` lists the
      *         stories dropped as repeats (each with its reason).
      */
-    public static function get_plan( int $post_id, int $count, bool $brief = false, array $platforms = [] ) {
+    public static function get_plan( int $post_id, int $count, bool $brief = false, array $platforms = [], bool $story_posts = false ) {
         $source = self::source_type( $post_id );
         if ( '' === $source ) {
             return new WP_Error( 'tiktok_short_no_script', sprintf( 'post #%d is neither a podcast post with a script nor an article with text.', $post_id ) );
         }
-        $article = self::SOURCE_ARTICLE === $source;
-        $brief   = $brief && ! $article;
+        $article     = self::SOURCE_ARTICLE === $source;
+        $brief       = $brief && ! $article;
+        $story_posts = $story_posts && ! $article && ! $brief;
+        $plan_meta   = $story_posts ? self::STORY_POSTS_PLAN_META : self::PLAN_META;
 
         if ( $brief ) {
             $prompt = PressHub_Social_Settings_Storage::get_tiktok_brief_prompt();
@@ -1232,9 +1370,9 @@ class PressHub_Social_TikTok_Shorts {
                 . '|' . self::primary_category( $post_id )
                 . '|' . ( $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '' );
         }
-        $hash      = hash( 'sha256', $script . $article_key . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() . ( $brief ? '|brief' : '' ) );
+        $hash      = hash( 'sha256', $script . $article_key . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() . ( $brief ? '|brief' : '' ) . ( $story_posts ? '|story_posts' : '' ) );
 
-        $stored = get_post_meta( $post_id, self::PLAN_META, true );
+        $stored = get_post_meta( $post_id, $plan_meta, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
             // No AI call: nothing was sent, so nothing was cut.
             if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
@@ -1287,7 +1425,7 @@ class PressHub_Social_TikTok_Shorts {
         } else {
             PressHub_Social_Logger::info( $article
                 ? sprintf( 'Generating the short of article post #%d.', $post_id )
-                : sprintf( 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
+                : sprintf( $story_posts ? 'Generating %d TikTok story posts for podcast post #%d.' : 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
         }
 
         // A response the plan cannot use (broken JSON, a script over the cap, an empty
@@ -1371,7 +1509,7 @@ class PressHub_Social_TikTok_Shorts {
         if ( ! empty( $skipped ) ) {
             $plan['skipped'] = $skipped;
         }
-        update_post_meta( $post_id, self::PLAN_META, $plan );
+        update_post_meta( $post_id, $plan_meta, $plan );
         return $plan;
     }
 

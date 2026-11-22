@@ -2539,9 +2539,12 @@ assert_equals( 6, count( $seq ), 'The brief image list has one image per 4-secon
 assert_equals( [ 'https://img/1.png', 'https://img/1.png', 'https://img/1.png', 'https://img/3.png', 'https://img/3.png', 'https://img/3.png' ], $seq, 'Each slot shows the image of the story being read; a story without an image keeps the one before' );
 assert_equals( [], PressHub_Social_TikTok_Shorts::brief_image_sequence( array_merge( $seq_short, [ 'images' => [] ] ) ), 'A brief without images leaves the image order to the worker' );
 
-// Enqueue: one job per platform, no photo slides.
+// Enqueue: one job per platform, no photo slides. (TikTok's full podcast and story
+// posts are off here; they have their own block below.)
 update_option( 'presshub_social_tiktok_shorts_format', 'brief' );
 update_option( 'presshub_social_tiktok_slides_enabled', true );
+update_option( 'presshub_social_tiktok_full_podcast_enabled', false );
+update_option( 'presshub_social_tiktok_story_posts', 0 );
 update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
 delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
 PressHub_Social_Queue::reset_memory_store();
@@ -2588,6 +2591,91 @@ update_option( 'presshub_social_facebook_shorts_enabled', true );
 $fb_brief = PressHub_Social_Dispatcher::enqueue_facebook_shorts( 880, 'api', null, null, time() );
 assert_equals( [], $fb_brief, 'The daily brief is not queued as a Graph API Facebook Reel' );
 delete_option( 'presshub_social_facebook_shorts_enabled' );
+
+
+// TikTok story posts and full podcast (2.85.0): next to the daily brief, TikTok gets the
+// full podcast and three instant news posts, each a video short or photo slides.
+echo "\n--- TikTok story posts and full podcast ---\n";
+assert_true( PressHub_Social_Settings_Storage::sanitize_tiktok_full_podcast_enabled( '1' ), 'TikTok Full Podcast saves on' );
+assert_equals( 3, PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_STORY_POSTS, 'TikTok Story Posts defaults to 3' );
+assert_equals( 5, PressHub_Social_Settings_Storage::sanitize_tiktok_story_posts( 9 ), 'TikTok Story Posts clamps to 5' );
+assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_tiktok_story_posts( -2 ), 'TikTok Story Posts clamps to 0' );
+assert_equals( 'random', PressHub_Social_Settings_Storage::sanitize_tiktok_story_posts_format( 'other' ), 'An unknown TikTok Story Post Format becomes random' );
+assert_equals( 'slides', PressHub_Social_Settings_Storage::sanitize_tiktok_story_posts_format( 'slides' ), 'TikTok Story Post Format keeps slides' );
+delete_option( 'presshub_social_tiktok_full_podcast_enabled' );
+delete_option( 'presshub_social_tiktok_story_posts' );
+delete_option( 'presshub_social_tiktok_story_posts_format' );
+assert_true( PressHub_Social_Settings_Storage::get_tiktok_full_podcast_enabled(), 'TikTok Full Podcast is on by default' );
+assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_story_posts(), 'TikTok gets 3 story posts by default' );
+assert_equals( 'random', PressHub_Social_Settings_Storage::get_tiktok_story_posts_format(), 'TikTok Story Post Format defaults to random' );
+assert_true( PressHub_Social_TikTok_Shorts::full_podcast_wanted( 880 ), 'A podcast with the daily brief also gets its full podcast on TikTok' );
+assert_false( PressHub_Social_TikTok_Shorts::full_podcast_wanted( 890 ), 'An article gets no full podcast' );
+assert_false( PressHub_Social_TikTok_Shorts::story_posts_wanted( 890, 'automation' ), 'An article gets no story posts' );
+assert_false( PressHub_Social_TikTok_Shorts::story_posts_wanted( 880, 'api' ), 'Story posts need the automation engine' );
+
+$formats_seen = [];
+for ( $k = 0; $k < 40; $k++ ) {
+    $formats_seen[ PressHub_Social_TikTok_Shorts::story_post_format( 0 ) ] = true;
+}
+assert_equals( 2, count( $formats_seen ), 'Random story post format picks both video shorts and photo slides' );
+update_option( 'presshub_social_tiktok_story_posts_format', 'video' );
+
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Ολόκληρο το podcast της ημέρας #κύπρος' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::STORY_POSTS_PLAN_META, '' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+PressHub_Social_Queue::reset_memory_store();
+$sp_before = time();
+$sp_ids    = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+assert_equals( 5, count( $sp_ids ), 'TikTok gets the brief, the full podcast and 3 story posts' );
+$sp_jobs   = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), $sp_ids );
+$sp_brief  = array_values( array_filter( $sp_jobs, fn( $j ) => ! empty( json_decode( (string) ( $j['metadata'] ?? '' ), true )['tiktok_short']['brief'] ) ) );
+$sp_full   = array_values( array_filter( $sp_jobs, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_short_job( $j ) ) );
+$sp_story  = array_values( array_filter( $sp_jobs, [ 'PressHub_Social_TikTok_Shorts', 'is_story_post_job' ] ) );
+assert_equals( [ 1, 1, 3 ], [ count( $sp_brief ), count( $sp_full ), count( $sp_story ) ], 'One brief, one full podcast and three story posts' );
+assert_equals( 'Ολόκληρο το podcast της ημέρας #κύπρος', $sp_full[0]['post_copy'] ?? '', 'The full podcast is the classic TikTok post with its AI caption' );
+$sp_spacing = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+$sp_brief_t = strtotime( $sp_brief[0]['scheduled_at'] . ' UTC' );
+assert_true( abs( strtotime( $sp_full[0]['scheduled_at'] . ' UTC' ) - ( $sp_brief_t + (int) floor( $sp_spacing / 2 ) ) ) <= 2, 'The full podcast goes out half a spacing after the brief' );
+assert_true( abs( strtotime( $sp_story[0]['scheduled_at'] . ' UTC' ) - ( $sp_brief_t + $sp_spacing ) ) <= 2, 'The first story post goes out one spacing after the brief' );
+assert_true( abs( strtotime( $sp_story[2]['scheduled_at'] . ' UTC' ) - ( $sp_brief_t + 3 * $sp_spacing ) ) <= 2, 'The story posts are one spacing apart' );
+assert_false( PressHub_Social_TikTok_Shorts::is_slides_job( $sp_story[0] ), 'Story Post Format video makes video shorts' );
+
+// Two plans: the brief's prompt and the shorts prompt for the story posts.
+$sp_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$sp_calls, $brief_json, $short_json ) {
+    $sp_calls[] = $user;
+    return str_contains( $user, '"stories"' ) ? $brief_json( 6 ) : $short_json( 3 );
+} );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, count( $sp_calls ), 'The brief and the story posts are planned with one AI call each' );
+assert_true( is_array( get_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, true ) ) && is_array( get_post_meta( 880, PressHub_Social_TikTok_Shorts::STORY_POSTS_PLAN_META, true ) ), 'The brief and the story posts keep separate plans' );
+foreach ( $sp_story as $k => $j ) {
+    $prep = json_decode( (string) PressHub_Social_Queue::get_job( (int) $j['id'] )['metadata'], true )['tiktok_short'] ?? [];
+    assert_true( ! empty( $prep['audio']['audio_url'] ) && 'Hook ' . ( $k + 1 ) . ' σε λίγες λέξεις' === ( $prep['hook'] ?? '' ), 'Story post ' . ( $k + 1 ) . ' is prepared from its own story' );
+    assert_true( array_key_exists( 'story_key', $prep ) && empty( $prep['brief'] ), 'Story post ' . ( $k + 1 ) . ' records its story for the story ledger' );
+}
+$sp_brief_prep = json_decode( (string) PressHub_Social_Queue::get_job( (int) $sp_brief[0]['id'] )['metadata'], true )['tiktok_short'] ?? [];
+assert_equals( 6, count( $sp_brief_prep['stories'] ?? [] ), 'The brief is still prepared from its own plan' );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, count( $sp_calls ), 'Preparing again makes no AI call: both plans are kept' );
+
+// Photo slides format, and the switches off.
+update_option( 'presshub_social_tiktok_story_posts_format', 'slides' );
+$sp_slides = PressHub_Social_TikTok_Shorts::build_story_post_jobs( 880, time() );
+assert_true( PressHub_Social_TikTok_Shorts::is_slides_job( array_merge( $sp_slides[0], [ 'metadata' => wp_json_encode( $sp_slides[0]['metadata'] ) ] ) ), 'Story Post Format slides makes photo slide posts' );
+update_option( 'presshub_social_tiktok_story_posts', 0 );
+update_option( 'presshub_social_tiktok_full_podcast_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+assert_equals( 1, count( PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] ) ), 'With both off TikTok gets only the brief' );
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
+assert_false( PressHub_Social_TikTok_Shorts::full_podcast_wanted( 880 ), 'One short per story gets no extra full podcast' );
+update_option( 'presshub_social_tiktok_story_posts', 3 );
+assert_false( PressHub_Social_TikTok_Shorts::story_posts_wanted( 880, 'automation' ), 'One short per story gets no extra story posts' );
+update_option( 'presshub_social_tiktok_story_posts', 0 );
+delete_option( 'presshub_social_tiktok_story_posts_format' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::STORY_POSTS_PLAN_META, '' );
+PressHub_Social_Queue::reset_memory_store();
 
 update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
 update_option( 'presshub_social_tiktok_slides_enabled', false );
