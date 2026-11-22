@@ -763,6 +763,34 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_tiktok_full_podcast_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_tiktok_full_podcast_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_tiktok_full_podcast_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_tiktok_full_podcast_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'With Podcast Shorts Format on Daily brief and TikTok Shorts on, also post the whole podcast to TikTok as one video over the podcast\'s image, half the Time Between Shorts after the brief.', 'presshub-social-autopost' ); ?> <?php echo esc_html__( 'Default: on.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_tiktok_story_posts_format_field(): void {
+        $current = PressHub_Social_Settings_Storage::get_tiktok_story_posts_format();
+        $labels  = [
+            'random' => __( 'Random: each post is a video short or photo slides', 'presshub-social-autopost' ),
+            'video'  => __( 'Video shorts only', 'presshub-social-autopost' ),
+            'slides' => __( 'Photo slides only', 'presshub-social-autopost' ),
+        ];
+        ?>
+        <select id="presshub_social_tiktok_story_posts_format" name="presshub_social_tiktok_story_posts_format">
+            <?php foreach ( PressHub_Social_Settings_Storage::TIKTOK_STORY_POSTS_FORMATS as $value ) : ?>
+                <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current, $value ); ?>><?php echo esc_html( $labels[ $value ] ?? $value ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'What each TikTok Story Post is: a voiced video short with captions, or photo slides with the story as text and a TikTok sound. Photo slides need worker 1.10.0 or later.', 'presshub-social-autopost' ); ?> <?php echo esc_html__( 'Default: Random.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
     public function render_youtube_privacy_field(): void {
         $current = PressHub_Social_Settings_Storage::get_youtube_privacy_status();
         $labels  = [

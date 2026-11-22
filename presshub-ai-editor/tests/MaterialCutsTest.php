@@ -278,7 +278,7 @@ mc_check( 'source: image prompt notes for its own action', false !== strpos( (st
 mc_check( 'source: url_extract notes its HTML cut for itself', false !== strpos( (string) file_get_contents( $root . 'class-url-fetcher.php' ), "clip_material( 'url_extract', (string) \$stripped_html, 25000" ) );
 mc_check( 'source: the draft passes its action to the URL fetcher', false !== strpos( (string) file_get_contents( $root . 'class-api-client.php' ), 'process_sources( $sources, $this->get_action() )' ) );
 $shorts = (string) file_get_contents( $root . 'class-social-tiktok-shorts.php' );
-mc_check( 'source: a stored shorts plan drops the cut', 1 === preg_match( "/PLAN_META, true \);\s*if \( is_array\( \\\$stored \).*?forget_material\( 'social_tiktok_shorts' \);\s*}\s*return \\\$stored;/s", $shorts ) );
+mc_check( 'source: a stored shorts plan drops the cut', 1 === preg_match( "/(?:PLAN_META|\\\$plan_meta), true \);\s*if \( is_array\( \\\$stored \).*?forget_material\( 'social_tiktok_shorts' \);\s*}\s*return \\\$stored;/s", $shorts ) );
 mc_check( 'source: the shorts plan drops the cut once its attempts are over', 1 === preg_match( "/try \{\s*for \( \\\$attempt = 1;.*?\} finally \{\s*if \( class_exists\( 'PressHub_AI_Knowledge_Cuts' \) \) \{\s*PressHub_AI_Knowledge_Cuts::forget_material\( 'social_tiktok_shorts' \);/s", $shorts ) );
 $pimg = (string) file_get_contents( $root . 'class-social-post-images.php' );
 mc_check( 'post images keep their cut for every planning attempt (multi-call)', in_array( 'social_post_images', PressHub_AI_Knowledge_Cuts::MULTI_CALL, true ) );

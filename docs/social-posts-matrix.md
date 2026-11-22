@@ -20,11 +20,12 @@ Read a cell from left to right. The post gets the first option whose condition h
 | X | Post with link | Post with link | Post with link |
 | Facebook | Link post. Plus 1 Reel if Facebook Reels and Article Shorts are on | Link post only | Link post. Plus Reels if Facebook Reels are on: the daily brief video (browser engine only, because the Graph API takes Reels up to 90 s) or one Reel per story |
 | Instagram | 1 Reel if Instagram Reels and Article Shorts are on. Otherwise the classic image card | Nothing | Reels if Instagram Reels are on: the daily brief video or one per story. Otherwise the classic image card |
-| TikTok | 1 short if TikTok Shorts and Article Shorts are on. Otherwise photo slides if Photo Slides and Article Shorts are on. Otherwise the classic video card | Nothing | If TikTok Shorts are on: the daily brief video, or one short per story. Otherwise photo slides (only in the one-short-per-story format, with Photo Slides on). Otherwise the classic post with the full podcast |
+| TikTok | 1 short if TikTok Shorts and Article Shorts are on. Otherwise photo slides if Photo Slides and Article Shorts are on. Otherwise the classic video card | Nothing | If TikTok Shorts are on: the daily brief video, plus the full podcast (TikTok Full Podcast) and TikTok Story Posts (default 3, each a short or photo slides), or one short per story. Otherwise photo slides (only in the one-short-per-story format, with Photo Slides on). Otherwise the classic post with the full podcast |
 | YouTube | 1 YouTube Short if YouTube Shorts and Article Shorts are on. Otherwise nothing | Nothing | The full episode (plus the English and Turkish episodes) if Podcast Episodes are on. Plus the daily brief video, or one short per story, if YouTube Shorts are on |
 
 - **Podcast Shorts Format** decides how a podcast is turned into video. The options are one daily brief video of about 2 minutes (the default), or one short per story, with Shorts per Podcast setting how many (default 3).
-- **No story goes to TikTok as both a video and photo slides.** Slides only go out where TikTok gets no video of that post, and they replace its classic post.
+- **TikTok with the daily brief (2.85.0)** gets three kinds of post from one podcast: the full podcast (about 10 minutes, all the day's news), the daily brief video (about 2 minutes, the main stories) and TikTok Story Posts (instant news of 30 to 60 seconds, one story each, each a video short or photo slides as TikTok Story Post Format says). The story posts have their own plan and go through the story ledger, so a story told by another post is replaced or left out; the same podcast's brief and full podcast never block them.
+- **Photo Slides do not double the shorts.** Outside the story posts, slides only go out where TikTok gets no video of that post, and they replace its classic post.
 - **The written daily brief gets no video.** Its podcast, published after it, tells the same stories in video. The filter `presshub_social_briefing_text_video` turns this off (code only).
 
 ## Formats and their conditions
@@ -36,6 +37,7 @@ Read a cell from left to right. The post gets the first option whose condition h
 | Article short / Reel | Platform Shorts switch, Article Shorts, a non-empty Article Shorts prompt | Pull Mode and the automation engine. Facebook can also use the API engine with Meta Page ID and token | Classic post (WARNING in the log) |
 | Podcast short (one per story) | Platform Shorts switch, Podcast Shorts Format = one per story | As above | Full podcast as the classic post (WARNING) |
 | Daily brief video | Platform Shorts switch, Podcast Shorts Format = daily brief, Daily Brief Script Length (default 300 words, about 2 min) | As above. Facebook needs the browser engine | Facebook: no Reel (WARNING). Others: as above |
+| TikTok story posts | TikTok Shorts, Podcast Shorts Format = daily brief, TikTok Story Posts above 0 | Pull Mode, TikTok automation engine | None posted (WARNING) |
 | TikTok photo slides | TikTok Photo Slides, and TikTok gets no video of the post. For articles, also Article Shorts. For podcasts, only in the one-per-story format | Pull Mode, TikTok automation engine, worker 1.10.0 or later | Classic post. The job waits for a capable worker |
 | YouTube podcast episode | YouTube Podcast Episodes. English and Turkish Playlists for the translations | Pull Mode, a connected channel, a worker that can upload | Not posted to YouTube |
 
@@ -67,6 +69,9 @@ Read a cell from left to right. The post gets the first option whose condition h
 | TikTok Shorts, Instagram Reels, Facebook Reels, YouTube Shorts | Social publishing → Shorts & Reels | Off |
 | Article Shorts | Social publishing → Shorts & Reels | On |
 | TikTok Photo Slides | Social publishing → Shorts & Reels | On |
+| TikTok Full Podcast | Social publishing → Shorts & Reels | On |
+| TikTok Story Posts | Social publishing → Shorts & Reels | 3 |
+| TikTok Story Post Format | Social publishing → Shorts & Reels | Random (video or slides) |
 | Podcast Shorts Format | Social publishing → Shorts & Reels | Daily brief video |
 | Shorts per Podcast | Social publishing → Shorts & Reels | 3 |
 | Daily Brief Script Length | Social publishing → Shorts & Reels | 300 words |

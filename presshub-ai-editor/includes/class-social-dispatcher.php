@@ -239,11 +239,18 @@ class PressHub_Social_Dispatcher {
                     continue;
                 }
                 $short_targets[ $platform ] = $engine;
-                continue;
+                // With the daily brief, TikTok also gets the full podcast (2.85.0): the classic
+                // TikTok post below, half a spacing after the brief.
+                if ( 'tiktok' !== $platform || ! PressHub_Social_TikTok_Shorts::full_podcast_wanted( $post_id ) ) {
+                    continue;
+                }
+                $full_podcast = true;
+            } else {
+                $full_podcast = false;
             }
 
             // Social post gate, before any AI copy or images are made for the post.
-            $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+            $gate_reason = $full_podcast ? '' : PressHub_Social_Post_Gate::check_post( $post_id, $platform );
             if ( '' !== $gate_reason ) {
                 PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
                 // The post's Reels are stopped with its link post: an article's Reel tells the
@@ -256,6 +263,9 @@ class PressHub_Social_Dispatcher {
             $copy      = is_string( $copy_meta ) ? trim( $copy_meta ) : '';
 
             $scheduled_at = gmdate( 'Y-m-d H:i:s', $base_time + ( $index * $interval ) );
+            if ( $full_podcast ) {
+                $scheduled_at = gmdate( 'Y-m-d H:i:s', $base_time + (int) floor( PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60 / 2 ) );
+            }
             $failed_error = null;
 
             if ( '' === $copy ) {
@@ -317,7 +327,7 @@ class PressHub_Social_Dispatcher {
                 }
                 if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'info' ) ) {
                     PressHub_Social_Logger::info(
-                        sprintf( 'Enqueued social job #%d for post #%d on %s (engine: %s, scheduled: %s%s)', $job_id, $post_id, $platform, $engine, $scheduled_at, $with_images ? ', with AI images' : '' )
+                        sprintf( 'Enqueued social job #%d for post #%d on %s (engine: %s, scheduled: %s%s%s)', $job_id, $post_id, $platform, $engine, $scheduled_at, $with_images ? ', with AI images' : '', $full_podcast ? ', the full podcast next to the daily brief' : '' )
                     );
                 }
             }
@@ -333,6 +343,10 @@ class PressHub_Social_Dispatcher {
         // The shorts of every platform, from one story schedule.
         if ( ! empty( $short_targets ) ) {
             $job_ids = array_merge( $job_ids, self::enqueue_shorts( $post_id, $short_targets, $media_url, $media_type, $base_time, $short_copies, $facebook_link_time ) );
+        }
+        // TikTok story posts (2.85.0): instant news of one story each, after the daily brief.
+        if ( isset( $short_targets['tiktok'] ) ) {
+            $job_ids = array_merge( $job_ids, self::enqueue_tiktok_story_posts( $post_id, (string) $short_targets['tiktok'], $base_time ) );
         }
 
         if ( ! empty( $needs_images ) ) {
@@ -394,6 +408,35 @@ class PressHub_Social_Dispatcher {
             } elseif ( $job_id > 0 ) {
                 $ids[] = (int) $job_id;
                 PressHub_Social_Logger::info( sprintf( 'Enqueued TikTok photo slides job #%d for post #%d (scheduled: %s)', $job_id, $post_id, $slides_job['scheduled_at'] ) );
+            }
+        }
+        if ( $ids ) {
+            PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );
+        }
+        return $ids;
+    }
+
+    /**
+     * Queue a podcast's TikTok story posts (2.85.0) when the daily brief is on and TikTok
+     * Story Posts is above 0: one video short or photo slides post per story, the first one
+     * Time Between Shorts after the brief ($start_time). Their stories are planned and
+     * checked against the story ledger when prepared.
+     *
+     * @return int[] IDs of the queued story post jobs.
+     */
+    public static function enqueue_tiktok_story_posts( int $post_id, string $engine, int $start_time ): array {
+        if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::story_posts_wanted( $post_id, $engine ) ) {
+            return [];
+        }
+        $ids = [];
+        foreach ( PressHub_Social_TikTok_Shorts::build_story_post_jobs( $post_id, $start_time ) as $story_job ) {
+            $job_id = PressHub_Social_Queue::enqueue( $story_job );
+            if ( is_wp_error( $job_id ) ) {
+                PressHub_Social_Logger::error( sprintf( 'Failed to enqueue a TikTok story post for post #%d: %s', $post_id, $job_id->get_error_message() ) );
+            } elseif ( $job_id > 0 ) {
+                $ids[] = (int) $job_id;
+                $format = PressHub_Social_TikTok_Shorts::FORMAT_SLIDES === ( $story_job['metadata'][ PressHub_Social_TikTok_Shorts::JOB_META_KEY ]['format'] ?? '' ) ? 'photo slides' : 'video short';
+                PressHub_Social_Logger::info( sprintf( 'Enqueued TikTok story post job #%d for post #%d (%s, scheduled: %s)', $job_id, $post_id, $format, $story_job['scheduled_at'] ) );
             }
         }
         if ( $ids ) {
