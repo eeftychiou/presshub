@@ -215,8 +215,8 @@ class PressHub_Social_Post_Gate {
     }
 
     /**
-     * An article plan with the article's kept story tag as each short's story_key and
-     * whats_new, so all of the article's posts carry one key. Unchanged when the post has
+     * An article plan with the article's kept story tag as each short's story_key (and
+     * its whats_new when the plan names none), so all of the article's posts carry one key. Unchanged when the post has
      * no kept tag.
      */
     public static function apply_post_tag( int $post_id, array $shorts ): array {
@@ -227,7 +227,10 @@ class PressHub_Social_Post_Gate {
         foreach ( $shorts as $i => $short ) {
             if ( is_array( $short ) && empty( $short['brief'] ) ) {
                 $shorts[ $i ]['story_key'] = (string) $kept['story_key'];
-                $shorts[ $i ]['whats_new'] = (string) ( $kept['whats_new'] ?? '' );
+                // A new fact the plan names (e.g. after a retry) wins over the kept one.
+                if ( '' === trim( (string) ( $short['whats_new'] ?? '' ) ) ) {
+                    $shorts[ $i ]['whats_new'] = (string) ( $kept['whats_new'] ?? '' );
+                }
             }
         }
         return $shorts;

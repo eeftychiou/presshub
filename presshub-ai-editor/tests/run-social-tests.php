@@ -4503,6 +4503,7 @@ update_post_meta( 978, PressHub_Social_Post_Gate::POST_META, [ 'story_key' => 'f
 $pg_applied = PressHub_Social_Post_Gate::apply_post_tag( 978, [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-cost-rise', 'whats_new' => '' ] ] );
 assert_true( 'fuel-prices' === $pg_applied[0]['story_key'] && 'New figures' === $pg_applied[0]['whats_new'], 'An article short carries the article\'s kept story tag' );
 assert_equals( 'other', PressHub_Social_Post_Gate::apply_post_tag( 979, [ [ 'story_key' => 'other' ] ] )[0]['story_key'], 'Without a kept tag the plan keeps its own key' );
+assert_equals( 'Plan fact', PressHub_Social_Post_Gate::apply_post_tag( 978, [ [ 'story_key' => 'x', 'whats_new' => 'Plan fact' ] ] )[0]['whats_new'], 'A new fact the plan names is kept' );
 $pg_fb_id = PressHub_Social_Queue::enqueue( [ 'post_id' => 978, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Caption ready', 'status' => 'pending',
     'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 1 ] ] ] );
 PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Λεζάντα #news' );
