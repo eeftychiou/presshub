@@ -16,6 +16,9 @@ import { findUpload, recordUpload } from './youtube/upload-log';
 import { ShortRenderCache, shortRenderKey, SHORT_CACHE_DIRNAME, DEFAULT_SHORT_CACHE_TTL_MS } from './media/short-cache';
 import { uploadFacebookReel, FacebookReelOptions, FacebookReelResult } from './facebook/reels-uploader';
 
+/** Longest video X takes from a standard (non-Premium) account: 2 minutes 20 seconds. */
+export const TWITTER_VIDEO_MAX_SECONDS = 140;
+
 export interface ClaimedJob {
   id: number | string;
   platform: string;
@@ -47,6 +50,8 @@ export interface ClaimedJob {
     source?: string;
     /** On-screen badge set by the site (e.g. the article's category); replaces ΕΙΔΗΣΗ n/N. */
     badge?: string;
+    /** X: longest video the account may post, in seconds (default TWITTER_VIDEO_MAX_SECONDS). */
+    max_seconds?: number;
   };
   /**
    * Set on TikTok photo slide jobs (#333): a short's hook and script as text on photo
@@ -432,8 +437,8 @@ export class PressHubPoller {
         body: JSON.stringify({
           sessions,
           // This worker can post Facebook Reels through the Graph API, without a browser session.
-          // ...and TikTok photo slide posts (#333).
-          capabilities: ['facebook_reels_api', 'tiktok_photo_slides'],
+          // ...and TikTok photo slide posts (#333), and shorts as X videos (1.12.0).
+          capabilities: ['facebook_reels_api', 'tiktok_photo_slides', 'twitter_video'],
           limit: 5
         })
       });
@@ -630,7 +635,7 @@ export class PressHubPoller {
             copy.toLowerCase().includes('podcast')
           );
 
-          if ((platform === 'tiktok' || platform === 'instagram' || platform === 'youtube' || platform === 'facebook') && job.tiktok_short) {
+          if ((platform === 'tiktok' || platform === 'instagram' || platform === 'youtube' || platform === 'facebook' || platform === 'twitter') && job.tiktok_short) {
             // A short is rendered with synced captions over its own story images. It
             // never falls back to the podcast's featured image.
             const short = job.tiktok_short;
@@ -687,6 +692,12 @@ export class PressHubPoller {
               // Longer than 3 minutes, YouTube files it as a normal video, not a Short.
               dropMedia();
               throw new Error(`The short is ${Math.round(Number(video.duration))}s long, over YouTube's ${YOUTUBE_SHORT_MAX_SECONDS}s limit for Shorts. Lower the words per short or raise the voice speed.`);
+            }
+            const xMax = Number(short.max_seconds) > 0 ? Number(short.max_seconds) : TWITTER_VIDEO_MAX_SECONDS;
+            if (platform === 'twitter' && !job.test_render && Number(video?.duration) > xMax) {
+              // WordPress checks the voice's length first; this catches what it could not know.
+              dropMedia();
+              throw new Error(`The video is ${Math.round(Number(video?.duration))}s long, over X's ${xMax}s limit. Shorten the Daily Brief Script Length or raise the short voice speed.`);
             }
 
             if (job.test_render) {
@@ -1079,6 +1090,7 @@ export function platformLabel(platform: string): string {
   if (platform === 'instagram') return 'Instagram Reel';
   if (platform === 'youtube') return 'YouTube';
   if (platform === 'facebook') return 'Facebook Reel';
+  if (platform === 'twitter') return 'X';
   return 'TikTok';
 }
 

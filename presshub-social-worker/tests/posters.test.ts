@@ -28,7 +28,8 @@ import {
   splitTikTokCaption,
   typeTikTokCaption,
   fitInstagramCaption,
-  INSTAGRAM_REEL_CAPTION_MAX_BYTES
+  INSTAGRAM_REEL_CAPTION_MAX_BYTES,
+  waitForTwitterVideo
 } from '../src/automation/posters';
 import { ChromeConnection } from '../src/automation/browser-helper';
 import { markSessionInvalid, clearSessionInvalid, verifySession } from '../src/automation/session-manager';
@@ -1967,5 +1968,36 @@ describe('fitInstagramCaption', () => {
     const fitted = fitInstagramCaption('Λέξη '.repeat(800), 500);
     expect(bytes(fitted)).toBeLessThanOrEqual(500);
     expect(fitted.endsWith('…')).toBe(true);
+  });
+});
+
+describe('waitForTwitterVideo', () => {
+  const fakeScope = (states: Array<{ ariaDisabled: string | null; progress: number }>) => {
+    let i = 0;
+    const current = () => states[Math.min(i, states.length - 1)];
+    const button = {
+      getAttribute: async (name: string) => (name === 'aria-disabled' ? current().ariaDisabled : null),
+      count: async () => 1
+    };
+    return {
+      locator: (sel: string) => (sel.includes('progressbar')
+        ? { count: async () => current().progress }
+        : { first: () => button }),
+      page: { waitForTimeout: async () => { i++; } }
+    };
+  };
+
+  test('waits until Post is enabled and the upload bar is gone', async () => {
+    const scope = fakeScope([
+      { ariaDisabled: 'true', progress: 1 },
+      { ariaDisabled: null, progress: 1 },
+      { ariaDisabled: null, progress: 0 }
+    ]);
+    await expect(waitForTwitterVideo(scope.page, scope, 5000, 1)).resolves.toBeGreaterThanOrEqual(0);
+  });
+
+  test('fails when X never finishes the upload', async () => {
+    const scope = fakeScope([{ ariaDisabled: 'true', progress: 1 }]);
+    await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).rejects.toThrow('X did not finish uploading the video');
   });
 });

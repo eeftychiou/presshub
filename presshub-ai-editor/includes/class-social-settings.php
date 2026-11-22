@@ -772,6 +772,14 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_twitter_shorts_enabled',
+            __( 'X Video Posts', 'presshub-social-autopost' ),
+            [ $render, 'render_twitter_shorts_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
+        );
+
+        add_settings_field(
             'presshub_social_tiktok_slides_enabled',
             __( 'TikTok Photo Slides', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_slides_enabled_field' ],
