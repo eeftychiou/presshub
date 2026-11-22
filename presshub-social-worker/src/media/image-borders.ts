@@ -4,9 +4,10 @@
  * it. A cover crop keeps those strips, so the short shows a grey band. trimFlatBorders()
  * cuts them off first, so the crop fills the frame with the picture itself.
  *
- * A border row (or column) is one whose pixels are all nearly the same shade. Only a run
- * of such rows that touches the edge counts, and the picture left over must keep at least
- * MIN_KEEP of the side, so a photo with a plain sky or wall is left as it is.
+ * A border row (or column) is one whose pixels are all nearly the same shade. Only runs
+ * of such rows that touch BOTH opposite edges count (a letterbox has a band on each side;
+ * a photo with a plain sky at the top, or a white backdrop on one side, does not), and the
+ * picture left over must keep at least MIN_KEEP of the side.
  */
 import sharp from 'sharp';
 
@@ -71,9 +72,8 @@ export function contentBox(grey: Uint8Array | Buffer, width: number, height: num
     return out;
   };
   let [top, bottom] = flatRun(height, row);
-  if (top < height * MIN_BAND) top = 0;
-  if (bottom < height * MIN_BAND) bottom = 0;
-  if (height - top - bottom < height * MIN_KEEP) {
+  // Both sides must have a band: one plain edge alone is picture (sky, backdrop).
+  if (top < height * MIN_BAND || bottom < height * MIN_BAND || height - top - bottom < height * MIN_KEEP) {
     top = 0;
     bottom = 0;
   }
@@ -81,9 +81,7 @@ export function contentBox(grey: Uint8Array | Buffer, width: number, height: num
   const keptRows = height - top - bottom;
   const colInside = (x: number) => col(x).slice(top, top + keptRows);
   let [left, right] = flatRun(width, colInside);
-  if (left < width * MIN_BAND) left = 0;
-  if (right < width * MIN_BAND) right = 0;
-  if (width - left - right < width * MIN_KEEP) {
+  if (left < width * MIN_BAND || right < width * MIN_BAND || width - left - right < width * MIN_KEEP) {
     left = 0;
     right = 0;
   }

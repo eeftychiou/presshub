@@ -232,6 +232,16 @@ class PressHub_Social_Trending_Short {
             }
         }
 
+        // Cards of references dropped above (same word as another) are not sent; renumber.
+        $used  = array_values( array_unique( array_map( static fn( $p ) => $p['card'], $unique ) ) );
+        sort( $used );
+        $remap = array_flip( $used );
+        $cards = array_map( static fn( $i ) => $cards[ $i ], $used );
+        foreach ( $unique as &$p ) {
+            $p['card'] = $remap[ $p['card'] ];
+        }
+        unset( $p );
+
         if ( ! empty( $missed ) ) {
             PressHub_Social_Logger::warning( sprintf( 'Trending short of post #%d: %d post reference(s) left out: %s.', $post_id, count( $missed ), implode( '; ', $missed ) ) );
         }

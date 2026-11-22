@@ -1100,7 +1100,6 @@ export function platformLabel(platform: string): string {
   return 'TikTok';
 }
 
-/** Badge of a short: the site's own badge (an article's category), else ΕΙΔΗΣΗ n/N. */
 /**
  * The post cards of a trending roundup short, checked: cards with a platform, and spans
  * with a card that exists and an end after the start. Empty for any other short.
@@ -1117,6 +1116,7 @@ export function postCardOptions(short: { cards?: unknown; card_spans?: unknown }
   return cards.length && spans.length ? { postCards: cards, cardSpans: spans } : {};
 }
 
+/** Badge of a short: the site's own badge (an article's category), else ΕΙΔΗΣΗ n/N. */
 export function shortBadge(short: { index: number; count: number; badge?: string }): string {
   if (typeof short.badge === 'string' && short.badge.trim() !== '') {
     return short.badge.trim();

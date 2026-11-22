@@ -64,8 +64,16 @@ describe('flat borders', () => {
     const h = 20;
     const grey = new Uint8Array(w * h).fill(100);
     for (let y = 3; y < 8; y++) grey.fill(200, y * w, (y + 1) * w);
-    for (let y = 8; y < 20; y++) for (let x = 0; x < w; x++) grey[y * w + x] = (x * 25 + y * 7) % 255;
-    expect(contentBox(grey, w, h).top).toBe(3);
+    for (let y = 8; y < 17; y++) for (let x = 0; x < w; x++) grey[y * w + x] = (x * 25 + y * 7) % 255;
+    expect(contentBox(grey, w, h)).toEqual({ left: 0, top: 3, width: 10, height: 14 });
+  });
+
+  test('a plain edge on one side only (a clear sky) is not cut', () => {
+    const w = 10;
+    const h = 20;
+    const grey = new Uint8Array(w * h).fill(180);
+    for (let y = 6; y < 20; y++) for (let x = 0; x < w; x++) grey[y * w + x] = (x * 25 + y * 7) % 255;
+    expect(contentBox(grey, w, h)).toEqual({ left: 0, top: 0, width: 10, height: 20 });
   });
 });
 

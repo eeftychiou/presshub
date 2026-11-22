@@ -102,6 +102,9 @@ ts_check( 'The card carries the post photo', 'https://pbs.twimg.com/media/a.jpg'
 ts_check( 'A post without a photo has none on its card', ! isset( $with[0]['post_cards'][1]['photo'] ) );
 ts_check( 'An http photo is not sent', ! isset( PressHub_Social_Trending_Short::card( $items[2] )['photo'] ) );
 ts_check( 'A card without a name uses the handle', '@maria.cy' === PressHub_Social_Trending_Short::card( $items[2] )['author'] );
+$same_raw = $plan_json( [ [ 'post' => 1, 'words' => 'Στο X, ο Νίκος' ], [ 'post' => 2, 'words' => 'Στο X, ο Νίκος' ], [ 'post' => 3, 'words' => 'Και στο TikTok' ] ] );
+$same     = PressHub_Social_Trending_Short::attach_plan( PressHub_Social_TikTok_Shorts::parse_plan( $same_raw, 1, 0, 1 ), $same_raw, $items, 700 );
+ts_check( 'Two posts on the same words: the second is dropped with its card', 2 === count( $same[0]['post_cards'] ?? [] ) && 'tiktok' === ( $same[0]['post_cards'][1]['platform'] ?? '' ) && 1 === ( $same[0]['post_refs'][1]['card'] ?? -1 ) );
 $none_raw = $plan_json( [] );
 $none     = PressHub_Social_Trending_Short::attach_plan( PressHub_Social_TikTok_Shorts::parse_plan( $none_raw, 1, 0, 1 ), $none_raw, $items, 700 );
 ts_check( 'A plan without references has no cards', ! isset( $none[0]['post_refs'] ) && ! isset( $none[0]['post_cards'] ) );
