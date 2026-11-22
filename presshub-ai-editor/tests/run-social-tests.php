@@ -2019,6 +2019,15 @@ assert_equals( 60, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_max_
 assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_shorts_images(), 'Story images per short default to 3' );
 assert_equals( 4, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( 9 ), 'Story images per short clamp to 4' );
 assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( -1 ), 'Story images per short clamp to 0' );
+assert_equals( 'brief', PressHub_Social_Settings_Storage::get_tiktok_shorts_format(), 'Podcast Shorts Format defaults to the daily brief' );
+assert_equals( 'brief', PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_format( 'other' ), 'An unknown Podcast Shorts Format becomes the daily brief' );
+assert_equals( 'stories', PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_format( ' Stories ' ), 'Podcast Shorts Format keeps one short per story' );
+assert_equals( 300, PressHub_Social_Settings_Storage::get_tiktok_brief_max_words(), 'Daily brief script length defaults to 300 words' );
+assert_equals( 380, PressHub_Social_Settings_Storage::sanitize_tiktok_brief_max_words( 900 ), 'Daily brief script length clamps to 380 words' );
+assert_equals( 150, PressHub_Social_Settings_Storage::sanitize_tiktok_brief_max_words( 5 ), 'Daily brief script length clamps to 150 words' );
+assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), '"stories"' ), 'The daily brief prompt seeds from its asset file' );
+// The shorts tests below cover one short per story; the daily brief has its own block.
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
 
 // #189: a new podcast cancels the earlier edition's unposted shorts.
 PressHub_Social_Queue::reset_memory_store();
@@ -2468,6 +2477,139 @@ for ( $run = 2; $run <= PressHub_Social_Settings_Storage::get_max_attempts(); $r
     PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 }
 assert_equals( 'failed', PressHub_Social_Queue::get_job( $fail_ids[0] )['status'], 'After the max attempts the unprepared shorts fail permanently' );
+
+// Daily brief: one ~2 minute video per podcast, one image per story in the order they are read.
+echo "\n--- Daily brief ---\n";
+$brief_story = fn( int $i, int $words ) => [
+    'topic'  => "Θέμα {$i}",
+    'script' => '[SPEAKER_1]: ' . trim( str_repeat( "λέξη{$i} ", $words ) ),
+    'visual' => "Nicosia street scene {$i}",
+];
+$brief_json = function ( int $stories, int $words = 30, array $extra = [] ) use ( $brief_story ): string {
+    $list = [];
+    for ( $i = 1; $i <= $stories; $i++ ) {
+        $list[] = $brief_story( $i, $words );
+    }
+    return wp_json_encode( [ 'shorts' => [ array_merge( [
+        'topic'   => 'Οι ειδήσεις της ημέρας',
+        'hook'    => 'Οι ειδήσεις της Κυριακής',
+        'intro'   => '[SPEAKER_1]: Αυτές είναι οι ειδήσεις της ημέρας.',
+        'stories' => $list,
+        'outro'   => '[SPEAKER_1]: Ακολούθησε το PressHub.',
+        'mood'    => 'neutral',
+        'caption' => 'Οι ειδήσεις της ημέρας #κύπρος',
+    ], $extra ) ] ] );
+};
+
+$bp = PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 7 ), 300, 10 );
+assert_true( is_array( $bp ) && 1 === count( $bp ) && ! empty( $bp[0]['brief'] ), 'parse_brief returns one brief short' );
+assert_equals( 7, count( $bp[0]['stories'] ?? [] ), 'parse_brief keeps every story' );
+assert_equals( 7, count( $bp[0]['visuals'] ?? [] ), 'parse_brief keeps one image description per story' );
+assert_equals( 6, $bp[0]['stories'][0]['from'] ?? null, 'The first story starts after the intro words' );
+assert_equals( 6 + 30, $bp[0]['stories'][1]['from'] ?? null, 'Each story starts where the one before ends' );
+assert_equals( 6 + 7 * 30 + 3, $bp[0]['words'] ?? null, 'parse_brief counts the spoken words of intro, stories and outro' );
+assert_true( str_starts_with( $bp[0]['script'], '[SPEAKER_1]: Αυτές είναι' ) && str_contains( $bp[0]['script'], "λέξη7\n[SPEAKER_1]: Ακολούθησε" ), 'The brief script is the intro, the stories and the outro in order' );
+assert_equals( 3, count( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 7 ), 300, 3 )[0]['visuals'] ), 'parse_brief keeps at most the allowed image descriptions' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 7, 60 ), 300, 10 ) ), 'A brief far over its word cap is rejected (YouTube three-minute limit)' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 1 ), 300, 10 ) ), 'A brief with a single story is rejected' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 3, 30, [ 'hook' => '' ] ), 300, 10 ) ), 'A brief without its hook is rejected' );
+assert_equals( 10, count( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 12, 10 ), 300, 20 )[0]['stories'] ), 'A brief keeps at most BRIEF_MAX_STORIES stories' );
+
+// Image order: each worker slot shows the story being read.
+$seq_short = [
+    'images'   => [
+        [ 'url' => 'https://img/1.png', 'prompt' => 'v1' ],
+        [ 'url' => 'https://img/3.png', 'prompt' => 'v3' ],
+    ],
+    'stories'  => [
+        [ 'topic' => 'a', 'visual' => 'v1', 'from' => 2, 'to' => 12 ],
+        [ 'topic' => 'b', 'visual' => 'v2', 'from' => 12, 'to' => 22 ],
+        [ 'topic' => 'c', 'visual' => 'v3', 'from' => 22, 'to' => 32 ],
+    ],
+    'words'    => 32,
+    'audio'    => [ 'segments' => [
+        [ 'speaker' => 1, 'text' => trim( str_repeat( 'α ', 22 ) ), 'start' => 0.0, 'end' => 11.0 ],
+        [ 'speaker' => 2, 'text' => trim( str_repeat( 'β ', 10 ) ), 'start' => 11.0, 'end' => 23.0 ],
+    ] ],
+];
+$seq = PressHub_Social_TikTok_Shorts::brief_image_sequence( $seq_short );
+assert_equals( 6, count( $seq ), 'The brief image list has one image per 4-second worker slot (23 s voice + 1 s tail)' );
+assert_equals( [ 'https://img/1.png', 'https://img/1.png', 'https://img/1.png', 'https://img/3.png', 'https://img/3.png', 'https://img/3.png' ], $seq, 'Each slot shows the image of the story being read; a story without an image keeps the one before' );
+assert_equals( [], PressHub_Social_TikTok_Shorts::brief_image_sequence( array_merge( $seq_short, [ 'images' => [] ] ) ), 'A brief without images leaves the image order to the worker' );
+
+// Enqueue: one job per platform, no photo slides.
+update_option( 'presshub_social_tiktok_shorts_format', 'brief' );
+update_option( 'presshub_social_tiktok_slides_enabled', true );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+PressHub_Social_Queue::reset_memory_store();
+$brief_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+assert_equals( 1, count( $brief_ids ), 'A podcast gets one daily brief job on TikTok and no photo slides' );
+$brief_meta = json_decode( (string) PressHub_Social_Queue::get_job( $brief_ids[0] )['metadata'], true )['tiktok_short'] ?? [];
+assert_true( ! empty( $brief_meta['brief'] ) && 1 === ( $brief_meta['count'] ?? 0 ), 'The daily brief job is marked as a brief' );
+assert_false( PressHub_Social_TikTok_Shorts::slides_wanted( 880, 'automation', false ), 'A podcast daily brief gets no photo slides' );
+assert_equals( [], PressHub_Social_TikTok_Shorts::build_slides_jobs( 880, time() ), 'No photo slide jobs are built for a podcast daily brief' );
+
+// Prepare with the brief prompt and claim with the images in reading order.
+$brief_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$brief_calls, $brief_json ) {
+    $brief_calls[] = $user;
+    return $brief_json( 6 );
+} );
+PressHub_Social_TikTok_Shorts::set_synthesizer( fn( array $short, array $job ) => [
+    'url'      => 'https://example.com/uploads/brief.wav',
+    'id'       => 990,
+    'segments' => [ [ 'speaker' => 1, 'text' => trim( (string) preg_replace( '/\[SPEAKER_1\]:/', ' ', $short['script'] ) ), 'start' => 0.0, 'end' => 119.0 ] ],
+] );
+PressHub_Social_TikTok_Shorts::set_image_generator( fn( string $prompt ) => [ 'url' => 'https://example.com/uploads/' . md5( $prompt ) . '.png', 'id' => 7 ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 1, count( $brief_calls ), 'The daily brief is written with one AI call' );
+assert_true( str_contains( $brief_calls[0] ?? '', '"stories"' ) && str_contains( $brief_calls[0] ?? '', 'το πολύ 300 λέξεις' ), 'The daily brief uses its own prompt and word cap' );
+$brief_job = PressHub_Social_Queue::get_job( $brief_ids[0] );
+$brief_prep = json_decode( (string) $brief_job['metadata'], true )['tiktok_short'] ?? [];
+assert_equals( 6, count( $brief_prep['images'] ?? [] ), 'The daily brief gets one story image per story' );
+assert_equals( 6, count( $brief_prep['stories'] ?? [] ), 'The prepared brief keeps where each story starts' );
+PressHub_Social_Queue::update_job( $brief_ids[0], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+$brief_claimed = PressHub_Social_TikTok_Shorts::attach_short( PressHub_Social_Queue::get_job( $brief_ids[0] ) );
+assert_equals( PressHub_Social_TikTok_Shorts::BRIEF_BADGE, $brief_claimed['tiktok_short']['badge'] ?? '', 'The daily brief shows the ΕΝΗΜΕΡΩΣΗ badge' );
+assert_equals( 30, count( $brief_claimed['tiktok_short']['images'] ?? [] ), 'The claimed brief has one image per worker slot (119 s voice + 1 s tail)' );
+assert_equals( 6, count( array_unique( $brief_claimed['tiktok_short']['images'] ?? [] ) ), 'Every story image is shown' );
+assert_equals( $brief_prep['images'][5]['url'] ?? 'x', end( $brief_claimed['tiktok_short']['images'] ), 'The last slots show the last story' );
+
+// YouTube episode scenes take one image group per story of the brief.
+$groups = PressHub_Social_YouTube::short_image_groups( 880 );
+assert_equals( 6, count( $groups ), 'A brief gives the YouTube episode one image group per story' );
+assert_equals( 'Θέμα 2', $groups[1]['topic'] ?? '', 'Each brief image group carries its story topic' );
+
+// Facebook Reels through the Graph API take up to 90 seconds: no brief Reel there.
+update_option( 'presshub_social_facebook_shorts_enabled', true );
+$fb_brief = PressHub_Social_Dispatcher::enqueue_facebook_shorts( 880, 'api', null, null, time() );
+assert_equals( [], $fb_brief, 'The daily brief is not queued as a Graph API Facebook Reel' );
+delete_option( 'presshub_social_facebook_shorts_enabled' );
+
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
+update_option( 'presshub_social_tiktok_slides_enabled', false );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$shorts_ai_calls, $short_json ) {
+    $shorts_ai_calls[] = $user;
+    return $short_json( 3 );
+} );
+PressHub_Social_TikTok_Shorts::set_synthesizer( function ( array $short, array $job ) use ( &$shorts_tts ) {
+    $shorts_tts[] = $short['script'];
+    return [
+        'url'      => 'https://example.com/uploads/short-' . count( $shorts_tts ) . '.wav',
+        'id'       => 950 + count( $shorts_tts ),
+        'segments' => [ [ 'speaker' => 1, 'text' => 'Γεγονός.', 'start' => 0.0, 'end' => 1.2 ], [ 'speaker' => 2, 'text' => 'Γιατί.', 'start' => 1.6, 'end' => 2.4 ] ],
+    ];
+} );
+PressHub_Social_TikTok_Shorts::set_image_generator( function ( string $prompt, int $post_id, array $short ) use ( &$shorts_images ) {
+    $shorts_images[] = $prompt;
+    if ( str_contains( $prompt, 'payslip 3' ) ) {
+        return new WP_Error( 'image_http_429', 'Image API rate limit' );
+    }
+    return [ 'url' => 'https://example.com/uploads/short-img-' . count( $shorts_images ) . '.png', 'id' => 1200 + count( $shorts_images ) ];
+} );
 
 // Article shorts: every other post goes to TikTok (and Instagram Reels) as one short.
 echo "\n--- Article Shorts ---\n";

@@ -654,7 +654,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_tiktok_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_tiktok_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post one 30-60 second video per top story: a hook-first script read by the briefing presenters, with the hook on screen, captions that follow the voice, AI story images and its own caption. With Article Shorts on, each article also becomes one such video. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post short vertical videos made from it (a two-minute daily brief, or one 30-60 second video per top story, see Podcast Shorts Format): a hook-first script read by the briefing presenters, with the hook on screen, captions that follow the voice, AI story images and its own caption. With Article Shorts on, each article also becomes one such video. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }
@@ -744,6 +744,22 @@ class PressHub_Social_Settings_Render {
             <input type="checkbox" name="presshub_social_youtube_episode_enhanced" value="1" <?php checked( $enabled, true ); ?> />
             <?php echo esc_html__( 'Show the story images of the podcast\'s shorts, one topic at a time, with captions like the shorts, a title card per topic and a chapter list in the description. Off: the whole audio over the podcast\'s image.', 'presshub-social-autopost' ); ?>
         </label>
+        <?php
+    }
+
+    public function render_tiktok_shorts_format_field(): void {
+        $current = PressHub_Social_Settings_Storage::get_tiktok_shorts_format();
+        $labels  = [
+            'brief'   => __( 'Daily brief: one video of about two minutes with the top stories', 'presshub-social-autopost' ),
+            'stories' => __( 'One short per story (Shorts per Podcast)', 'presshub-social-autopost' ),
+        ];
+        ?>
+        <select id="presshub_social_tiktok_shorts_format" name="presshub_social_tiktok_shorts_format">
+            <?php foreach ( PressHub_Social_Settings_Storage::TIKTOK_SHORTS_FORMATS as $value ) : ?>
+                <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current, $value ); ?>><?php echo esc_html( $labels[ $value ] ?? $value ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'What each podcast becomes on the shorts platforms. Daily brief: one video of about two minutes with the day\'s top stories, each with its own image, and no photo slides. One short per story: Shorts per Podcast videos of 30-60 seconds, one story each, each with photo slides when they are on. Articles are not affected.', 'presshub-social-autopost' ); ?> <?php echo esc_html__( 'Default: Daily brief.', 'presshub-social-autopost' ); ?></p>
         <?php
     }
 

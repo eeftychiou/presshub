@@ -767,7 +767,31 @@ class PressHub_Social_Settings {
                 'default' => 3,
                 'min'     => 1,
                 'max'     => 5,
-                'desc'    => __( 'How many top stories of each podcast become their own TikTok video.', 'presshub-social-autopost' ),
+                'desc'    => __( 'How many top stories of each podcast become their own TikTok video, when Podcast Shorts Format is one short per story.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_format',
+            __( 'Podcast Shorts Format', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_shorts_format_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_brief_max_words',
+            __( 'Daily Brief Script Length', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_tiktok_brief_max_words',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_BRIEF_MAX_WORDS,
+                'min'     => 150,
+                'max'     => 380,
+                'unit'    => __( 'words', 'presshub-social-autopost' ),
+                'desc'    => __( 'Most words in the daily brief script, about 150 words a minute. 300 is about two minutes; the top stays under YouTube\'s three-minute limit for Shorts.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -1142,6 +1166,19 @@ class PressHub_Social_Settings {
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
                 'desc'   => __( 'Used for podcast posts when TikTok Shorts, TikTok Photo Slides, Instagram Reels or YouTube Shorts are on. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from the Shorts tab: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_tiktok_brief',
+            __( 'Daily Brief: Script Prompt', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_brief',
+                'rows'   => 10,
+                'desc'   => __( 'Used for podcast posts when Podcast Shorts Format is Daily brief. One call writes the brief as JSON {"shorts":[{"topic","hook","intro","stories":[{"topic","script","visual"}],"outro","mood","caption"}]}: the intro, one spoken part and one image description per story, and the outro are read in that order, and each story\'s image is shown while it is read. Placeholders: {max_words} (Daily Brief Script Length), {caption_words}, {moods} and {speakers} as in the Script Prompt above. From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title. Emptied, the brief fails instead of being posted.', 'presshub-social-autopost' ),
             ]
         );
 

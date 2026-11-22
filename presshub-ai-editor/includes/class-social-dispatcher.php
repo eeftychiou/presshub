@@ -373,6 +373,12 @@ class PressHub_Social_Dispatcher {
         }
         if ( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE !== PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
             PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, 'facebook' );
+            // The Graph API takes Reels of 3 to 90 seconds, so the two-minute daily brief
+            // cannot go there; the browser session posts it as a video.
+            if ( 'api' === $engine && PressHub_Social_Settings_Storage::get_tiktok_brief_enabled() ) {
+                PressHub_Social_Logger::warning( sprintf( 'Facebook Reels are on but podcast post #%d gets no Reel: the daily brief is about two minutes and the Graph API takes Reels of up to 90 seconds. Use the Facebook automation engine, or set Podcast Shorts Format to one short per story.', $post_id ) );
+                return [];
+            }
         }
         $start = $link_time + PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
         $ids   = [];

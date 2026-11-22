@@ -288,6 +288,19 @@ class PressHub_Social_Settings_Storage {
             'default'           => true,
         ] );
 
+        // Daily brief: one ~2 minute multi-story video per podcast instead of one short per story.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_format', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_format' ],
+            'default'           => self::DEFAULT_TIKTOK_SHORTS_FORMAT,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_brief_max_words', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_brief_max_words' ],
+            'default'           => self::DEFAULT_TIKTOK_BRIEF_MAX_WORDS,
+        ] );
+
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_slides_words', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_slides_words' ],
@@ -567,6 +580,13 @@ class PressHub_Social_Settings_Storage {
             },
         ] );
 
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_brief', [
+            'type'              => 'string',
+            'sanitize_callback' => function( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_brief' );
+            },
+        ] );
+
         foreach ( self::PLATFORMS as $platform ) {
             PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_' . $platform, [
                 'type'              => 'string',
@@ -643,6 +663,15 @@ class PressHub_Social_Settings_Storage {
                 update_option( 'presshub_social_prompt_tiktok_article_short', PressHub_Social_Prompt_Loader::load( 'social_tiktok_article_short.txt' ) );
             } catch ( Exception $e ) {
                 PressHub_Social_Logger::error( 'Failed to seed TikTok article short prompt: ' . $e->getMessage() );
+            }
+        }
+
+        $brief_prompt = get_option( 'presshub_social_prompt_tiktok_brief', false );
+        if ( false === $brief_prompt || '' === trim( (string) $brief_prompt ) ) {
+            try {
+                update_option( 'presshub_social_prompt_tiktok_brief', PressHub_Social_Prompt_Loader::load( 'social_tiktok_brief.txt' ) );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to seed TikTok daily brief prompt: ' . $e->getMessage() );
             }
         }
 
@@ -827,6 +856,7 @@ class PressHub_Social_Settings_Storage {
         }
         update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_article_short', PressHub_Social_Prompt_Loader::load( 'social_tiktok_article_short.txt' ) );
+        update_option( 'presshub_social_prompt_tiktok_brief', PressHub_Social_Prompt_Loader::load( 'social_tiktok_brief.txt' ) );
         update_option( 'presshub_social_prompt_post_images', PressHub_Social_Prompt_Loader::load( 'social_post_images.txt' ) );
         update_option( 'presshub_social_prompt_post_image_style', PressHub_Social_Prompt_Loader::load( 'social_post_image_style.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
@@ -1530,6 +1560,38 @@ class PressHub_Social_Settings_Storage {
         return max( 1, min( 5, (int) $value ) );
     }
 
+    /** Podcast Shorts Format: one daily brief video per podcast, or one short per story. */
+    public const TIKTOK_SHORTS_FORMATS = [ 'brief', 'stories' ];
+    public const DEFAULT_TIKTOK_SHORTS_FORMAT = 'brief';
+
+    public static function get_tiktok_shorts_format(): string {
+        return self::sanitize_tiktok_shorts_format( get_option( 'presshub_social_tiktok_shorts_format', self::DEFAULT_TIKTOK_SHORTS_FORMAT ) );
+    }
+
+    public static function sanitize_tiktok_shorts_format( $value ): string {
+        $value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+        return in_array( $value, self::TIKTOK_SHORTS_FORMATS, true ) ? $value : self::DEFAULT_TIKTOK_SHORTS_FORMAT;
+    }
+
+    /** Whether podcast posts get one daily brief video instead of one short per story. */
+    public static function get_tiktok_brief_enabled(): bool {
+        return 'brief' === self::get_tiktok_shorts_format();
+    }
+
+    /**
+     * Word cap of the daily brief script (150-380, default 300, about two minutes of
+     * speech). The top stays under YouTube's three-minute limit for Shorts.
+     */
+    public const DEFAULT_TIKTOK_BRIEF_MAX_WORDS = 300;
+
+    public static function get_tiktok_brief_max_words(): int {
+        return self::sanitize_tiktok_brief_max_words( get_option( 'presshub_social_tiktok_brief_max_words', self::DEFAULT_TIKTOK_BRIEF_MAX_WORDS ) );
+    }
+
+    public static function sanitize_tiktok_brief_max_words( $value ): int {
+        return max( 150, min( 380, (int) $value ) );
+    }
+
     /** Minutes between consecutive shorts of the same podcast (0-720, default 180). */
     public static function get_tiktok_shorts_spacing_minutes(): int {
         return self::sanitize_tiktok_shorts_spacing_minutes( get_option( 'presshub_social_tiktok_shorts_spacing_minutes', 90 ) );
@@ -1826,6 +1888,24 @@ class PressHub_Social_Settings_Storage {
         return is_string( $val ) ? trim( $val ) : '';
     }
 
+    /**
+     * Prompt that writes a podcast's daily brief video (Podcast Shorts Format "brief").
+     * Seeds from social_tiktok_brief.txt if the option does not exist yet; an emptied
+     * prompt fails the brief (Zero-Silent-Fallback), it never falls back to another prompt.
+     */
+    public static function get_tiktok_brief_prompt(): string {
+        $val = get_option( 'presshub_social_prompt_tiktok_brief', false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_brief.txt' );
+                update_option( 'presshub_social_prompt_tiktok_brief', $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
+        return is_string( $val ) ? trim( $val ) : '';
+    }
+
     public static function get_tiktok_shorts_prompt(): string {
         $val = get_option( 'presshub_social_prompt_tiktok_shorts', false );
         if ( false === $val || ( is_string( $val ) && self::is_legacy_tiktok_shorts_prompt( $val ) ) ) {
@@ -2066,6 +2146,7 @@ class PressHub_Social_Settings_Storage {
             'presshub_social_prompt_tiktok_slides_sounds',
             'presshub_social_prompt_tiktok_article_short',
             'presshub_social_prompt_tiktok_shorts',
+            'presshub_social_prompt_tiktok_brief',
         ];
         foreach ( self::PLATFORMS as $platform ) {
             $keys[] = 'presshub_social_prompt_' . $platform;
