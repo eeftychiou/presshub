@@ -13,11 +13,11 @@ Plugin 2.84.0. This file describes what each kind of post becomes on each social
 
 ## Master matrix
 
-Read a cell from left to right. The post gets the first option whose condition holds. "Plus" means both go out. A video or slides never replace the post on X or the Facebook link post.
+Read a cell from left to right. The post gets the first option whose condition holds. "Plus" means both go out. A video or slides never replace the Facebook link post, or a podcast's post on X. Only an article's X post can carry its short instead of its image (X Video Posts, 2.86.0).
 
 | Platform | Article (also trending roundups) | Written daily brief | Podcast |
 |---|---|---|---|
-| X | Post with link | Post with link | Post with link |
+| X | Post with link. With X Video Posts and Article Shorts on, it carries the article short instead of its image (the image post if the short cannot be made) | Post with link | Post with link. Plus the daily brief video if X Video Posts are on and Podcast Shorts Format is daily brief (not posted when longer than 2 min 20 s; no per-story shorts on X) |
 | Facebook | Link post. Plus 1 Reel if Facebook Reels and Article Shorts are on | Link post only | Link post. Plus Reels if Facebook Reels are on: the daily brief video (browser engine only, because the Graph API takes Reels up to 90 s) or one Reel per story |
 | Instagram | 1 Reel if Instagram Reels and Article Shorts are on. Otherwise the classic image card | Nothing | Reels if Instagram Reels are on: the daily brief video or one per story. Otherwise the classic image card |
 | TikTok | 1 short if TikTok Shorts and Article Shorts are on. Otherwise photo slides if Photo Slides and Article Shorts are on. Otherwise the classic video card | Nothing | If TikTok Shorts are on: the daily brief video, plus the full podcast (TikTok Full Podcast) and TikTok Story Posts (default 3, each a short or photo slides), or one short per story. Otherwise photo slides (only in the one-short-per-story format, with Photo Slides on). Otherwise the classic post with the full podcast |

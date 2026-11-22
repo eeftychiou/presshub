@@ -36,7 +36,7 @@ export interface PostOptions {
   stateDir?: string;
   /** TikTok photo post: words to search in the sound picker; empty keeps TikTok's own sound. */
   soundQuery?: string;
-  /** Facebook: most milliseconds to wait for a video upload (default FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS). */
+  /** Facebook and X: most milliseconds to wait for a video upload (default FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS / TWITTER_VIDEO_UPLOAD_TIMEOUT_MS). */
   videoUploadTimeoutMs?: number;
 }
 
@@ -297,6 +297,40 @@ export function sanitizeTwitterCopy(copy: string, maxWeightedChars: number = TWI
 /**
  * Twitter / X automation poster using saved browser session or running Chrome.
  */
+/** Most milliseconds X gets to upload and process an attached video before the post fails. */
+export const TWITTER_VIDEO_UPLOAD_TIMEOUT_MS = 300_000;
+
+/**
+ * Waits until X has uploaded and processed an attached video: the composer's Post button
+ * is enabled and no upload progress bar is left. X keeps Post disabled while it uploads, so
+ * posting earlier would do nothing (or, worse, post the text alone through a fallback).
+ * Returns the milliseconds waited; throws when the video is not ready in time.
+ */
+export async function waitForTwitterVideo(page: any, scope: any, timeoutMs: number = TWITTER_VIDEO_UPLOAD_TIMEOUT_MS, pollMs: number = 1000): Promise<number> {
+  const started = Date.now();
+  // The composer's own Post button, never the sidebar's "Post" / "New Post" (as in Tier 2).
+  const button = scope.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"], button[data-slot="xds-button"]:has-text("Post")')
+    .filter({ hasNotText: 'New Post' })
+    .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"], [data-testid="SideNav_NewTweet_Button"]') })
+    .first();
+  const progress = scope.locator('[role="progressbar"], [data-testid="attachments"] [aria-valuenow]');
+  let lastLog = 0;
+  while (Date.now() - started < timeoutMs) {
+    const ariaDisabled = await button.getAttribute('aria-disabled').catch(() => null);
+    const disabled = await button.getAttribute('disabled').catch(() => null);
+    const uploading = await progress.count().then((c: number) => c > 0).catch(() => false);
+    if (ariaDisabled !== 'true' && disabled === null && !uploading && (await button.count().catch(() => 0)) > 0) {
+      return Date.now() - started;
+    }
+    if (Date.now() - lastLog >= 15_000) {
+      lastLog = Date.now();
+      WorkerLogger.info('Twitter Automation', `Waiting for X to process the video (${Math.round((Date.now() - started) / 1000)}s)...`);
+    }
+    await page.waitForTimeout(pollMs);
+  }
+  throw new Error(`X did not finish uploading the video within ${Math.round(timeoutMs / 1000)}s.`);
+}
+
 export async function postTwitter(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('twitter', options.sessionsDir);
   const timeout = options.timeoutMs || 30000;
@@ -484,6 +518,14 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
         await fileInput.setInputFiles(twitterMedia.length === 1 ? twitterMedia[0] : twitterMedia);
         // Wait for the attachment previews to appear
         await page.waitForTimeout(3000 + (twitterMedia.length - 1) * 1500);
+        if (twitterMedia.some(isFacebookVideoFile)) {
+          // A video takes a while to upload and process; Post stays disabled until then.
+          const waited = await waitForTwitterVideo(page, isModal ? modalSurface : page, options.videoUploadTimeoutMs || TWITTER_VIDEO_UPLOAD_TIMEOUT_MS);
+          WorkerLogger.info('Twitter Automation', `X processed the video in ${Math.round(waited / 1000)}s.`);
+        }
+      } else if (twitterMedia.some(isFacebookVideoFile)) {
+        // Never post a video tweet without its video.
+        throw new Error('X composer has no file input for the video.');
       }
     }
 
@@ -2033,7 +2075,7 @@ export async function resolveFacebookPermalink(
 /** Most time a Facebook video upload may take before the post fails (5 minutes). */
 export const FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
-/** Whether a file is a video Facebook takes (a rendered short is an .mp4). */
+/** Whether a file is a video Facebook (and X) takes (a rendered short is an .mp4). */
 export function isFacebookVideoFile(file: string): boolean {
   return /\.(mp4|mov|m4v|webm)$/i.test(file || '');
 }

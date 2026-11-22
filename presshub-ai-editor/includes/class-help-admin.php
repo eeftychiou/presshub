@@ -572,14 +572,14 @@ class PressHub_AI_Help_Admin {
 
     private static function section_social(): string {
         $e    = 'esc_html';
-        $html = self::p( __( 'Every published post goes to each active platform as one format. The format depends on the kind of post and on the settings below. Every post then passes the social post gate before anything is made for it. A video or slides never replace the post on X or the Facebook link post; they come on top of it.', 'presshub-ai-editor' ) );
+        $html = self::p( __( 'Every published post goes to each active platform as one format. The format depends on the kind of post and on the settings below. Every post then passes the social post gate before anything is made for it. A video or slides never replace the Facebook link post, or a podcast\'s post on X; they come on top of it. Only an article\'s X post can carry its short instead of its image (X Video Posts).', 'presshub-ai-editor' ) );
 
         $html .= self::h3( __( 'What each kind of post becomes', 'presshub-ai-editor' ) );
         $html .= self::p( __( 'Read a cell left to right: the first part whose condition holds is what the post gets. "Shorts on" means that platform\'s Shorts switch is on and its engine can post video.', 'presshub-ai-editor' ), 'description' );
         $html .= self::table(
             [ __( 'Platform', 'presshub-ai-editor' ), __( 'Article (also trending roundups)', 'presshub-ai-editor' ), __( 'Written daily brief', 'presshub-ai-editor' ), __( 'Podcast', 'presshub-ai-editor' ) ],
             [
-                [ $e( 'X' ), $e( __( 'Post with link', 'presshub-ai-editor' ) ), $e( __( 'Post with link', 'presshub-ai-editor' ) ), $e( __( 'Post with link', 'presshub-ai-editor' ) ) ],
+                [ $e( 'X' ), $e( __( 'Post with link. With X Video Posts and Article Shorts on, it carries the article short instead of its image (the image post if the short cannot be made).', 'presshub-ai-editor' ) ), $e( __( 'Post with link', 'presshub-ai-editor' ) ), $e( __( 'Post with link. Plus the daily brief video if X Video Posts are on and the format is daily brief (not posted when longer than 2 minutes 20 seconds).', 'presshub-ai-editor' ) ) ],
                 [ $e( 'Facebook' ), $e( __( 'Link post. Plus 1 Reel if Facebook Reels and Article Shorts are on.', 'presshub-ai-editor' ) ), $e( __( 'Link post only.', 'presshub-ai-editor' ) ), $e( __( 'Link post. Plus Reels if Facebook Reels are on: the daily brief video (browser engine only; the API takes Reels up to 90 seconds) or one Reel per story.', 'presshub-ai-editor' ) ) ],
                 [ $e( 'Instagram' ), $e( __( '1 Reel if Instagram Reels and Article Shorts are on; otherwise the classic image card.', 'presshub-ai-editor' ) ), $e( __( 'Nothing.', 'presshub-ai-editor' ) ), $e( __( 'Reels if Instagram Reels are on: the daily brief video or one per story; otherwise the classic image card.', 'presshub-ai-editor' ) ) ],
                 [ $e( 'TikTok' ), $e( __( '1 short if TikTok Shorts and Article Shorts are on; otherwise photo slides if Photo Slides and Article Shorts are on; otherwise the classic video card.', 'presshub-ai-editor' ) ), $e( __( 'Nothing.', 'presshub-ai-editor' ) ), $e( __( 'If TikTok Shorts are on: the daily brief video, plus the full podcast (TikTok Full Podcast) and TikTok Story Posts (each a short or photo slides), or one short per story. Otherwise photo slides (one-short-per-story format only, Photo Slides on). Otherwise the classic post with the full podcast.', 'presshub-ai-editor' ) ) ],
@@ -607,6 +607,7 @@ class PressHub_AI_Help_Admin {
                 [ $e( __( 'TikTok Shorts', 'presshub-ai-editor' ) ), $on( $s::get_tiktok_shorts_enabled() ) ],
                 [ $e( __( 'Instagram Reels (Shorts)', 'presshub-ai-editor' ) ), $on( $s::get_instagram_shorts_enabled() ) ],
                 [ $e( __( 'Facebook Reels (Shorts)', 'presshub-ai-editor' ) ), $on( $s::get_facebook_shorts_enabled() ) ],
+                [ $e( __( 'X Video Posts', 'presshub-ai-editor' ) ), $on( $s::get_twitter_shorts_enabled() ) ],
                 [ $e( __( 'YouTube Shorts', 'presshub-ai-editor' ) ), $on( $s::get_youtube_shorts_enabled() ) ],
                 [ $e( __( 'YouTube Podcast Episodes', 'presshub-ai-editor' ) ), $on( $s::get_youtube_podcast_enabled() ) ],
                 [ $e( __( 'Article Shorts', 'presshub-ai-editor' ) ), $on( $s::get_tiktok_article_shorts_enabled() ) ],

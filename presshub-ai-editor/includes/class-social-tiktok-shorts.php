@@ -55,6 +55,14 @@
  * posted by the worker's browser session as a video, which Facebook makes a Reel. Facebook
  * and YouTube shorts are extra posts (`EXTRA_PLATFORMS`): Facebook keeps its usual link
  * post, so a failed short there fails instead of falling back to a normal post.
+ * X video posts (2.86.0, `presshub_social_twitter_shorts_enabled`): `twitter` is a shorts
+ * platform too. An article's X post carries the article short instead of its image (same
+ * text and link, falls back to the image post like TikTok and Instagram). A podcast gets
+ * only its daily brief on X, as an extra post after the usual link tweet (no per-story
+ * shorts, so X does not get several tweets per podcast); its caption gets the post's link.
+ * X plays videos of up to TWITTER_MAX_VIDEO_SECONDS on a standard account: a longer brief
+ * is cancelled at claim time (too_long_for_twitter()). Only a worker that announces
+ * TWITTER_VIDEO_CAPABILITY (1.12.0+) gets X short jobs.
  * Every platform's jobs are queued by PressHub_Social_Dispatcher::enqueue_shorts() from one
  * story schedule (the platforms a few minutes apart), and the music is picked per story
  * (story_seed()), so the worker renders each story once and posts that file everywhere.
@@ -134,6 +142,12 @@ class PressHub_Social_TikTok_Shorts {
      * and story images, with its hook and script as text on the slides and no voice.
      */
     public const FORMAT_SLIDES = 'slides';
+
+    /** Capability a worker announces at claim time when it can post a short to X as a video. */
+    public const TWITTER_VIDEO_CAPABILITY = 'twitter_video';
+
+    /** Longest video X takes from a standard (non-Premium) account: 2 minutes 20 seconds. */
+    public const TWITTER_MAX_VIDEO_SECONDS = 140;
 
     /** Capability a worker announces at claim time when it can post photo slides. */
     public const SLIDES_CAPABILITY = 'tiktok_photo_slides';
@@ -329,6 +343,8 @@ class PressHub_Social_TikTok_Shorts {
             $enabled = PressHub_Social_Settings_Storage::get_facebook_shorts_enabled();
         } elseif ( 'youtube' === $platform ) {
             $enabled = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+        } elseif ( 'twitter' === $platform ) {
+            $enabled = PressHub_Social_Settings_Storage::get_twitter_shorts_enabled();
         } else {
             $enabled = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
         }
@@ -519,7 +535,7 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /** Platforms that get the shorts. */
-    public const PLATFORMS = [ 'tiktok', 'instagram', 'facebook', 'youtube' ];
+    public const PLATFORMS = [ 'tiktok', 'instagram', 'facebook', 'youtube', 'twitter' ];
 
     /**
      * Platforms whose short is posted in addition to the usual post instead of replacing
@@ -530,7 +546,7 @@ class PressHub_Social_TikTok_Shorts {
 
     /** Name of a shorts platform for log lines. */
     public static function platform_label( string $platform ): string {
-        $labels = [ 'tiktok' => 'TikTok', 'instagram' => 'Instagram', 'facebook' => 'Facebook', 'youtube' => 'YouTube' ];
+        $labels = [ 'tiktok' => 'TikTok', 'instagram' => 'Instagram', 'facebook' => 'Facebook', 'youtube' => 'YouTube', 'twitter' => 'X' ];
         return $labels[ $platform ] ?? ucfirst( $platform );
     }
 
@@ -807,6 +823,44 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
+     * Seconds the worker's video of a prepared short lasts: the end of its last spoken
+     * turn plus the worker's tail. 0.0 when unknown.
+     */
+    public static function video_seconds( array $job ): float {
+        $short    = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? null;
+        $segments = is_array( $short ) ? (array) ( $short['audio']['segments'] ?? [] ) : [];
+        $end      = 0.0;
+        foreach ( $segments as $segment ) {
+            if ( is_array( $segment ) ) {
+                $end = max( $end, (float) ( $segment['end'] ?? 0 ) );
+            }
+        }
+        return $end > 0 ? $end + self::WORKER_TAIL_SECONDS : 0.0;
+    }
+
+    /**
+     * Why a prepared X short cannot go to X, or '': X takes videos of up to
+     * TWITTER_MAX_VIDEO_SECONDS from a standard account (filter
+     * `presshub_social_twitter_max_video_seconds`, e.g. 600 for Premium).
+     */
+    public static function twitter_max_seconds(): int {
+        $max = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_social_twitter_max_video_seconds', self::TWITTER_MAX_VIDEO_SECONDS ) : self::TWITTER_MAX_VIDEO_SECONDS;
+        return max( 0, $max );
+    }
+
+    public static function too_long_for_twitter( array $job ): string {
+        if ( 'twitter' !== ( $job['platform'] ?? '' ) || ! self::is_short_job( $job ) ) {
+            return '';
+        }
+        $max     = self::twitter_max_seconds();
+        $seconds = self::video_seconds( $job );
+        if ( $max <= 0 || $seconds <= $max ) {
+            return '';
+        }
+        return sprintf( 'the video is %d seconds long and X takes videos of up to %d seconds.', (int) ceil( $seconds ), $max );
+    }
+
+    /**
      * The generated caption of a prepared short job, or '' before preparation.
      */
     public static function generated_caption( array $job ): string {
@@ -844,6 +898,19 @@ class PressHub_Social_TikTok_Shorts {
             return self::attach_slides( $job, $short, $copy );
         }
 
+        // An X post fits X's length and links the post (a brief's caption has no link).
+        if ( 'twitter' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+            $post_id = (int) ( $job['post_id'] ?? 0 );
+            $url     = $post_id > 0 && function_exists( 'get_permalink' ) ? (string) get_permalink( $post_id ) : '';
+            $fitted  = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $copy, $url, '' !== $url );
+            if ( '' !== $fitted && $fitted !== $copy ) {
+                $copy = $fitted;
+                if ( $job_id > 0 ) {
+                    PressHub_Social_Queue::update_job_copy( $job_id, $copy );
+                }
+            }
+        }
+
         $job['post_copy']    = $copy;
         $job['test_render']  = ! empty( $short['test'] );
         $job['audio_url']    = (string) $short['audio']['audio_url'];
@@ -866,6 +933,9 @@ class PressHub_Social_TikTok_Shorts {
             if ( ! empty( $sequence ) ) {
                 $job['tiktok_short']['images'] = $sequence;
             }
+        }
+        if ( 'twitter' === ( $job['platform'] ?? '' ) ) {
+            $job['tiktok_short']['max_seconds'] = self::twitter_max_seconds();
         }
         // One track per story, not per job: every platform's copy of the story then has the
         // same music, so the worker renders the video once and reuses it.
@@ -1228,7 +1298,7 @@ class PressHub_Social_TikTok_Shorts {
      * short's metadata is removed (the failure is kept under `tiktok_short_fallback`), the
      * placeholder copy becomes the platform's usual AI caption, and the job stays pending,
      * so the next claim posts it with the narrated slideshow (TikTok) or the image post
-     * (Instagram), with AI post images when those are on.
+     * (Instagram, X), with AI post images when those are on.
      */
     public static function fallback_to_classic( array $job, WP_Error $error, int $attempts = 0 ): bool {
         $job_id  = (int) ( $job['id'] ?? 0 );
@@ -1258,6 +1328,9 @@ class PressHub_Social_TikTok_Shorts {
             $generated = class_exists( 'PressHub_Social_AI_Copywriter' ) ? PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform ) : new WP_Error( 'missing_copywriter', 'PressHub_Social_AI_Copywriter is not loaded.' );
             // A failed caption gets the usual placeholder, which the claim regenerates.
             $copy = is_wp_error( $generated ) ? sprintf( '[AI Copy Generation Failed: %s]', $generated->get_error_message() ) : (string) $generated;
+            if ( 'twitter' === $platform && ! is_wp_error( $generated ) && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
+                $copy = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $copy, function_exists( 'get_permalink' ) ? (string) ( get_permalink( $post_id ) ?: '' ) : '' );
+            }
         }
 
         $fields = [

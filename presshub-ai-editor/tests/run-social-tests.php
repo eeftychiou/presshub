@@ -4098,6 +4098,123 @@ null === $us_saved_platforms ? delete_option( 'presshub_social_enabled_platforms
 null === $us_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $us_saved_sessions );
 
 // ----------------------------------------------------------------------
+// Suite: X video posts (2.86.0)
+// ----------------------------------------------------------------------
+echo "\n--- Suite: X video posts ---\n";
+
+delete_option( 'presshub_social_twitter_shorts_enabled' );
+assert_false( PressHub_Social_Settings_Storage::get_twitter_shorts_enabled(), 'X video posts are off by default' );
+update_option( 'presshub_social_twitter_shorts_enabled', true );
+$_POST = [ 'unrelated_tab' => '1' ];
+assert_true( PressHub_Social_Settings_Storage::sanitize_twitter_shorts_enabled( null ), 'sanitize_twitter_shorts_enabled keeps the stored value when the box is on another tab' );
+$_POST = [];
+assert_true( in_array( 'twitter', PressHub_Social_TikTok_Shorts::PLATFORMS, true ), 'X is a shorts platform' );
+assert_equals( 'X', PressHub_Social_TikTok_Shorts::platform_label( 'twitter' ), 'X is called X in log lines' );
+assert_true( PressHub_Social_TikTok_Shorts::has_classic_fallback( [ 'platform' => 'twitter' ] ), 'An X article short falls back to the image post' );
+assert_equals( 'twitter', array_slice( PressHub_Social_Dispatcher::SHORTS_PLATFORM_ORDER, -1 )[0], 'X comes last in a story slot (its link post goes first)' );
+
+$x_saved_platforms = get_option( 'presshub_social_enabled_platforms', null );
+$x_saved_format    = get_option( 'presshub_social_tiktok_shorts_format', null );
+$x_saved_article   = get_option( 'presshub_social_tiktok_article_shorts_enabled', null );
+$x_saved_sessions  = get_option( 'presshub_social_worker_sessions', null );
+update_option( 'presshub_social_enabled_platforms', [ 'twitter' ] );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true ] );
+update_option( 'presshub_social_engine_twitter', 'automation' );
+
+// Podcast: the daily brief only, as an extra post after the link tweet.
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
+assert_false( PressHub_Social_Dispatcher::shorts_wanted( $fb_short_post_id, 'twitter', 'automation' ), 'A podcast in one-short-per-story format gets no X video (X gets only the daily brief)' );
+update_option( 'presshub_social_tiktok_shorts_format', 'brief' );
+assert_true( PressHub_Social_Dispatcher::shorts_wanted( $fb_short_post_id, 'twitter', 'automation' ), 'A podcast in daily brief format gets its brief on X' );
+assert_false( PressHub_Social_Dispatcher::shorts_wanted( $fb_short_post_id, 'twitter', 'api' ), 'X videos need the automation engine' );
+PressHub_Social_Queue::reset_memory_store();
+$x_pod  = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $fb_short_post_id, [ 'twitter' ] ) );
+$x_link = array_values( array_filter( $x_pod, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_short_job( $j ) ) );
+$x_vid  = array_values( array_filter( $x_pod, [ 'PressHub_Social_TikTok_Shorts', 'is_short_job' ] ) );
+assert_equals( 1, count( $x_link ), 'A podcast keeps its X link post' );
+assert_equals( 1, count( $x_vid ), 'A podcast gets one X video: its daily brief' );
+$x_vid_meta = is_array( $x_vid[0]['metadata'] ) ? $x_vid[0]['metadata'] : (array) json_decode( (string) $x_vid[0]['metadata'], true );
+assert_true( ! empty( $x_vid_meta['tiktok_short']['brief'] ), 'The X video is the daily brief' );
+assert_true( strtotime( $x_vid[0]['scheduled_at'] . ' UTC' ) > strtotime( $x_link[0]['scheduled_at'] . ' UTC' ), 'The X brief video goes out after the link tweet' );
+
+// The written daily brief gets no X video (its podcast tells the same stories).
+update_post_meta( $fb_short_post_id, '_presshub_briefing_type', 'text' );
+assert_false( PressHub_Social_Dispatcher::shorts_wanted( $fb_short_post_id, 'twitter', 'automation' ), 'The written daily brief gets no X video' );
+update_post_meta( $fb_short_post_id, '_presshub_briefing_type', 'podcast' );
+
+// Article: the X post is its short, with the usual X text and link.
+$x_article_id = 913;
+$GLOBALS['POSTS_STORE'][ $x_article_id ] = [
+    'ID'           => $x_article_id,
+    'post_title'   => 'X Video Article Test',
+    'post_content' => 'The council approved the new coastal road after a long debate on costs and safety.',
+    'post_status'  => 'publish',
+    'post_type'    => 'post',
+];
+$x_article_url = (string) get_permalink( $x_article_id );
+update_post_meta( $x_article_id, '_presshub_social_copy_twitter', 'The council approved the coastal road. ' . $x_article_url );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+assert_equals( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE, PressHub_Social_TikTok_Shorts::source_type( $x_article_id ), 'The test post is an article' );
+PressHub_Social_Queue::reset_memory_store();
+$x_art = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $x_article_id, [ 'twitter' ] ) );
+assert_equals( 1, count( $x_art ), 'An article gets one X post' );
+assert_true( PressHub_Social_TikTok_Shorts::is_short_job( $x_art[0] ), 'The article\'s X post is its short (the video replaces the image)' );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( $x_art[0] ), 'The X short is an article short, so it can fall back to the image post' );
+assert_false( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) $x_art[0]['post_copy'] ), 'The X short carries the usual X text, not a placeholder' );
+assert_true( '' !== $x_article_url && str_contains( (string) $x_art[0]['post_copy'], $x_article_url ), 'The X short keeps the article link' );
+update_option( 'presshub_social_twitter_shorts_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+$x_off = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $x_article_id, [ 'twitter' ] ) );
+assert_true( 1 === count( $x_off ) && ! PressHub_Social_TikTok_Shorts::is_short_job( $x_off[0] ), 'With X video posts off, the article gets the usual X post' );
+update_option( 'presshub_social_twitter_shorts_enabled', true );
+
+// Claim: only a worker that can post X videos gets them; a brief over X's limit is cancelled.
+PressHub_Social_Queue::reset_memory_store();
+$x_ready = function ( float $end ) {
+    return [ 'tiktok_short' => [
+        'index' => 0, 'count' => 1, 'brief' => true, 'hook' => 'Brief hook', 'caption' => 'Today in Cyprus #news', 'images' => [],
+        'audio' => [ 'audio_url' => 'https://example.com/uploads/brief.wav', 'segments' => [ [ 'speaker' => 1, 'text' => 'Hi', 'start' => 0, 'end' => $end ] ] ],
+    ] ];
+};
+$x_ok_job = PressHub_Social_Queue::enqueue( [
+    'post_id' => $fb_short_post_id, 'platform' => 'twitter', 'engine' => 'automation', 'post_copy' => PressHub_Social_TikTok_Shorts::placeholder_copy( 0, 1 ),
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'status' => 'pending', 'metadata' => $x_ready( 100.0 ),
+] );
+$x_req = new WP_REST_Request( 'POST', '/worker/claim' );
+$x_req->set_param( 'sessions', [ 'twitter' => true ] );
+$x_req->set_param( 'limit', 5 );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $x_req )['jobs'] ), 'A worker without the X video capability gets no X video' );
+assert_true( str_starts_with( (string) PressHub_Social_Queue::get_job( $x_ok_job )['last_error'], 'Waiting' ), 'The X video says it waits for a newer worker' );
+$x_req->set_param( 'capabilities', [ PressHub_Social_TikTok_Shorts::TWITTER_VIDEO_CAPABILITY ] );
+$x_claimed = PressHub_Social_REST_Controller::handle_claim( $x_req )['jobs'];
+assert_equals( [ (int) $x_ok_job ], array_map( fn( $j ) => (int) $j['id'], $x_claimed ), 'A worker that can post X videos gets the brief' );
+assert_equals( PressHub_Social_TikTok_Shorts::TWITTER_MAX_VIDEO_SECONDS, (int) ( $x_claimed[0]['tiktok_short']['max_seconds'] ?? 0 ), 'The claimed X video says how long X lets it be' );
+assert_true( str_contains( (string) $x_claimed[0]['post_copy'], 'http' ), 'The brief\'s X caption gets the post\'s link' );
+assert_equals( '', PressHub_Social_TikTok_Shorts::too_long_for_twitter( PressHub_Social_Queue::get_job( $x_ok_job ) ), 'A 101-second video fits X' );
+
+$x_long_job = PressHub_Social_Queue::enqueue( [
+    'post_id' => $fb_short_post_id, 'platform' => 'twitter', 'engine' => 'automation', 'post_copy' => PressHub_Social_TikTok_Shorts::placeholder_copy( 0, 1 ),
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'status' => 'pending', 'metadata' => $x_ready( 150.0 ),
+] );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $x_req )['jobs'] ), 'A brief longer than X takes is not handed out' );
+$x_long = PressHub_Social_Queue::get_job( $x_long_job );
+assert_equals( 'cancelled', $x_long['status'], 'A brief longer than X takes is cancelled' );
+assert_true( str_starts_with( (string) $x_long['last_error'], 'Not posted:' ) && str_contains( (string) $x_long['last_error'], '140' ), 'Its note says it is too long for X' );
+add_filter( 'presshub_social_twitter_max_video_seconds', fn() => 600 );
+assert_equals( '', PressHub_Social_TikTok_Shorts::too_long_for_twitter( array_merge( $x_long, [ 'status' => 'pending' ] ) ), 'The limit can be raised with a filter (X Premium)' );
+remove_all_filters( 'presshub_social_twitter_max_video_seconds' );
+
+PressHub_Social_Queue::reset_memory_store();
+delete_post_meta( $x_article_id, '_presshub_social_copy_twitter' );
+null === $x_saved_article ? delete_option( 'presshub_social_tiktok_article_shorts_enabled' ) : update_option( 'presshub_social_tiktok_article_shorts_enabled', $x_saved_article );
+null === $x_saved_format ? delete_option( 'presshub_social_tiktok_shorts_format' ) : update_option( 'presshub_social_tiktok_shorts_format', $x_saved_format );
+unset( $GLOBALS['POSTS_STORE'][ $x_article_id ] );
+delete_option( 'presshub_social_engine_twitter' );
+delete_option( 'presshub_social_twitter_shorts_enabled' );
+null === $x_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $x_saved_platforms );
+null === $x_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $x_saved_sessions );
+
+// ----------------------------------------------------------------------
 // Suite: TikTok photo slides (#333)
 // ----------------------------------------------------------------------
 echo "\n--- Suite: TikTok photo slides ---\n";

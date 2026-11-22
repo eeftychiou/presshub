@@ -176,6 +176,7 @@ class PressHub_Social_Dispatcher {
         $short_targets      = [];
         $short_copies       = [];
         $facebook_link_time = null;
+        $twitter_link_time  = null;
 
         // A post whose stories another post tells in video gets no video of its own (the
         // written daily brief, 2.84.0).
@@ -247,6 +248,25 @@ class PressHub_Social_Dispatcher {
                 $full_podcast = true;
             } else {
                 $full_podcast = false;
+            }
+
+            // X video posts (2.86.0): an article's X post is its short, with the usual X
+            // text and link (the image post is its fallback). A podcast keeps its link
+            // tweet below and gets its daily brief as an extra post after it.
+            $twitter_shorts = 'twitter' === $platform && self::shorts_wanted( $post_id, 'twitter', $engine );
+            if ( $twitter_shorts && PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE === PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
+                $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                    continue;
+                }
+                $x_copy = self::article_short_copy( $post_id, 'twitter' );
+                if ( '' !== $x_copy && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
+                    $x_copy = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $x_copy, function_exists( 'get_permalink' ) ? (string) ( get_permalink( $post_id ) ?: '' ) : '' );
+                }
+                $short_copies['twitter']  = $x_copy;
+                $short_targets['twitter'] = $engine;
+                continue;
             }
 
             // Social post gate, before any AI copy or images are made for the post.
@@ -338,11 +358,16 @@ class PressHub_Social_Dispatcher {
                 $short_targets['facebook'] = $engine;
                 $facebook_link_time        = strtotime( $scheduled_at . ' UTC' ) ?: $base_time;
             }
+            // X: a podcast's daily brief follows its link tweet as an extra video post.
+            if ( $twitter_shorts ) {
+                $short_targets['twitter'] = $engine;
+                $twitter_link_time        = strtotime( $scheduled_at . ' UTC' ) ?: $base_time;
+            }
         }
 
         // The shorts of every platform, from one story schedule.
         if ( ! empty( $short_targets ) ) {
-            $job_ids = array_merge( $job_ids, self::enqueue_shorts( $post_id, $short_targets, $media_url, $media_type, $base_time, $short_copies, $facebook_link_time ) );
+            $job_ids = array_merge( $job_ids, self::enqueue_shorts( $post_id, $short_targets, $media_url, $media_type, $base_time, $short_copies, $facebook_link_time, $twitter_link_time ) );
         }
         // TikTok story posts (2.85.0): instant news of one story each, after the daily brief.
         if ( isset( $short_targets['tiktok'] ) ) {
@@ -471,8 +496,8 @@ class PressHub_Social_Dispatcher {
         return '';
     }
 
-    /** Order of the platforms inside one story's slot. Facebook last: its link post goes first. */
-    public const SHORTS_PLATFORM_ORDER = [ 'tiktok', 'instagram', 'youtube', 'facebook' ];
+    /** Order of the platforms inside one story's slot. Facebook and X last: their link posts go first. */
+    public const SHORTS_PLATFORM_ORDER = [ 'tiktok', 'instagram', 'youtube', 'facebook', 'twitter' ];
 
     /**
      * Minutes between two platforms' posts of the same story (filter
@@ -496,8 +521,15 @@ class PressHub_Social_Dispatcher {
         if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, $platform ) ) {
             return false;
         }
-        if ( 'facebook' === $platform && '' !== self::no_video_reason( $post_id ) ) {
-            return false; // No Reel either; the Facebook link post stays.
+        if ( in_array( $platform, [ 'facebook', 'twitter' ], true ) && '' !== self::no_video_reason( $post_id ) ) {
+            return false; // No video either; the Facebook or X link post stays.
+        }
+        if ( 'twitter' === $platform
+            && PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE !== PressHub_Social_TikTok_Shorts::source_type( $post_id )
+            && ! PressHub_Social_Settings_Storage::get_tiktok_brief_enabled() ) {
+            // X gets a podcast's daily brief only, never one tweet per story.
+            PressHub_Social_Logger::info( sprintf( 'X video posts are on but podcast post #%d gets no X video: X gets only the daily brief, and Podcast Shorts Format is one short per story. Its X link post goes out as usual.', $post_id ) );
+            return false;
         }
         if ( 'facebook' === $platform && 'api' === $engine
             && PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE !== PressHub_Social_TikTok_Shorts::source_type( $post_id )
@@ -524,9 +556,11 @@ class PressHub_Social_Dispatcher {
      * @param array<string,string> $targets   Platform => engine.
      * @param array<string,string> $copies    Article captions already made, by platform.
      * @param int|null             $link_time Unix time of the Facebook link post, if any.
+     * @param int|null             $twitter_link_time Unix time of a podcast's X link post, if any
+     *                                                (its daily brief video follows it).
      * @return int[] IDs of the queued short jobs.
      */
-    public static function enqueue_shorts( int $post_id, array $targets, ?string $media_url, ?string $media_type, int $start_time, array $copies = [], ?int $link_time = null ): array {
+    public static function enqueue_shorts( int $post_id, array $targets, ?string $media_url, ?string $media_type, int $start_time, array $copies = [], ?int $link_time = null, ?int $twitter_link_time = null ): array {
         if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || empty( $targets ) ) {
             return [];
         }
@@ -555,7 +589,10 @@ class PressHub_Social_Dispatcher {
             } elseif ( $article ) {
                 $copy = $copies[ $platform ] ?? self::article_short_copy( $post_id, $platform );
             }
-            $label = 'facebook' === $platform ? 'Facebook Reel' : $platform . ' short';
+            if ( 'twitter' === $platform && null !== $twitter_link_time ) {
+                $start = max( $start, $twitter_link_time + $stagger );
+            }
+            $label = 'facebook' === $platform ? 'Facebook Reel' : ( 'twitter' === $platform ? 'X video' : $platform . ' short' );
             foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $start, false, $platform, $copy ) as $short_job ) {
                 $job_id = PressHub_Social_Queue::enqueue( $short_job );
                 if ( is_wp_error( $job_id ) ) {

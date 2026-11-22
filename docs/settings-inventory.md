@@ -15,10 +15,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
 | Daily Briefing (`daily-briefing`) | 81 | 0 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 17 | 0 | 0 |
-| Social publishing (`social-publishing`) | 82 | 0 | 0 |
+| Social publishing (`social-publishing`) | 83 | 0 | 0 |
 | Social listening (`social-listening`) | 35 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **322** | | |
+| **Total** | **323** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 34 option(s); both lists are at the end.
 
@@ -237,7 +237,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_fact_checks_budgets` | Fact check context per AI task (characters) | array | characters | ai / knowledge |  |
 
-## Social publishing (`social-publishing`, 82)
+## Social publishing (`social-publishing`, 83)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -271,6 +271,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_tiktok_shorts_enabled` | TikTok Shorts | boolean |  | social / shorts | checkbox |
 | `presshub_social_instagram_shorts_enabled` | Instagram Reels (Shorts) | boolean |  | social / shorts | checkbox |
 | `presshub_social_facebook_shorts_enabled` | Facebook Reels (Shorts) | boolean |  | social / shorts | checkbox |
+| `presshub_social_twitter_shorts_enabled` | X Video Posts | boolean |  | social / shorts | checkbox |
 | `presshub_social_tiktok_slides_enabled` | TikTok Photo Slides | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_shorts_enabled` | YouTube Shorts | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_podcast_enabled` | YouTube Podcast Episodes | boolean |  | social / shorts | checkbox |
@@ -280,23 +281,23 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_youtube_podcast_language_playlists` | English and Turkish Playlists | array |  | social / shorts | needs `presshub_social_youtube_podcast_enabled` on |
 | `presshub_social_youtube_privacy_status` | YouTube Visibility | string |  | social / shorts |  |
 | `presshub_social_youtube_category_id` | YouTube Category | integer | category ID | social / shorts |  |
-| `presshub_social_tiktok_article_shorts_enabled` | Article Shorts | boolean |  | social / shorts | checkbox, needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
-| `presshub_social_tiktok_shorts_count` | Shorts per Podcast | integer | shorts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
-| `presshub_social_tiktok_shorts_format` | Podcast Shorts Format | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
-| `presshub_social_tiktok_brief_max_words` | Daily Brief Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_article_shorts_enabled` | Article Shorts | boolean |  | social / shorts | checkbox, needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
+| `presshub_social_tiktok_shorts_count` | Shorts per Podcast | integer | shorts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
+| `presshub_social_tiktok_shorts_format` | Podcast Shorts Format | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_brief_max_words` | Daily Brief Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
 | `presshub_social_tiktok_full_podcast_enabled` | TikTok Full Podcast | boolean |  | social / shorts | checkbox, needs `presshub_social_tiktok_shorts_enabled` on |
 | `presshub_social_tiktok_story_posts` | TikTok Story Posts | integer | posts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
 | `presshub_social_tiktok_story_posts_format` | TikTok Story Post Format | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
 | `presshub_social_tiktok_slides_words` | Words per Photo Slide | integer | words | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_slides_max` | Most Photo Slides per Post | integer | slides | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
-| `presshub_social_tiktok_shorts_spacing_minutes` | Time between shorts (min) | integer | min | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on, was: Time Between Shorts |
-| `presshub_social_tiktok_shorts_max_words` | Short Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
-| `presshub_social_tiktok_shorts_images` | Story Images per Short | integer | images | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
-| `presshub_social_tiktok_shorts_caption_words` | Short Post Text Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
-| `presshub_social_tiktok_shorts_narrators` | Short Narrators | integer | narrators | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_voice_1` | Short Narrator Voice | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_voice_2` | Second Narrator Voice | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_voice_speed` | Short voice speed (%) | integer | % | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on, was: Short Voice Speed |
+| `presshub_social_tiktok_shorts_spacing_minutes` | Time between shorts (min) | integer | min | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on, was: Time Between Shorts |
+| `presshub_social_tiktok_shorts_max_words` | Short Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
+| `presshub_social_tiktok_shorts_images` | Story Images per Short | integer | images | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
+| `presshub_social_tiktok_shorts_caption_words` | Short Post Text Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
+| `presshub_social_tiktok_shorts_narrators` | Short Narrators | integer | narrators | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_voice_1` | Short Narrator Voice | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_voice_2` | Second Narrator Voice | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_voice_speed` | Short voice speed (%) | integer | % | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_twitter_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on, was: Short Voice Speed |
 | `presshub_social_tiktok_shorts_music_enabled` | Shorts Background Music | boolean |  | social / shorts | checkbox |
 | `presshub_social_tiktok_shorts_music_volume` | Music volume (%) | integer | % | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on, was: Music Volume |
 | `presshub_social_tiktok_shorts_music_tracks` | Music Tracks per Mood | integer | tracks | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on |
@@ -459,6 +460,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_social_tiktok_story_post_format` | code only |
 | `presshub_social_trending_max_per_account` | `presshub_ai_social_trending_max_per_account` |
 | `presshub_social_trending_share_after_hour` | `presshub_ai_social_trending_share_after_hour` |
+| `presshub_social_twitter_max_video_seconds` | code only |
 
 ## Scheduled for removal
 

@@ -298,6 +298,9 @@ class PressHub_Social_REST_Controller {
         // TikTok photo slides go only to a worker that can post them (1.10.0+): an older
         // worker would post them as a classic TikTok video. They wait in the queue.
         $slides_ok = is_array( $capabilities ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && in_array( PressHub_Social_TikTok_Shorts::SLIDES_CAPABILITY, $capabilities, true );
+        // X video posts go only to a worker that renders shorts for X (1.12.0+): an older
+        // worker would post an X short as a plain tweet. They wait in the queue.
+        $x_video_ok = is_array( $capabilities ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && in_array( PressHub_Social_TikTok_Shorts::TWITTER_VIDEO_CAPABILITY, $capabilities, true );
         if ( $reels_api && ! in_array( 'facebook', $active_platforms, true ) ) {
             $active_platforms[] = 'facebook';
             $fb_reels_only      = true;
@@ -333,6 +336,13 @@ class PressHub_Social_REST_Controller {
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
+                if ( ! $x_video_ok && 'twitter' === ( $candidate['platform'] ?? '' ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) ) {
+                    if ( 'Waiting' !== substr( (string) ( $candidate['last_error'] ?? '' ), 0, 7 ) ) {
+                        PressHub_Social_Queue::update_job( (int) $candidate['id'], [ 'last_error' => 'Waiting for a worker that can post videos to X (worker 1.12.0 or later).' ] );
+                    }
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
                 if ( 'youtube' === ( $candidate['platform'] ?? '' ) && ! $youtube_ok ) {
                     $skipped[] = (int) $candidate['id'];
                     continue;
@@ -359,6 +369,18 @@ class PressHub_Social_REST_Controller {
                 }
                 if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) && ! PressHub_Social_TikTok_Shorts::is_ready( $candidate ) ) {
                     PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $candidate['post_id'] ?? 0 ) );
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                // An X video longer than X takes (the two-minute daily brief can be) is not
+                // posted there; the X link post already went out.
+                $too_long = class_exists( 'PressHub_Social_TikTok_Shorts' ) ? PressHub_Social_TikTok_Shorts::too_long_for_twitter( $candidate ) : '';
+                if ( '' !== $too_long ) {
+                    PressHub_Social_Queue::update_job( (int) $candidate['id'], [
+                        'status'     => 'cancelled',
+                        'last_error' => 'Not posted: ' . $too_long,
+                    ] );
+                    PressHub_Social_Logger::warning( sprintf( 'X video job #%d (post #%d) is not posted: %s Shorten the Daily Brief Script Length or raise the short voice speed.', (int) $candidate['id'], (int) ( $candidate['post_id'] ?? 0 ), $too_long ) );
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
@@ -401,7 +423,7 @@ class PressHub_Social_REST_Controller {
             $job = PressHub_Social_Queue::get_job( $job_id ) ?? $job;
 
             // A held episode's "Waiting…" note no longer applies once it is handed out.
-            if ( ( 'youtube' === ( $job['platform'] ?? '' ) || $is_slides ) && str_starts_with( (string) ( $job['last_error'] ?? '' ), 'Waiting' ) ) {
+            if ( ( 'youtube' === ( $job['platform'] ?? '' ) || $is_slides || ( $is_short && 'twitter' === ( $job['platform'] ?? '' ) ) ) && str_starts_with( (string) ( $job['last_error'] ?? '' ), 'Waiting' ) ) {
                 PressHub_Social_Queue::update_job( $job_id, [ 'last_error' => '' ] );
                 $job['last_error'] = '';
             }

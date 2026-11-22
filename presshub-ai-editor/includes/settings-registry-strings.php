@@ -535,6 +535,8 @@ __( 'Instagram Reels (Shorts)', 'presshub-ai-editor' );
 __( 'Posts the same short videos to Instagram as Reels. Default: off.', 'presshub-ai-editor' );
 __( 'Facebook Reels (Shorts)', 'presshub-ai-editor' );
 __( 'Posts the same short videos to the Facebook Page as Reels, after the usual Facebook link post, which is still made. With the API engine the worker uploads them through the Graph API (the Meta token needs pages_manage_posts); with the automation engine it uses the browser session. Default: off.', 'presshub-ai-editor' );
+__( 'X Video Posts', 'presshub-ai-editor' );
+__( "Posts videos to X. An article's X post carries the article short instead of its image (the image post goes out if the short cannot be made); a podcast's daily brief goes to X as one extra video post after the usual link post, when it is no longer than X's 2 minutes 20 seconds. Needs the automation engine, Pull Mode and worker 1.12.0. Default: off.", 'presshub-ai-editor' );
 __( 'TikTok Photo Slides', 'presshub-ai-editor' );
 __( "Posts a story to TikTok as a photo post when TikTok gets no video of it: the hook and the script as text over the story images, with no voice, and a TikTok sound found for the story's mood. With TikTok Shorts on, TikTok gets the videos and no photo posts, so a story is not posted twice. Needs the automation engine, Pull Mode and worker 1.10.0. Default: on.", 'presshub-ai-editor' );
 __( 'YouTube Shorts', 'presshub-ai-editor' );

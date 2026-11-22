@@ -379,10 +379,11 @@ class PressHub_Social_Settings_Render {
         $tiktok    = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
         $instagram = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
         $facebook  = PressHub_Social_Settings_Storage::get_facebook_shorts_enabled();
+        $twitter   = PressHub_Social_Settings_Storage::get_twitter_shorts_enabled();
         $youtube   = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() || PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
         // TikTok photo slides (#333) are on by default, so they count only where TikTok is posted to.
         $slides = PressHub_Social_Settings_Storage::get_tiktok_slides_enabled() && PressHub_Social_Settings_Storage::is_platform_enabled( 'tiktok' );
-        if ( ! $tiktok && ! $slides && ! $instagram && ! $facebook && ! $youtube ) {
+        if ( ! $tiktok && ! $slides && ! $instagram && ! $facebook && ! $twitter && ! $youtube ) {
             return [];
         }
         $issues = [];
@@ -407,6 +408,13 @@ class PressHub_Social_Settings_Render {
                 'text' => __( 'Instagram Reels need the automation engine, but Instagram uses another engine.', 'presshub-social-autopost' ),
                 'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_instagram' ),
                 'link' => __( 'Change Instagram engine', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $twitter && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'twitter' ) ) {
+            $issues[] = [
+                'text' => __( 'X video posts need the automation engine, but X uses another engine.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_twitter' ),
+                'link' => __( 'Change X engine', 'presshub-social-autopost' ),
             ];
         }
         if ( $facebook && 'api' === PressHub_Social_Settings_Storage::get_platform_engine( 'facebook' ) && ! PressHub_Social_TikTok_Shorts::facebook_reels_via_api() ) {
@@ -449,7 +457,7 @@ class PressHub_Social_Settings_Render {
             <h3 class="ph-margin-0_8em-0-0_4em">
                 <?php
                 /* translators: %d: number of things to fix */
-                $only_episodes = ! PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_instagram_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_facebook_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+                $only_episodes = ! PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_instagram_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_facebook_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_twitter_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
                 echo esc_html( $only_episodes
                     /* translators: %d: number of things to fix */
                     ? sprintf( _n( 'YouTube podcast episodes can\'t be uploaded yet. %d thing to fix:', 'YouTube podcast episodes can\'t be uploaded yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) )
@@ -677,6 +685,17 @@ class PressHub_Social_Settings_Render {
         <label>
             <input type="checkbox" name="presshub_social_facebook_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
             <?php echo esc_html__( 'Also post each short (podcast stories and, with Article Shorts on, articles) to the Facebook Page as a Reel, with the short\'s own caption. The usual Facebook link post to the article is still made; each Reel follows it by the time between shorts. Needs Facebook enabled and the worker in Pull Mode. With the API engine the worker uploads each Reel through the Graph API (the Meta token needs pages_manage_posts); with the automation engine it posts it with the Facebook browser session.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_twitter_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_twitter_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_twitter_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_twitter_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Post videos to X. With Article Shorts on, an article\'s X post carries the article short instead of its image, with the same text and link; if the short cannot be made, the usual image post goes out. A podcast\'s daily brief (Podcast Shorts Format: daily brief) goes to X as one extra video post after the usual link post; a brief longer than X\'s 2 minutes 20 seconds is not posted there. Needs X on the automation engine, the worker in Pull Mode and worker 1.12.0 or later.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }

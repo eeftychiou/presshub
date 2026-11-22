@@ -281,6 +281,14 @@ class PressHub_Social_Settings_Storage {
             'default'           => false,
         ] );
 
+        // X video posts (2.86.0): an article's X post carries its short, a podcast's daily brief
+        // goes to X as an extra video post.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_shorts_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_shorts_enabled' ],
+            'default'           => false,
+        ] );
+
         // TikTok photo slides (#333): each short also as a TikTok photo post, its script as text.
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_slides_enabled', [
             'type'              => 'boolean',
@@ -1405,6 +1413,21 @@ class PressHub_Social_Settings_Storage {
     public static function sanitize_facebook_shorts_enabled( $value ): bool {
         if ( null === $value && empty( $_POST['presshub_social_facebook_shorts_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
             return self::get_facebook_shorts_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /**
+     * Whether X gets video posts (default off): an article's X post carries the article
+     * short instead of its image, and a podcast's daily brief goes to X as an extra post.
+     */
+    public static function get_twitter_shorts_enabled(): bool {
+        return in_array( get_option( 'presshub_social_twitter_shorts_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_twitter_shorts_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_twitter_shorts_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_twitter_shorts_enabled();
         }
         return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
     }
