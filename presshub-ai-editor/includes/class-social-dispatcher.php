@@ -177,8 +177,8 @@ class PressHub_Social_Dispatcher {
         $short_copies       = [];
         $facebook_link_time = null;
 
-        // Story repeats (2.84.0): a post whose stories another post tells in video gets no
-        // video of its own (the written daily brief, a second trending roundup in a day).
+        // A post whose stories another post tells in video gets no video of its own (the
+        // written daily brief, 2.84.0).
         $no_video = self::no_video_reason( $post_id );
 
         foreach ( $platforms as $index => $platform ) {
@@ -209,6 +209,12 @@ class PressHub_Social_Dispatcher {
             $platform_shorts = in_array( $platform, [ 'tiktok', 'instagram' ], true ) && self::shorts_wanted( $post_id, $platform, $engine );
             if ( 'tiktok' === $platform && ! $platform_shorts
                 && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::slides_wanted( $post_id, $engine, false ) ) {
+                // Social post gate, before the slides' AI copy and images.
+                $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                    continue;
+                }
                 $slide_ids = self::enqueue_tiktok_slides( $post_id, $engine, $base_time + ( $index * $interval ), null, false );
                 if ( ! empty( $slide_ids ) ) {
                     $job_ids = array_merge( $job_ids, $slide_ids );
@@ -220,6 +226,18 @@ class PressHub_Social_Dispatcher {
             // with the other platforms' shorts after this loop, on one story schedule.
             if ( $platform_shorts ) {
                 $short_targets[ $platform ] = $engine;
+                continue;
+            }
+
+            // Social post gate, before any AI copy or images are made for the post. A
+            // Facebook link post that is stopped still lets the post's Reels be planned:
+            // their stories are checked when they are planned.
+            $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+            if ( '' !== $gate_reason ) {
+                PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                if ( 'facebook' === $platform && self::shorts_wanted( $post_id, 'facebook', $engine ) ) {
+                    $short_targets['facebook'] = $engine;
+                }
                 continue;
             }
 
@@ -268,6 +286,11 @@ class PressHub_Social_Dispatcher {
             $with_images = class_exists( 'PressHub_Social_Post_Images' ) && PressHub_Social_Post_Images::applies( $post_id, $platform );
             if ( $with_images ) {
                 $job_data['metadata'] = PressHub_Social_Post_Images::job_metadata( $platform );
+            }
+            // The post's story tag, so the story ledger knows what this job told.
+            $with_story = PressHub_Social_Post_Gate::with_story( $post_id, $job_data['metadata'] ?? null );
+            if ( null !== $with_story ) {
+                $job_data['metadata'] = $with_story;
             }
 
             $job_id = PressHub_Social_Queue::enqueue( $job_data );
@@ -375,16 +398,11 @@ class PressHub_Social_Dispatcher {
     /** Post meta that marks a trending roundup (PressHub_AI_Social_Trending::META_KEY). */
     public const TRENDING_META_KEY = '_presshub_social_trending_key';
 
-    /** Hours after a trending roundup's video in which a newer roundup gets none (2.84.0). */
-    public const ROUNDUP_VIDEO_GAP_HOURS = 20;
-
     /**
      * Why a post gets no video posts (TikTok, Instagram, YouTube, Facebook Reels), or ''.
      * - The written daily brief (`_presshub_briefing_type` = text): its podcast follows and
      *   tells the same stories in video. Filter `presshub_social_briefing_text_video`
      *   (default false) gives it videos again, e.g. on a site without podcasts.
-     * - A trending roundup when another roundup's video went out, or is queued, in the last
-     *   ROUNDUP_VIDEO_GAP_HOURS hours, while Story Repeat Window is on.
      * Its X and Facebook link posts go out as usual.
      */
     public static function no_video_reason( int $post_id ): string {
@@ -395,21 +413,6 @@ class PressHub_Social_Dispatcher {
             $video = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_social_briefing_text_video', false, $post_id ) : false;
             if ( ! $video ) {
                 return 'it is the written daily brief, and its podcast tells the same stories in video.';
-            }
-        }
-        $roundup_key = class_exists( 'PressHub_AI_Social_Trending' ) ? PressHub_AI_Social_Trending::META_KEY : self::TRENDING_META_KEY;
-        if ( '' !== (string) get_post_meta( $post_id, $roundup_key, true )
-            && class_exists( 'PressHub_Social_Story_Check' ) && PressHub_Social_Story_Check::enabled() ) {
-            $since = gmdate( 'Y-m-d H:i:s', PressHub_Social_Story_Check::now() - self::ROUNDUP_VIDEO_GAP_HOURS * 3600 );
-            foreach ( PressHub_Social_Queue::query_jobs( [ 'statuses' => PressHub_Social_Story_Check::TOLD_STATUSES, 'since' => $since, 'limit' => 200 ] ) as $job ) {
-                $other = (int) ( $job['post_id'] ?? 0 );
-                if ( $other === $post_id || ! in_array( (string) ( $job['platform'] ?? '' ), array_merge( self::VIDEO_PLATFORMS, [ 'facebook' ] ), true ) ) {
-                    continue;
-                }
-                if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job )
-                    && '' !== (string) get_post_meta( $other, $roundup_key, true ) ) {
-                    return sprintf( 'trending roundup #%d already went out as video in the last %d hours.', $other, self::ROUNDUP_VIDEO_GAP_HOURS );
-                }
             }
         }
         return '';
@@ -588,7 +591,7 @@ class PressHub_Social_Dispatcher {
      * @param int $job_id
      * @return bool|WP_Error True on success, WP_Error on failure.
      */
-    public static function dispatch_job( int $job_id ): bool|WP_Error {
+    public static function dispatch_job( int $job_id, bool $gate = true ): bool|WP_Error {
         $job = PressHub_Social_Queue::get_job( $job_id );
         if ( ! $job ) {
             return new WP_Error( 'job_not_found', sprintf( __( 'Social job #%d not found.', 'presshub-social-autopost' ), $job_id ) );
@@ -602,6 +605,16 @@ class PressHub_Social_Dispatcher {
         $platform = sanitize_key( (string) ( $job['platform'] ?? '' ) );
         $engine   = sanitize_key( (string) ( $job['engine'] ?? 'api' ) );
         $post_id  = (int) ( $job['post_id'] ?? 0 );
+
+        // Social post gate: checked again, before any copy is rewritten or anything
+        // is sent, against what went out since the job was queued. A manual repost skips it.
+        if ( $gate ) {
+            $gate_reason = PressHub_Social_Post_Gate::check_job( $job );
+            if ( '' !== $gate_reason ) {
+                PressHub_Social_Post_Gate::block_job( $job_id, $gate_reason );
+                return new WP_Error( PressHub_Social_Post_Gate::BLOCKED_CODE, 'Not posted: ' . $gate_reason );
+            }
+        }
 
         // If this job previously failed during AI copy generation, regenerate copy BEFORE
         // entering Pull Mode or dispatching so an error placeholder is never queued as pending.
@@ -795,6 +808,8 @@ class PressHub_Social_Dispatcher {
                 $summary['succeeded']++;
             } elseif ( is_wp_error( $res ) && in_array( $res->get_error_code(), [ PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE, 'social_post_images_pending' ], true ) ) {
                 $summary['deferred']++;
+            } elseif ( is_wp_error( $res ) && PressHub_Social_Post_Gate::BLOCKED_CODE === $res->get_error_code() ) {
+                $summary['skipped']++;
             } else {
                 $summary['failed']++;
             }

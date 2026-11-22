@@ -829,6 +829,10 @@ class PressHub_Social_Queue {
             }
         }
 
+        // Reposted by hand: the operator chose to post it, so the social post gate lets it go.
+        $repost_meta = is_array( $repost_meta ) ? $repost_meta : [];
+        $repost_meta['gate_bypass'] = true;
+
         $new_job_data = [
             'post_id'      => (int) $source['post_id'],
             'platform'     => (string) $source['platform'],

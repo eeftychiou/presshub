@@ -234,6 +234,45 @@ class PressHub_Social_Settings {
 
 
         add_settings_section(
+            'presshub_social_gate_sec',
+            __( 'Social post gate', 'presshub-social-autopost' ),
+            '__return_empty_string',
+            'presshub_social_general'
+        );
+
+        add_settings_field(
+            'presshub_social_story_repeat_hours',
+            __( 'Story Window', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_general',
+            'presshub_social_gate_sec',
+            [
+                'option'  => 'presshub_social_story_repeat_hours',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_STORY_REPEAT_HOURS,
+                'min'     => 0,
+                'max'     => 168,
+                'unit'    => __( 'hours', 'presshub-social-autopost' ),
+                'desc'    => __( 'Every social post, on every platform, is checked before it is prepared and again before it goes out. A story a platform already posted in this time goes out there again only with a new development, and then it leads with what is new. Stopped posts stay in the Social Queue as cancelled, with the reason. 0 turns the story check off.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_story_max_posts',
+            __( 'Most Posts per Story per Platform', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_general',
+            'presshub_social_gate_sec',
+            [
+                'option'  => 'presshub_social_story_max_posts',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_STORY_MAX_POSTS,
+                'min'     => 1,
+                'max'     => 6,
+                'unit'    => __( 'posts', 'presshub-social-autopost' ),
+                'desc'    => __( 'How many times one story may go out on one platform within Story Window, even when it keeps developing. Used while Story Window is above 0.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_section(
             'presshub_social_engines_sec',
             __( 'Platform Dispatch Engines', 'presshub-social-autopost' ),
             '__return_empty_string',
@@ -792,38 +831,6 @@ class PressHub_Social_Settings {
                 'max'     => 380,
                 'unit'    => __( 'words', 'presshub-social-autopost' ),
                 'desc'    => __( 'Most words in the daily brief script, about 150 words a minute. 300 is about two minutes; the top stays under YouTube\'s three-minute limit for Shorts.', 'presshub-social-autopost' ),
-            ]
-        );
-
-        add_settings_field(
-            'presshub_social_story_repeat_hours',
-            __( 'Story Repeat Window', 'presshub-social-autopost' ),
-            [ $render, 'render_number_field' ],
-            'presshub_social_shorts',
-            'presshub_social_shorts_script_sec',
-            [
-                'option'  => 'presshub_social_story_repeat_hours',
-                'default' => PressHub_Social_Settings_Storage::DEFAULT_STORY_REPEAT_HOURS,
-                'min'     => 0,
-                'max'     => 168,
-                'unit'    => __( 'hours', 'presshub-social-autopost' ),
-                'desc'    => __( 'How far back the shorts, the daily brief video and the photo slides look for stories already posted on the same platform. A story told in this time goes out again only when the editorial memory shows a new development, and then it leads with what is new. 0 turns the check off.', 'presshub-social-autopost' ),
-            ]
-        );
-
-        add_settings_field(
-            'presshub_social_story_max_per_day',
-            __( 'Most Posts per Story a Day', 'presshub-social-autopost' ),
-            [ $render, 'render_number_field' ],
-            'presshub_social_shorts',
-            'presshub_social_shorts_script_sec',
-            [
-                'option'  => 'presshub_social_story_max_per_day',
-                'default' => PressHub_Social_Settings_Storage::DEFAULT_STORY_MAX_PER_DAY,
-                'min'     => 1,
-                'max'     => 6,
-                'unit'    => __( 'posts', 'presshub-social-autopost' ),
-                'desc'    => __( 'How many times one story may go out on one platform in 24 hours, even when it keeps developing. Used while Story Repeat Window is above 0.', 'presshub-social-autopost' ),
             ]
         );
 

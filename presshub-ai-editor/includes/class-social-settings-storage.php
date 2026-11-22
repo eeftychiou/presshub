@@ -301,18 +301,18 @@ class PressHub_Social_Settings_Storage {
             'default'           => self::DEFAULT_TIKTOK_BRIEF_MAX_WORDS,
         ] );
 
-        // Story repeats (2.84.0, PressHub_Social_Story_Check): how far back the shorts look for
-        // stories already posted, and how often one story may go out in a day.
+        // Social post gate (2.84.0, PressHub_Social_Post_Gate): the story ledger's window, and
+        // how often one story may go out on one platform inside it.
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_story_repeat_hours', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_story_repeat_hours' ],
             'default'           => self::DEFAULT_STORY_REPEAT_HOURS,
         ] );
 
-        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_story_max_per_day', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_story_max_posts', [
             'type'              => 'integer',
-            'sanitize_callback' => [ __CLASS__, 'sanitize_story_max_per_day' ],
-            'default'           => self::DEFAULT_STORY_MAX_PER_DAY,
+            'sanitize_callback' => [ __CLASS__, 'sanitize_story_max_posts' ],
+            'default'           => self::DEFAULT_STORY_MAX_POSTS,
         ] );
 
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_slides_words', [
@@ -1607,9 +1607,9 @@ class PressHub_Social_Settings_Storage {
     }
 
     /**
-     * Story Repeat Window: hours the shorts look back for stories already posted (0-168,
-     * default 36). A story told in the window goes out again only with a new development
-     * in the editorial memory. 0 turns the check off.
+     * Story Window: hours the social post gate looks back for stories already posted on a
+     * platform (0-168, default 36). A story told in the window goes out again on that
+     * platform only with a new development. 0 turns the story check off.
      */
     public const DEFAULT_STORY_REPEAT_HOURS = 36;
 
@@ -1621,14 +1621,14 @@ class PressHub_Social_Settings_Storage {
         return max( 0, min( 168, (int) $value ) );
     }
 
-    /** Most Posts per Story a Day: posts of one story per platform in 24 hours (1-6, default 2). */
-    public const DEFAULT_STORY_MAX_PER_DAY = 2;
+    /** Most Posts per Story per Platform: posts of one story on one platform inside Story Window (1-6, default 2). */
+    public const DEFAULT_STORY_MAX_POSTS = 2;
 
-    public static function get_story_max_per_day(): int {
-        return self::sanitize_story_max_per_day( get_option( 'presshub_social_story_max_per_day', self::DEFAULT_STORY_MAX_PER_DAY ) );
+    public static function get_story_max_posts(): int {
+        return self::sanitize_story_max_posts( get_option( 'presshub_social_story_max_posts', self::DEFAULT_STORY_MAX_POSTS ) );
     }
 
-    public static function sanitize_story_max_per_day( $value ): int {
+    public static function sanitize_story_max_posts( $value ): int {
         return max( 1, min( 6, (int) $value ) );
     }
 

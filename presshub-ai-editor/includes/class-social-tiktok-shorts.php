@@ -81,7 +81,10 @@
  * Story repeats (2.84.0, PressHub_Social_Story_Check): get_plan() shows the AI the stories
  * already posted on the post's platforms and the editorial memory's stories, every plan
  * story carries `story_key` and `whats_new`, and a story that repeats what was told without a
- * change is asked for again, then left out (see that class).
+ * change is asked for again, then left out (see that class). This is the plan stage of the
+ * social post gate (PressHub_Social_Post_Gate): a podcast whose edition has nothing that may
+ * go out again gets no plan call at all (edition_blocked()), and the planned stories are
+ * checked with check_stories() before any script, voice or render.
  *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
@@ -921,6 +924,12 @@ class PressHub_Social_TikTok_Shorts {
 
         $platforms = array_values( array_unique( array_map( fn( $j ) => (string) ( $j['platform'] ?? '' ), $all ) ) );
         $plan      = self::get_plan( $post_id, $count, $brief, $platforms );
+        if ( is_wp_error( $plan ) && PressHub_Social_Post_Gate::BLOCKED_CODE === $plan->get_error_code() ) {
+            foreach ( $pending as $job ) {
+                PressHub_Social_Post_Gate::block_job( (int) $job['id'], $plan->get_error_message() );
+            }
+            return;
+        }
         if ( is_wp_error( $plan ) ) {
             self::handle_failures( $post_id, array_map( fn( $j ) => [ $j, $plan ], $pending ) );
             return;
@@ -1255,6 +1264,14 @@ class PressHub_Social_TikTok_Shorts {
                 PressHub_Social_Logger::warning( sprintf( 'Story repeats: the prompt block for post #%d could not be built (%s); the plan is checked in code only.', $post_id, $e->getMessage() ) );
             }
         }
+        // Social post gate, before the plan's AI call: a podcast whose edition has nothing
+        // that may go out again is not planned at all.
+        if ( $check && ! $article ) {
+            $blocked = PressHub_Social_Post_Gate::edition_blocked( $post_id, $told, $memory );
+            if ( '' !== $blocked ) {
+                return new WP_Error( PressHub_Social_Post_Gate::BLOCKED_CODE, $blocked );
+            }
+        }
         $ask_count = ( $check && ! $article && ! $brief && ! empty( $told ) ) ? $count + self::SPARE_STORIES : $count;
 
         $user_prompt = $article
@@ -1307,7 +1324,7 @@ class PressHub_Social_TikTok_Shorts {
                     }
                     if ( $check ) {
                         $shorts  = PressHub_Social_Story_Check::annotate( $shorts, $memory );
-                        $repeats = PressHub_Social_Story_Check::find_repeats( $shorts, $told, $memory );
+                        $repeats = PressHub_Social_Post_Gate::check_stories( $post_id, $shorts, $platforms, $told, $memory );
                         if ( ! empty( $repeats ) && $attempt < self::PLAN_ATTEMPTS ) {
                             PressHub_Social_Logger::info( sprintf( 'TikTok shorts plan for post #%d repeats stories already posted (attempt %d of %d): %s Asking the AI again.', $post_id, $attempt, self::PLAN_ATTEMPTS, PressHub_Social_Story_Check::describe( $repeats ) ), [ 'record_ids' => $record_ids ] );
                             $prompt_now = PressHub_Social_Story_Check::retry_prompt( $user_prompt, $repeats, $article );

@@ -274,6 +274,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-ai-json.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-post-images.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-shorts.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-story-check.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-post-gate.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-music.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-youtube.php';
 PressHub_Social_TikTok_Shorts::register_hooks();

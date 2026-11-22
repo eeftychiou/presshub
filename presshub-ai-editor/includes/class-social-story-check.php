@@ -1,26 +1,29 @@
 <?php
 /**
- * Story repeats (2.84.0): keeps the shorts, the daily brief video and the TikTok photo
- * slides from telling a story the same platform already told, unless it changed.
+ * The story ledger (2.84.0): what each platform already told, and which stories would
+ * repeat it. It is the first check of the social post gate (PressHub_Social_Post_Gate),
+ * which every post on every platform passes before it is prepared and again before it
+ * goes out.
  *
- * What was told is read from the social queue itself, so there is no new store: every
- * short, brief and slide job keeps its stories in `metadata.tiktok_short` (topic, hook,
- * and since 2.84.0 `story_key`, `whats_new` and `dev_hash`; a brief per story under
- * `stories`). Jobs of other posts that were published, are being posted or are prepared
- * and waiting, inside Story Repeat Window (`presshub_social_story_repeat_hours`), count.
+ * The ledger is read from the social queue itself, so there is no new store. A short, a
+ * brief or photo slides keep their stories in `metadata.tiktok_short` (topic, hook,
+ * `story_key`, `whats_new`, `dev_hash`; a brief per story under `stories`); any other post
+ * keeps its story tag in `metadata.story` (PressHub_Social_Post_Gate::STORY_META). Jobs of
+ * other posts that were published, are being posted or are waiting, inside Story Window
+ * (`presshub_social_story_repeat_hours`), count, per platform.
  *
  * The story keys are the editorial memory's (PressHub_AI_Memory_Store): each daily digest
  * lists its stories with a key that stays the same across days, a development and a
- * status. When a plan is written (PressHub_Social_TikTok_Shorts::get_plan()):
+ * status. When a plan or a story tag is written:
  * 1. The prompt gets the stories already told and the memory's stories
  *    (prompt_block(), asset social_story_repeats.txt), and the AI tags every story with a
  *    `story_key` and, when it retells one, the new fact in `whats_new`.
- * 2. find_repeats() checks the plan in code. A story already told in the window is a
+ * 2. find_repeats() checks the stories in code. A story already told in the window is a
  *    repeat unless it names what is new AND, when the memory knows the story, the memory's
  *    development or status changed since it was told (`dev_hash`). A story the memory marks
- *    resolved, a story told Most Posts per Story a Day times in 24 hours, and a story twice
- *    in one plan are always repeats.
- * 3. The plan is asked for once more with the reason; repeats left after that are dropped
+ *    resolved, a story posted Most Posts per Story per Platform times on one platform in
+ *    the window, and a story twice in one plan are always repeats.
+ * 3. A plan is asked for once more with the reason; repeats left after that are dropped
  *    (a podcast's short, a brief's story part, an article's short), each with an INFO log.
  *
  * @package PressHub_AI_Editor
@@ -40,9 +43,6 @@ class PressHub_Social_Story_Check {
 
     /** Most memory stories and told stories put in the prompt. */
     const MAX_PROMPT_STORIES = 40;
-
-    /** Platforms whose short jobs are compared. */
-    const PLATFORMS = [ 'tiktok', 'instagram', 'youtube', 'facebook' ];
 
     /** Clock override for tests. */
     private static ?int $now = null;
@@ -65,17 +65,18 @@ class PressHub_Social_Story_Check {
      * window, newest first: one entry per job and story, {key, topic, hook, whats_new,
      * dev_hash, platform, post_id, job_id, when (Unix time), format}.
      *
-     * @param string[] $platforms Platforms to look at; empty = all shorts platforms.
+     * @param string[] $platforms Platforms to look at; empty = every platform.
+     * @param string[] $statuses  Job statuses that count as told.
      */
-    public static function told( int $exclude_post_id, array $platforms = [], ?int $hours = null ): array {
+    public static function told( int $exclude_post_id, array $platforms = [], ?int $hours = null, array $statuses = self::TOLD_STATUSES ): array {
         $hours     = null === $hours ? PressHub_Social_Settings_Storage::get_story_repeat_hours() : $hours;
         if ( $hours <= 0 ) {
             return [];
         }
-        $platforms = empty( $platforms ) ? self::PLATFORMS : array_values( array_intersect( $platforms, self::PLATFORMS ) );
+        $platforms = empty( $platforms ) ? PressHub_Social_Queue::VALID_PLATFORMS : array_values( array_intersect( $platforms, PressHub_Social_Queue::VALID_PLATFORMS ) );
         $since     = gmdate( 'Y-m-d H:i:s', self::now() - $hours * 3600 );
         $jobs      = PressHub_Social_Queue::query_jobs( [
-            'statuses' => self::TOLD_STATUSES,
+            'statuses' => $statuses,
             'since'    => $since,
             'limit'    => self::MAX_JOBS,
         ] );
@@ -85,11 +86,8 @@ class PressHub_Social_Story_Check {
             if ( $post_id === $exclude_post_id || ! in_array( (string) ( $job['platform'] ?? '' ), $platforms, true ) ) {
                 continue;
             }
-            $meta = self::decode( $job['metadata'] ?? null );
-            $ts   = $meta[ PressHub_Social_TikTok_Shorts::JOB_META_KEY ] ?? null;
-            if ( ! is_array( $ts ) || ! empty( $ts['test'] ) || '' === trim( (string) ( $ts['topic'] ?? '' ) ) ) {
-                continue; // Not a short, a test render, or not prepared yet.
-            }
+            $meta   = self::decode( $job['metadata'] ?? null );
+            $ts     = $meta[ PressHub_Social_TikTok_Shorts::JOB_META_KEY ] ?? null;
             $status = (string) ( $job['status'] ?? '' );
             $when   = strtotime( ( 'published' === $status && ! empty( $job['dispatched_at'] ) ? $job['dispatched_at'] : ( $job['scheduled_at'] ?? '' ) ) . ' UTC' );
             $base   = [
@@ -97,9 +95,22 @@ class PressHub_Social_Story_Check {
                 'post_id'  => $post_id,
                 'job_id'   => (int) ( $job['id'] ?? 0 ),
                 'when'     => $when ?: self::now(),
-                'format'   => ! empty( $ts['brief'] ) ? 'brief' : ( PressHub_Social_TikTok_Shorts::FORMAT_SLIDES === ( $ts['format'] ?? '' ) ? 'slides' : 'short' ),
+                'format'   => 'post',
                 'status'   => $status,
             ];
+            if ( ! is_array( $ts ) ) {
+                // Any other post (a link post, a photo post, a tweet): its story tag, set by
+                // the social post gate when it was queued (PressHub_Social_Post_Gate::STORY_META).
+                $story = $meta[ PressHub_Social_Post_Gate::STORY_META ] ?? null;
+                if ( is_array( $story ) && ( '' !== trim( (string) ( $story['story_key'] ?? '' ) ) || '' !== trim( (string) ( $story['topic'] ?? '' ) ) ) ) {
+                    $entries[] = array_merge( $base, self::story_fields( $story, '' ) );
+                }
+                continue;
+            }
+            if ( ! empty( $ts['test'] ) || '' === trim( (string) ( $ts['topic'] ?? '' ) ) ) {
+                continue; // A test render, or a short not prepared yet.
+            }
+            $base['format'] = ! empty( $ts['brief'] ) ? 'brief' : ( PressHub_Social_TikTok_Shorts::FORMAT_SLIDES === ( $ts['format'] ?? '' ) ? 'slides' : 'short' );
             if ( ! empty( $ts['brief'] ) && is_array( $ts['stories'] ?? null ) ) {
                 foreach ( $ts['stories'] as $story ) {
                     if ( ! is_array( $story ) ) {
@@ -271,10 +282,9 @@ class PressHub_Social_Story_Check {
      *
      * @param array $shorts A parsed and annotated plan.
      */
-    public static function find_repeats( array $shorts, array $told, array $memory, ?int $max_per_day = null ): array {
-        $max_per_day = null === $max_per_day ? PressHub_Social_Settings_Storage::get_story_max_per_day() : $max_per_day;
-        $now         = self::now();
-        $by_key      = [];
+    public static function find_repeats( array $shorts, array $told, array $memory, ?int $max_posts = null ): array {
+        $max_posts = null === $max_posts ? PressHub_Social_Settings_Storage::get_story_max_posts() : $max_posts;
+        $by_key    = [];
         foreach ( $told as $entry ) {
             if ( '' !== $entry['key'] ) {
                 $by_key[ $entry['key'] ][] = $entry; // Newest first, as told() sorts.
@@ -307,14 +317,21 @@ class PressHub_Social_Story_Check {
                     $repeats[] = $where + [ 'reason' => sprintf( 'told at %s and the editorial memory marks it resolved', $label ) ];
                     continue;
                 }
-                $posts_today = [];
+                // Posts per platform inside the window (the told list is the window).
+                $per_platform = [];
                 foreach ( $matches as $m ) {
-                    if ( $m['when'] >= $now - 86400 ) {
-                        $posts_today[ $m['post_id'] ] = true;
+                    $per_platform[ $m['platform'] ][ $m['post_id'] ] = true;
+                }
+                $most_on = '';
+                $most    = 0;
+                foreach ( $per_platform as $platform => $posts ) {
+                    if ( count( $posts ) > $most ) {
+                        $most    = count( $posts );
+                        $most_on = (string) $platform;
                     }
                 }
-                if ( count( $posts_today ) >= $max_per_day ) {
-                    $repeats[] = $where + [ 'reason' => sprintf( 'told %d times in the last 24 hours (most: %d), last at %s', count( $posts_today ), $max_per_day, $label ) ];
+                if ( $most >= $max_posts ) {
+                    $repeats[] = $where + [ 'reason' => sprintf( 'posted %d times on %s inside the story window (most: %d), last at %s', $most, $most_on, $max_posts, $label ) ];
                     continue;
                 }
                 $whats_new = trim( (string) ( $story['whats_new'] ?? '' ) );

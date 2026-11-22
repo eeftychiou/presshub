@@ -503,6 +503,7 @@ require_once $base_dir . '/includes/class-social-image-library.php';
 require_once $base_dir . '/includes/class-social-post-images.php';
 require_once $base_dir . '/includes/class-social-tiktok-shorts.php';
 require_once $base_dir . '/includes/class-social-story-check.php';
+require_once $base_dir . '/includes/class-social-post-gate.php';
 require_once $base_dir . '/includes/class-social-tiktok-music.php';
 require_once $base_dir . '/includes/class-podcast-timeline.php';
 require_once $base_dir . '/includes/class-podcast-translations.php';
@@ -4187,12 +4188,12 @@ null === $sl_saved_sessions ? delete_option( 'presshub_social_worker_sessions' )
 // =============================================================================
 echo "\n--- Suite: Story repeats ---\n";
 
-assert_equals( 36, PressHub_Social_Settings_Storage::get_story_repeat_hours(), 'Story Repeat Window defaults to 36 hours' );
-assert_equals( 2, PressHub_Social_Settings_Storage::get_story_max_per_day(), 'Most Posts per Story a Day defaults to 2' );
+assert_equals( 36, PressHub_Social_Settings_Storage::get_story_repeat_hours(), 'Story Window defaults to 36 hours' );
+assert_equals( 2, PressHub_Social_Settings_Storage::get_story_max_posts(), 'Most Posts per Story per Platform defaults to 2' );
 assert_equals( 168, PressHub_Social_Settings_Storage::sanitize_story_repeat_hours( 500 ), 'The repeat window is clamped to a week' );
 assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_story_repeat_hours( -3 ), 'The repeat window can be 0 (off)' );
-assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_story_max_per_day( 0 ), 'At least one post per story a day' );
-assert_equals( 6, PressHub_Social_Settings_Storage::sanitize_story_max_per_day( 40 ), 'At most six posts per story a day' );
+assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_story_max_posts( 0 ), 'At least one post per story per platform' );
+assert_equals( 6, PressHub_Social_Settings_Storage::sanitize_story_max_posts( 40 ), 'At most six posts per story per platform' );
 assert_true( PressHub_Social_Story_Check::enabled(), 'The story check is on by default' );
 
 // What was told: published, processing and prepared jobs of other posts, inside the window.
@@ -4252,7 +4253,7 @@ $rp_mem_new = [ 'fuel-prices' => [ 'title' => 'Fuel', 'development' => 'd2', 'st
 assert_equals( [], $rp_find( [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => 'New EU figures' ] ], $rp_mem_new ), 'A story whose memory record moved, with its new fact, goes out again' );
 $rp_mem_done = [ 'fuel-prices' => [ 'title' => 'Fuel', 'development' => 'd2', 'status' => 'resolved', 'hash' => 'zzz' ] ];
 assert_true( str_contains( $rp_find( [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => 'x' ] ], $rp_mem_done )[0]['reason'] ?? '', 'resolved' ), 'A told story the memory marks resolved is not told again' );
-assert_true( str_contains( $rp_find( [ [ 'topic' => 'Aykut', 'story_key' => 'aykut-release', 'whats_new' => 'x' ] ], [], 1 )[0]['reason'] ?? '', 'last 24 hours' ), 'A story already told Most Posts per Story a Day times waits, even with news' );
+assert_true( str_contains( $rp_find( [ [ 'topic' => 'Aykut', 'story_key' => 'aykut-release', 'whats_new' => 'x' ] ], [], 1 )[0]['reason'] ?? '', 'inside the story window' ), 'A story already posted Most Posts per Story per Platform times on a platform waits, even with news' );
 $rp_r = $rp_find( [ [ 'topic' => 'A', 'story_key' => 'same' ], [ 'topic' => 'B', 'story_key' => 'same' ] ] );
 assert_true( 1 === count( $rp_r ) && 1 === $rp_r[0]['short'], 'The same story twice in one plan is a repeat' );
 $rp_r = $rp_find( [ [ 'brief' => true, 'stories' => [ [ 'topic' => 'x', 'story_key' => 'brand-new' ], [ 'topic' => 'y', 'story_key' => 'aykut-release' ] ] ] ] );
@@ -4346,14 +4347,201 @@ add_filter( 'presshub_social_briefing_text_video', '__return_true' );
 assert_equals( '', PressHub_Social_Dispatcher::no_video_reason( $rp_text ), 'A filter gives the written brief videos again (a site without podcasts)' );
 remove_filter( 'presshub_social_briefing_text_video', '__return_true' );
 
-// A second trending roundup within 20 hours gets no video.
-$rp_r1 = 956;
+// Trending roundups are not held back by a rule of their own (their post mode is a setting).
 $rp_r2 = 957;
-update_post_meta( $rp_r1, PressHub_Social_Dispatcher::TRENDING_META_KEY, 'day:2026-11-21' );
 update_post_meta( $rp_r2, PressHub_Social_Dispatcher::TRENDING_META_KEY, 'run:abc' );
-assert_equals( '', PressHub_Social_Dispatcher::no_video_reason( $rp_r2 ), 'The first roundup of the day gets its video' );
-$rp_told_job( $rp_r1, 'tiktok', [ 'topic' => 'Τι συζητά η Κύπρος', 'source' => 'article' ] );
-assert_true( str_contains( PressHub_Social_Dispatcher::no_video_reason( $rp_r2 ), 'trending roundup #956' ), 'A second roundup within 20 hours gets no video' );
+assert_equals( '', PressHub_Social_Dispatcher::no_video_reason( $rp_r2 ), 'A trending roundup gets its video' );
+assert_false( PressHub_Social_Post_Gate::single_story( $rp_r2 ), 'A trending roundup is not tagged as one story' );
+assert_false( PressHub_Social_Post_Gate::single_story( $rp_text ), 'A daily brief is not tagged as one story' );
+
+// =============================================================================
+// Suite: Social post gate (2.84.0): every post on every platform passes it
+// =============================================================================
+echo "\n--- Suite: Social post gate ---\n";
+
+PressHub_Social_Queue::reset_memory_store();
+PressHub_Social_Post_Gate::reset_cache();
+update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook' ] );
+update_option( 'presshub_social_engine_twitter', 'automation' );
+update_option( 'presshub_social_engine_facebook', 'automation' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'facebook' => true, 'tiktok' => true ] );
+$pg_link_job = static function ( int $post_id, string $platform, array $story, string $status = 'published', int $ago = 3600 ): int {
+    $id = PressHub_Social_Queue::enqueue( [
+        'post_id'      => $post_id,
+        'platform'     => $platform,
+        'engine'       => 'api',
+        'post_copy'    => 'Copy',
+        'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - $ago ),
+        'status'       => 'pending',
+        'metadata'     => [ PressHub_Social_Post_Gate::STORY_META => $story ],
+    ] );
+    if ( 'published' === $status ) {
+        PressHub_Social_Queue::mark_published( (int) $id, 'x', 'https://example.com/p/' . $id );
+        PressHub_Social_Queue::update_job( (int) $id, [ 'dispatched_at' => gmdate( 'Y-m-d H:i:s', time() - $ago ) ] );
+    }
+    return (int) $id;
+};
+$pg_article = static function ( int $id, string $title ) {
+    $GLOBALS['POSTS_STORE'][ $id ] = [ 'ID' => $id, 'post_title' => $title, 'post_content' => '<p>' . $title . ' κείμενο.</p>', 'post_excerpt' => '', 'post_status' => 'publish' ];
+    $GLOBALS['test_posts'][ $id ]  = new WP_Post( $GLOBALS['POSTS_STORE'][ $id ] );
+    delete_post_meta( $id, PressHub_Social_Post_Gate::POST_META );
+};
+$pg_copy_calls = 0;
+PressHub_Social_AI_Copywriter::set_ai_caller( function () use ( &$pg_copy_calls ) {
+    $pg_copy_calls++;
+    return 'Κείμενο ανάρτησης #news';
+} );
+
+// Nothing posted in the window: no story tag call, the posts go out, tagged by title.
+$pg_tag_calls = [];
+PressHub_Social_Post_Gate::set_ai_caller( function ( string $sys, string $user ) use ( &$pg_tag_calls ) {
+    $pg_tag_calls[] = $user;
+    return json_encode( [ 'story_key' => 'aykut-release', 'whats_new' => '' ] );
+} );
+$pg_article( 970, 'Αφέθηκε ελεύθερος ο Αϊκούτ' );
+$pg_ids = PressHub_Social_Dispatcher::enqueue_for_post( 970, [ 'twitter', 'facebook' ] );
+assert_equals( 2, count( $pg_ids ), 'With nothing posted in the window, the article goes to every platform' );
+assert_equals( [], $pg_tag_calls, 'With nothing posted in the window, no story tag is asked for' );
+$pg_meta = json_decode( (string) PressHub_Social_Queue::get_job( $pg_ids[0] )['metadata'], true );
+assert_equals( 'post-970', $pg_meta['story']['story_key'] ?? '', 'An untagged post is known in the ledger as post-<id>' );
+PressHub_Social_Queue::mark_published( $pg_ids[0], 'x', 'https://example.com/970' );
+PressHub_Social_Queue::mark_published( $pg_ids[1], 'x', 'https://example.com/970f' );
+
+// The same story again with nothing new: stopped before any copy is written, and the
+// queue shows why. The tag is asked for once for both platforms.
+$pg_copy_calls = 0;
+PressHub_Social_Post_Gate::set_ai_caller( function ( string $sys, string $user ) use ( &$pg_tag_calls ) {
+    $pg_tag_calls[] = $user;
+    return json_encode( [ 'story_key' => 'post-970', 'whats_new' => '' ] );
+} );
+$pg_article( 971, 'Ελεύθερος ο Αϊκούτ, ξανά' );
+$pg_ids = PressHub_Social_Dispatcher::enqueue_for_post( 971, [ 'twitter', 'facebook' ] );
+assert_equals( [], $pg_ids, 'A repeated story with nothing new is not queued' );
+assert_equals( 1, count( $pg_tag_calls ), 'The story tag is asked for once per post, not per platform' );
+assert_true( str_contains( $pg_tag_calls[0], '[post-970]' ) && str_contains( $pg_tag_calls[0], 'Ελεύθερος ο Αϊκούτ, ξανά' ), 'The tag prompt has the article and the stories already posted' );
+assert_equals( 0, $pg_copy_calls, 'No AI copy is written for a post the gate stops' );
+$pg_blocked = PressHub_Social_Queue::query_jobs( [ 'post_id' => 971, 'limit' => 10 ] );
+assert_equals( 2, count( $pg_blocked ), 'Each stopped platform shows in the Social Queue' );
+assert_true( 'cancelled' === $pg_blocked[0]['status'] && str_starts_with( (string) $pg_blocked[0]['last_error'], 'Not posted: ' ) && str_contains( (string) $pg_blocked[0]['last_error'], 'no new development' ), 'A stopped post is cancelled with the reason' );
+assert_true( PressHub_Social_Dispatcher::has_publish_jobs( 971 ), 'A stopped post is not queued again on its next save' );
+
+// With a new fact it goes out, leading with it.
+$pg_tag_calls = [];
+PressHub_Social_Post_Gate::set_ai_caller( fn() => json_encode( [ 'story_key' => 'post-970', 'whats_new' => 'Η Λευκωσία ζήτησε εξηγήσεις' ] ) );
+$pg_article( 972, 'Η Λευκωσία ζητά εξηγήσεις για τον Αϊκούτ' );
+$pg_ids = PressHub_Social_Dispatcher::enqueue_for_post( 972, [ 'twitter' ] );
+assert_equals( 1, count( $pg_ids ), 'A told story with a new fact is queued' );
+$pg_meta = json_decode( (string) PressHub_Social_Queue::get_job( $pg_ids[0] )['metadata'], true );
+assert_equals( 'Η Λευκωσία ζήτησε εξηγήσεις', $pg_meta['story']['whats_new'] ?? '', 'The job keeps what was new' );
+PressHub_Social_Queue::mark_published( $pg_ids[0], 'x', 'https://example.com/972' );
+
+// Most Posts per Story per Platform: even with news, a third post of the story waits.
+PressHub_Social_Post_Gate::set_ai_caller( fn() => json_encode( [ 'story_key' => 'post-970', 'whats_new' => 'Νέα δήλωση' ] ) );
+$pg_article( 973, 'Τρίτο άρθρο για τον Αϊκούτ' );
+assert_true( str_contains( PressHub_Social_Post_Gate::check_post( 973, 'twitter' ), 'posted 2 times on twitter' ), 'A story at the most posts on a platform is stopped there' );
+assert_equals( '', PressHub_Social_Post_Gate::check_post( 973, 'instagram' ), 'The limit is per platform' );
+
+// A failed tag call lets the post go (logged), untagged.
+PressHub_Social_Post_Gate::set_ai_caller( fn() => new WP_Error( 'down', 'provider down' ) );
+$pg_article( 974, 'Άλλη είδηση' );
+assert_equals( '', PressHub_Social_Post_Gate::check_post( 974, 'twitter' ), 'A failed story tag never stops a post' );
+assert_equals( 'post-974', PressHub_Social_Post_Gate::tag_post( 974, false )['story_key'] ?? '', 'The post keeps its untagged key' );
+
+// Out: checked again at claim and dispatch against what went out since, with no AI call.
+PressHub_Social_Queue::reset_memory_store();
+$pg_short = PressHub_Social_Queue::enqueue( [ 'post_id' => 980, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'c', 'status' => 'pending',
+    'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => '' ] ] ] );
+assert_equals( '', PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( $pg_short ) ), 'A job whose story did not go out since passes' );
+$pg_other = $rp_told_job( 981, 'tiktok', [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices' ], 'pending', 60 );
+assert_equals( '', PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( $pg_short ) ), 'Only what went out counts at claim, not what waits beside it' );
+PressHub_Social_Queue::mark_published( $pg_other, 'x', 'https://example.com/981' );
+$pg_reason = PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( $pg_short ) );
+assert_true( str_contains( $pg_reason, 'fuel-prices' ), 'A job whose story went out in the meantime is stopped' );
+$pg_brief = PressHub_Social_Queue::enqueue( [ 'post_id' => 982, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'c', 'status' => 'pending',
+    'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'brief' => true, 'topic' => 'Brief', 'stories' => [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices' ], [ 'topic' => 'A', 'story_key' => 'a' ], [ 'topic' => 'B', 'story_key' => 'b' ] ] ] ] ] );
+assert_equals( '', PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( $pg_brief ) ), 'A brief with two fresh stories left still goes out' );
+$pg_bypass = PressHub_Social_Queue::repost_as_new_job( $pg_short );
+assert_equals( '', PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( (int) $pg_bypass ) ), 'A job reposted by hand skips the gate' );
+
+// The worker claim cancels a stopped job with its reason.
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true ] );
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+PressHub_Social_Queue::cancel_job( (int) $pg_bypass );
+PressHub_Social_Queue::cancel_job( $pg_brief );
+$pg_req = new WP_REST_Request( 'POST', '/presshub-social/v1/jobs/claim' );
+$pg_req->set_param( 'sessions', [ 'tiktok' => true ] );
+$pg_claim = PressHub_Social_REST_Controller::handle_claim( $pg_req );
+assert_false( in_array( $pg_short, array_map( fn( $j ) => (int) ( $j['id'] ?? 0 ), $pg_claim['jobs'] ?? [] ), true ), 'The worker never gets a job the gate stops' );
+$pg_job = PressHub_Social_Queue::get_job( $pg_short );
+assert_true( 'cancelled' === $pg_job['status'] && str_starts_with( (string) $pg_job['last_error'], 'Not posted: ' ), 'The claim cancels the stopped job with the reason' );
+
+// API dispatch: stopped before anything is sent.
+$pg_api = $pg_link_job( 983, 'twitter', [ 'story_key' => 'fuel-prices', 'topic' => 'Fuel', 'whats_new' => '' ], 'pending', 0 );
+$pg_link_job( 984, 'twitter', [ 'story_key' => 'fuel-prices', 'topic' => 'Fuel', 'whats_new' => '' ], 'published', 120 );
+$pg_res = PressHub_Social_Dispatcher::dispatch_job( $pg_api );
+assert_true( is_wp_error( $pg_res ) && PressHub_Social_Post_Gate::BLOCKED_CODE === $pg_res->get_error_code(), 'API dispatch stops a repeated post' );
+assert_equals( 'cancelled', PressHub_Social_Queue::get_job( $pg_api )['status'] ?? '', 'The stopped API job is cancelled' );
+
+// More checks plug in through a filter, for every platform.
+$pg_filter = fn( array $checks ) => $checks + [ 'no_weekend' => fn( array $c ) => 'threads' === $c['platform'] ? 'not on this platform today' : '' ];
+add_filter( 'presshub_social_post_gate_checks', $pg_filter );
+assert_equals( 'not on this platform today', PressHub_Social_Post_Gate::check( [ 'platform' => 'threads', 'post_id' => 1 ] ), 'A check added through the filter can stop a post' );
+assert_equals( '', PressHub_Social_Post_Gate::check( [ 'platform' => 'twitter', 'post_id' => 1 ] ), 'A check added through the filter lets others go' );
+remove_filter( 'presshub_social_post_gate_checks', $pg_filter );
+
+// Plan stage: a podcast whose edition's stories are all blocked is not planned at all.
+if ( ! class_exists( 'PressHub_AI_Memory_Store' ) ) {
+    class PressHub_AI_Memory_Store {
+        public static array $rows = [];
+        public static function get_entries_for_range( $from, $to, $scope, $status ): array {
+            return array_values( array_filter( self::$rows, fn( $r ) => $r['period_start'] >= $from && $r['period_start'] <= $to ) );
+        }
+        public static function decode_content( string $json ): array {
+            $d = json_decode( $json, true );
+            return is_array( $d ) ? $d : [];
+        }
+    }
+}
+PressHub_Social_Queue::reset_memory_store();
+PressHub_Social_Post_Gate::reset_cache();
+$pg_day = gmdate( 'Y-m-d' );
+PressHub_AI_Memory_Store::$rows = [ [ 'period_start' => $pg_day, 'edition' => 'noon', 'content_json' => json_encode( [ 'stories' => [
+    [ 'key' => 'fuel-prices', 'title' => 'Fuel', 'development' => 'Same', 'status' => 'resolved' ],
+    [ 'key' => 'aykut-release', 'title' => 'Aykut', 'development' => 'Same', 'status' => 'resolved' ],
+] ] ) ] ];
+$pg_pod = 985;
+$GLOBALS['mock_posts'][ $pg_pod ] = (object) [ 'ID' => $pg_pod, 'post_title' => 'Noon podcast', 'post_content' => 'Body', 'post_status' => 'publish', 'post_type' => 'post' ];
+update_post_meta( $pg_pod, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $pg_pod, '_presshub_briefing_date', $pg_day );
+update_post_meta( $pg_pod, '_presshub_briefing_edition', 'noon' );
+update_post_meta( $pg_pod, '_presshub_podcast_script', '[SPEAKER_1]: Οι ειδήσεις.' );
+$rp_told_job( 986, 'tiktok', [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices' ] );
+$rp_told_job( 986, 'tiktok', [ 'topic' => 'Aykut', 'story_key' => 'aykut-release' ] );
+$pg_plan_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$pg_plan_calls ) {
+    $pg_plan_calls++;
+    return '{}';
+} );
+delete_post_meta( $pg_pod, PressHub_Social_TikTok_Shorts::PLAN_META );
+$pg_plan = PressHub_Social_TikTok_Shorts::get_plan( $pg_pod, 1, true, [ 'tiktok' ] );
+assert_true( is_wp_error( $pg_plan ) && PressHub_Social_Post_Gate::BLOCKED_CODE === $pg_plan->get_error_code(), 'An edition with nothing that may go out again is not planned' );
+assert_equals( 0, $pg_plan_calls, 'No plan AI call is made for it' );
+PressHub_AI_Memory_Store::$rows[0]['content_json'] = json_encode( [ 'stories' => [
+    [ 'key' => 'fuel-prices', 'title' => 'Fuel', 'development' => 'Same', 'status' => 'resolved' ],
+    [ 'key' => 'new-story', 'title' => 'New', 'development' => 'First time', 'status' => 'new' ],
+] ] );
+PressHub_Social_Post_Gate::reset_cache();
+assert_equals( '', PressHub_Social_Post_Gate::edition_blocked( $pg_pod, PressHub_Social_Story_Check::told( $pg_pod, [ 'tiktok' ] ), PressHub_Social_Story_Check::memory_stories( $pg_day ) ), 'An edition with one story that may go out is planned' );
+PressHub_AI_Memory_Store::$rows = [];
+PressHub_Social_Post_Gate::reset_cache();
+
+PressHub_Social_Post_Gate::set_ai_caller( null );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+foreach ( [ 970, 971, 972, 973, 974 ] as $pg_id ) {
+    unset( $GLOBALS['POSTS_STORE'][ $pg_id ], $GLOBALS['test_posts'][ $pg_id ] );
+}
+delete_option( 'presshub_social_engine_twitter' );
+delete_option( 'presshub_social_engine_facebook' );
 
 PressHub_Social_TikTok_Shorts::set_ai_caller( null );
 PressHub_Social_TikTok_Shorts::set_synthesizer( null );

@@ -243,6 +243,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 |---|---|---|---|---|---|
 | `presshub_social_auto_publish_enabled` | Auto-Publish on Post | boolean |  | social / general | checkbox |
 | `presshub_social_enabled_platforms` | Active Platforms | array |  | social / general | checkbox |
+| `presshub_social_story_repeat_hours` | Story Window | integer | hours | social / general |  |
+| `presshub_social_story_max_posts` | Most Posts per Story per Platform | integer | posts | social / general |  |
 | `presshub_social_copy_mode` | Copy Generation Mode | string |  | social / general |  |
 | `presshub_social_engine_twitter` | Twitter Engine | string |  | social / general |  |
 | `presshub_social_engine_facebook` | Facebook Engine | string |  | social / general |  |
@@ -282,8 +284,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_tiktok_shorts_count` | Shorts per Podcast | integer | shorts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_shorts_format` | Podcast Shorts Format | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
 | `presshub_social_tiktok_brief_max_words` | Daily Brief Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
-| `presshub_social_story_repeat_hours` | Story Repeat Window | integer | hours | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
-| `presshub_social_story_max_per_day` | Most Posts per Story a Day | integer | posts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_slides_words` | Words per Photo Slide | integer | words | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_slides_max` | Most Photo Slides per Post | integer | slides | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_shorts_spacing_minutes` | Time between shorts (min) | integer | min | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on, was: Time Between Shorts |
@@ -448,6 +448,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_legacy_admin_redirects` | code only |
 | `presshub_settings_registry` | code only |
 | `presshub_social_briefing_text_video` | code only |
+| `presshub_social_post_gate_checks` | code only |
 | `presshub_social_post_image_aspect` | code only |
 | `presshub_social_settings_cap` | code only |
 | `presshub_social_shorts_platform_stagger_minutes` | code only |
