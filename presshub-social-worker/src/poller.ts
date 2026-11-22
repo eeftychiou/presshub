@@ -13,6 +13,7 @@ import { TrendingClient } from './trending/trending-client';
 import { Mp3Converter } from './media/mp3-converter';
 import { uploadToYouTube, YouTubeUploadMeta, YouTubeUploadOptions, YouTubeUploadResult } from './youtube/uploader';
 import { findUpload, recordUpload } from './youtube/upload-log';
+import { ShortRenderCache, shortRenderKey, SHORT_CACHE_DIRNAME, DEFAULT_SHORT_CACHE_TTL_MS } from './media/short-cache';
 import { uploadFacebookReel, FacebookReelOptions, FacebookReelResult } from './facebook/reels-uploader';
 
 export interface ClaimedJob {
@@ -98,6 +99,11 @@ export interface PollerOptions {
   generateCardFn?: (params: any) => Promise<CardResult>;
   generateVideoFn?: (params: any) => Promise<VideoResult>;
   generateShortFn?: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
+  /**
+   * How long a rendered short is kept for the story's other platforms (ms, default 24 h);
+   * 0 renders every platform's copy again and removes it after posting.
+   */
+  shortCacheTtlMs?: number;
   generateEpisodeFn?: (params: GenerateEpisodeOptions) => Promise<EpisodeVideoResult>;
   /** Renders the slides of a TikTok photo post (tests inject a fake). */
   generateSlidesFn?: (params: GeneratePhotoSlidesOptions) => Promise<PhotoSlidesResult>;
@@ -145,6 +151,8 @@ export class PressHubPoller {
   private readonly generateCardFn: (params: any) => Promise<CardResult>;
   private readonly generateVideoFn: (params: any) => Promise<VideoResult>;
   private readonly generateShortFn: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
+  private readonly shortCacheTtlMs: number;
+  private shortCacheInstance?: ShortRenderCache;
   private readonly generateEpisodeFn: (params: GenerateEpisodeOptions) => Promise<EpisodeVideoResult>;
   private readonly generateSlidesFn: (params: GeneratePhotoSlidesOptions) => Promise<PhotoSlidesResult>;
   private readonly youtubeUploadFn: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
@@ -181,6 +189,7 @@ export class PressHubPoller {
     this.generateCardFn = options.generateCardFn || generateCard;
     this.generateVideoFn = options.generateVideoFn || generateVideo;
     this.generateShortFn = options.generateShortFn || generateShortVideo;
+    this.shortCacheTtlMs = typeof options.shortCacheTtlMs === 'number' ? Math.max(0, options.shortCacheTtlMs) : DEFAULT_SHORT_CACHE_TTL_MS;
     this.generateEpisodeFn = options.generateEpisodeFn || generateEpisodeVideo;
     this.generateSlidesFn = options.generateSlidesFn || generatePhotoSlides;
     this.youtubeUploadFn = options.youtubeUploadFn || uploadToYouTube;
@@ -392,6 +401,15 @@ export class PressHubPoller {
    * Executes a single poll cycle: claims jobs from WordPress, executes them,
    * and reports results back to WordPress.
    */
+  /** The render cache of shorts, under the output folder. */
+  private shortCache(): ShortRenderCache {
+    if (!this.shortCacheInstance) {
+      const base = this.outputDir ? path.resolve(this.outputDir) : path.resolve(process.cwd(), 'output');
+      this.shortCacheInstance = new ShortRenderCache(path.join(base, SHORT_CACHE_DIRNAME), this.shortCacheTtlMs);
+    }
+    return this.shortCacheInstance;
+  }
+
   public async pollOnce(): Promise<PollStats> {
     if (this.isPolling) {
       return { claimed: 0, succeeded: 0, failed: 0 };
@@ -539,6 +557,13 @@ export class PressHubPoller {
           }
 
           let mediaPath: string | undefined;
+          // True when mediaPath is a cached short that the story's other platforms reuse.
+          let mediaCached = false;
+          const dropMedia = () => {
+            if (mediaPath && !mediaCached) {
+              try { fs.unlinkSync(mediaPath); } catch {}
+            }
+          };
           let episodeNote: string | undefined;
           let mediaPaths: string[] | undefined;
           let downloadedImages: string[] = [];
@@ -618,7 +643,7 @@ export class PressHubPoller {
               'Poller',
               `${jobTag} Rendering ${platformLabel(platform)} short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns, ${short.music_url ? `${short.mood || 'music'} music` : 'no music'})...`
             );
-            const video = await this.generateShortFn({
+            const shortOptions: GenerateShortOptions = {
               audioUrl,
               imageUrls: images,
               hook: String(job.video_title || short.hook || title),
@@ -628,17 +653,39 @@ export class PressHubPoller {
               segments: Array.isArray(short.segments) ? short.segments : [],
               musicUrl: typeof short.music_url === 'string' && short.music_url !== '' ? short.music_url : undefined,
               musicVolume: typeof short.music_volume === 'number' ? short.music_volume : undefined,
-              ...(platform === 'youtube' ? { endCardLine: siteEndCardLine(this.wpUrl) } : {}),
+              // One end line for every platform: the site's name, true everywhere,
+              // where "link in bio" was true only on TikTok and Instagram.
+              endCardLine: siteEndCardLine(this.wpUrl),
               outputDir: this.outputDir
-            });
+            };
+            // A story is rendered once and reused by its other platforms; a test
+            // render is always made fresh, since it is moved away for review.
+            const cache = job.test_render ? null : this.shortCache();
+            const renderKey = cache ? shortRenderKey(shortOptions) : '';
+            let video: { filePath: string; duration: number } | null = cache ? cache.get(renderKey) : null;
+            if (video) {
+              mediaCached = true;
+              WorkerLogger.info('Poller', `${jobTag} Reusing this story's render from another platform (${renderKey}).`);
+            } else {
+              if (cache) {
+                const pruned = cache.prune();
+                if (pruned > 0) WorkerLogger.info('Poller', `Removed ${pruned} cached short render(s) older than a day.`);
+              }
+              const fresh = await this.generateShortFn(shortOptions);
+              if (cache) {
+                const stored = cache.put(renderKey, fresh);
+                video = stored;
+                mediaCached = stored.cached;
+              } else {
+                video = fresh;
+              }
+            }
             mediaPath = video?.filePath;
             shortRendering = false;
             WorkerLogger.info('Poller', `${jobTag} Short rendered at: ${mediaPath}`);
             if (platform === 'youtube' && !job.test_render && Number(video?.duration) > YOUTUBE_SHORT_MAX_SECONDS) {
               // Longer than 3 minutes, YouTube files it as a normal video, not a Short.
-              if (mediaPath) {
-                try { fs.unlinkSync(mediaPath); } catch {}
-              }
+              dropMedia();
               throw new Error(`The short is ${Math.round(Number(video.duration))}s long, over YouTube's ${YOUTUBE_SHORT_MAX_SECONDS}s limit for Shorts. Lower the words per short or raise the voice speed.`);
             }
 
@@ -777,9 +824,7 @@ export class PressHubPoller {
                 onPublished: (videoId, url) => remember(videoId, url)
               });
             } finally {
-              if (mediaPath) {
-                try { fs.unlinkSync(mediaPath); } catch {}
-              }
+              dropMedia();
             }
             if (reel.success && reel.videoId) {
               await this.reportReelPublished(job, reel.videoId, reel.url || `https://www.facebook.com/reel/${reel.videoId}`, reel.note);
@@ -834,9 +879,7 @@ export class PressHubPoller {
                 onUploaded: (videoId, url) => remember(videoId, url)
               });
             } finally {
-              if (mediaPath) {
-                try { fs.unlinkSync(mediaPath); } catch {}
-              }
+              dropMedia();
             }
             if (upload.success && upload.videoId) {
               // Remember the video before telling WordPress, so a lost report never
@@ -885,8 +928,8 @@ export class PressHubPoller {
             }
             // A rendered short is made for this one post: remove it once posted (or failed),
             // as the YouTube upload does, so each platform's copy does not pile up in output/.
-            if (job.tiktok_short && mediaPath) {
-              try { fs.unlinkSync(mediaPath); } catch {}
+            if (job.tiktok_short) {
+              dropMedia();
             }
           }
 

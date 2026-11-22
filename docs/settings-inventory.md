@@ -447,6 +447,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_settings_registry` | code only |
 | `presshub_social_post_image_aspect` | code only |
 | `presshub_social_settings_cap` | code only |
+| `presshub_social_shorts_platform_stagger_minutes` | code only |
 | `presshub_social_tiktok_shorts_cancel_superseded` | code only |
 | `presshub_social_trending_max_per_account` | `presshub_ai_social_trending_max_per_account` |
 | `presshub_social_trending_share_after_hour` | `presshub_ai_social_trending_share_after_hour` |

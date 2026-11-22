@@ -153,6 +153,8 @@ describe('Poller with Facebook Reels through the API', () => {
     };
     const rendered = videoFile(2000);
     const poller = new PressHubPoller({
+      // These tests check one job's render and its removal, not the render cache.
+      shortCacheTtlMs: 0,
       wpUrl: 'https://presshub.test',
       workerSecret: 'S',
       fetchFn,

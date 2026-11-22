@@ -623,7 +623,7 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       const stats = await poller.pollOnce();
       expect(stats.succeeded).toBe(1);
       expect(mockGenerateShort).toHaveBeenCalledWith(expect.objectContaining({ hook: 'Hook', badge: 'ΑΠΟΨΗ' }));
-      expect(mockGenerateShort.mock.calls[0][0].endCardLine).toBeUndefined();
+      expect(mockGenerateShort.mock.calls[0][0].endCardLine).toBe('Ολόκληρη η ενημέρωση στο presshub.cy');
       expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ platform: 'facebook', mediaPath: '/tmp/fb-reel.mp4', copy: 'Facebook Reel caption #κύπρος' }));
       expect(mockPoster.mock.calls[0][0].mediaPaths).toBeUndefined();
     });
