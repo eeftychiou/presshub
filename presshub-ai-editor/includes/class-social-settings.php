@@ -796,6 +796,38 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_story_repeat_hours',
+            __( 'Story Repeat Window', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_story_repeat_hours',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_STORY_REPEAT_HOURS,
+                'min'     => 0,
+                'max'     => 168,
+                'unit'    => __( 'hours', 'presshub-social-autopost' ),
+                'desc'    => __( 'How far back the shorts, the daily brief video and the photo slides look for stories already posted on the same platform. A story told in this time goes out again only when the editorial memory shows a new development, and then it leads with what is new. 0 turns the check off.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_story_max_per_day',
+            __( 'Most Posts per Story a Day', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_story_max_per_day',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_STORY_MAX_PER_DAY,
+                'min'     => 1,
+                'max'     => 6,
+                'unit'    => __( 'posts', 'presshub-social-autopost' ),
+                'desc'    => __( 'How many times one story may go out on one platform in 24 hours, even when it keeps developing. Used while Story Repeat Window is above 0.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
             'presshub_social_tiktok_shorts_spacing_minutes',
             __( 'Time Between Shorts', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],

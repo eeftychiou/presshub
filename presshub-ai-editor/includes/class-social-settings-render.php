@@ -687,7 +687,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_tiktok_slides_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_tiktok_slides_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Also post each short (podcast stories and, with Article Shorts on, articles) to TikTok as a photo post: the hook and the script as text over the story images, with no voice, and a TikTok sound found for the story\'s mood (Sound Searches under Prompts). Each photo post goes out halfway between two shorts. The video shorts are not changed. Needs TikTok on the automation engine, the worker in Pull Mode and worker 1.10.0 or later.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Post a story (a podcast story in one-short-per-story format or, with Article Shorts on, an article) to TikTok as a photo post when TikTok gets no video of it: the hook and the script as text over the story images, with no voice, and a TikTok sound found for the story\'s mood (Sound Searches under Prompts). With TikTok Shorts on, TikTok gets the videos and no photo posts, so a story is not posted twice. Needs TikTok on the automation engine, the worker in Pull Mode and worker 1.10.0 or later.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }
@@ -759,7 +759,7 @@ class PressHub_Social_Settings_Render {
                 <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current, $value ); ?>><?php echo esc_html( $labels[ $value ] ?? $value ); ?></option>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo esc_html__( 'What each podcast becomes on the shorts platforms. Daily brief: one video of about two minutes with the day\'s top stories, each with its own image, and no photo slides. One short per story: Shorts per Podcast videos of 30-60 seconds, one story each, each with photo slides when they are on. Articles are not affected.', 'presshub-social-autopost' ); ?> <?php echo esc_html__( 'Default: Daily brief.', 'presshub-social-autopost' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'What each podcast becomes on the shorts platforms. Daily brief: one video of about two minutes with the day\'s top stories, each with its own image, and no photo slides. One short per story: Shorts per Podcast videos of 30-60 seconds, one story each. Articles are not affected.', 'presshub-social-autopost' ); ?> <?php echo esc_html__( 'Default: Daily brief.', 'presshub-social-autopost' ); ?></p>
         <?php
     }
 

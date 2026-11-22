@@ -327,7 +327,9 @@ class PressHub_Social_Queue {
     /**
      * Query jobs with flexible filters.
      *
-     * @param array $filters Supported: status, platform, post_id, limit, offset.
+     * @param array $filters Supported: status, statuses (a list of statuses), platform,
+     *                       post_id, since (a UTC 'Y-m-d H:i:s': jobs dispatched, or not yet
+     *                       dispatched and scheduled, at or after it), limit, offset.
      * @return array<int, array>
      */
     public static function query_jobs( array $filters = [] ): array {
@@ -345,6 +347,14 @@ class PressHub_Social_Queue {
                 $args[]  = $filters['status'];
             }
 
+            if ( ! empty( $filters['statuses'] ) && is_array( $filters['statuses'] ) ) {
+                $statuses = array_values( array_intersect( $filters['statuses'], self::VALID_STATUSES ) );
+                if ( ! empty( $statuses ) ) {
+                    $where[] = 'status IN (' . implode( ',', array_fill( 0, count( $statuses ), '%s' ) ) . ')';
+                    $args    = array_merge( $args, $statuses );
+                }
+            }
+
             if ( ! empty( $filters['platform'] ) && in_array( $filters['platform'], self::VALID_PLATFORMS, true ) ) {
                 $where[] = 'platform = %s';
                 $args[]  = $filters['platform'];
@@ -353,6 +363,11 @@ class PressHub_Social_Queue {
             if ( ! empty( $filters['post_id'] ) ) {
                 $where[] = 'post_id = %d';
                 $args[]  = (int) $filters['post_id'];
+            }
+
+            if ( ! empty( $filters['since'] ) && is_string( $filters['since'] ) ) {
+                $where[] = 'COALESCE(dispatched_at, scheduled_at) >= %s';
+                $args[]  = $filters['since'];
             }
 
             $where_sql = implode( ' AND ', $where );
@@ -368,11 +383,17 @@ class PressHub_Social_Queue {
         if ( ! empty( $filters['status'] ) ) {
             $items = array_filter( $items, fn( $j ) => $j['status'] === $filters['status'] );
         }
+        if ( ! empty( $filters['statuses'] ) && is_array( $filters['statuses'] ) ) {
+            $items = array_filter( $items, fn( $j ) => in_array( $j['status'] ?? '', $filters['statuses'], true ) );
+        }
         if ( ! empty( $filters['platform'] ) ) {
             $items = array_filter( $items, fn( $j ) => $j['platform'] === $filters['platform'] );
         }
         if ( ! empty( $filters['post_id'] ) ) {
             $items = array_filter( $items, fn( $j ) => (int) $j['post_id'] === (int) $filters['post_id'] );
+        }
+        if ( ! empty( $filters['since'] ) && is_string( $filters['since'] ) ) {
+            $items = array_filter( $items, fn( $j ) => (string) ( ( $j['dispatched_at'] ?? '' ) ?: ( $j['scheduled_at'] ?? '' ) ) >= $filters['since'] );
         }
 
         usort( $items, fn( $a, $b ) => $b['id'] <=> $a['id'] );

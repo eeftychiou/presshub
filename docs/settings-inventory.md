@@ -15,10 +15,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
 | Daily Briefing (`daily-briefing`) | 81 | 0 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 17 | 0 | 0 |
-| Social publishing (`social-publishing`) | 77 | 0 | 0 |
+| Social publishing (`social-publishing`) | 79 | 0 | 0 |
 | Social listening (`social-listening`) | 35 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **317** | | |
+| **Total** | **319** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 34 option(s); both lists are at the end.
 
@@ -237,7 +237,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_fact_checks_budgets` | Fact check context per AI task (characters) | array | characters | ai / knowledge |  |
 
-## Social publishing (`social-publishing`, 77)
+## Social publishing (`social-publishing`, 79)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -282,6 +282,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_tiktok_shorts_count` | Shorts per Podcast | integer | shorts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_shorts_format` | Podcast Shorts Format | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
 | `presshub_social_tiktok_brief_max_words` | Daily Brief Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_story_repeat_hours` | Story Repeat Window | integer | hours | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
+| `presshub_social_story_max_per_day` | Most Posts per Story a Day | integer | posts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_slides_words` | Words per Photo Slide | integer | words | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_slides_max` | Most Photo Slides per Post | integer | slides | social / shorts | needs `presshub_social_tiktok_slides_enabled` on |
 | `presshub_social_tiktok_shorts_spacing_minutes` | Time between shorts (min) | integer | min | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_facebook_shorts_enabled` or `presshub_social_youtube_shorts_enabled` or `presshub_social_tiktok_slides_enabled` on, was: Time Between Shorts |
@@ -445,6 +447,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_url_fetcher_headers` | code only |
 | `presshub_legacy_admin_redirects` | code only |
 | `presshub_settings_registry` | code only |
+| `presshub_social_briefing_text_video` | code only |
 | `presshub_social_post_image_aspect` | code only |
 | `presshub_social_settings_cap` | code only |
 | `presshub_social_shorts_platform_stagger_minutes` | code only |

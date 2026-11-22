@@ -59,9 +59,10 @@
  * story schedule (the platforms a few minutes apart), and the music is picked per story
  * (story_seed()), so the worker renders each story once and posts that file everywhere.
  *
- * TikTok photo slides (#333, `presshub_social_tiktok_slides_enabled`, default on): each
- * short also becomes a TikTok photo post (`metadata.tiktok_short.format = slides`, queued by
- * build_slides_jobs() halfway between two shorts). It shares the short's plan and story
+ * TikTok photo slides (#333, `presshub_social_tiktok_slides_enabled`, default on): a story
+ * becomes a TikTok photo post (`metadata.tiktok_short.format = slides`, queued by
+ * build_slides_jobs()) when TikTok gets no video short of it (2.84.0: in place of the classic
+ * TikTok post; before, every short also went out as slides). It shares the short's plan and story
  * images (no extra AI call) and has no voice: the claim hands the worker `tiktok_slides`
  * with the hook, the script cut into slide texts (slide_texts()), the images and a sound
  * search for the story's mood (sound_query()). Only a worker that announces the
@@ -76,6 +77,11 @@
  * claim time brief_image_sequence() orders the images to follow the voice: each ~4 second
  * image slot of the worker shows the image of the story being read. A brief gets no photo
  * slides. Articles are not affected. Format "stories" keeps one short per story.
+ *
+ * Story repeats (2.84.0, PressHub_Social_Story_Check): get_plan() shows the AI the stories
+ * already posted on the post's platforms and the editorial memory's stories, every plan
+ * story carries `story_key` and `whats_new`, and a story that repeats what was told without a
+ * change is asked for again, then left out (see that class).
  *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
@@ -114,6 +120,9 @@ class PressHub_Social_TikTok_Shorts {
 
     /** Capability a worker announces at claim time when it can post photo slides. */
     public const SLIDES_CAPABILITY = 'tiktok_photo_slides';
+
+    /** Extra stories a podcast's plan asks for when stories were already told, to replace repeats. */
+    const SPARE_STORIES = 2;
 
     /** Most stories kept from a daily brief plan (the prompt asks for 6 to 8). */
     public const BRIEF_MAX_STORIES = 10;
@@ -567,16 +576,18 @@ class PressHub_Social_TikTok_Shorts {
      * @param int         $start_time Unix time of the post's first TikTok short (or TikTok post).
      * @param string|null $copy       Post text of an article's slides (its usual TikTok caption);
      *                                null or '' uses the placeholder, filled with the plan's caption.
+     * @param bool        $between    Halfway between two shorts (true), or on each story's own
+     *                                slot when TikTok gets no shorts (false).
      * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().
      */
-    public static function build_slides_jobs( int $post_id, int $start_time, ?string $copy = null ): array {
+    public static function build_slides_jobs( int $post_id, int $start_time, ?string $copy = null, bool $between = true ): array {
         $article = self::SOURCE_ARTICLE === self::source_type( $post_id );
         if ( ! $article && PressHub_Social_Settings_Storage::get_tiktok_brief_enabled() ) {
             return []; // The daily brief gets no photo slides.
         }
         $count   = $article ? 1 : PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
         $spacing = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
-        $offset  = (int) floor( $spacing / 2 );
+        $offset  = $between ? (int) floor( $spacing / 2 ) : 0;
         $jobs    = [];
         for ( $i = 0; $i < $count; $i++ ) {
             $meta = [ 'index' => $i, 'count' => $count, 'format' => self::FORMAT_SLIDES ];
@@ -908,7 +919,8 @@ class PressHub_Social_TikTok_Shorts {
             @set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- background cron; TTS is paced by the shared rate limiter.
         }
 
-        $plan = self::get_plan( $post_id, $count, $brief );
+        $platforms = array_values( array_unique( array_map( fn( $j ) => (string) ( $j['platform'] ?? '' ), $all ) ) );
+        $plan      = self::get_plan( $post_id, $count, $brief, $platforms );
         if ( is_wp_error( $plan ) ) {
             self::handle_failures( $post_id, array_map( fn( $j ) => [ $j, $plan ], $pending ) );
             return;
@@ -947,7 +959,14 @@ class PressHub_Social_TikTok_Shorts {
 
             if ( ! is_array( $short ) ) {
                 PressHub_Social_Queue::cancel_job( $job_id );
-                PressHub_Social_Logger::warning( sprintf( 'TikTok short job #%d cancelled: the plan for post #%d has %d stories, so story %d does not exist.', $job_id, $post_id, count( $plan['shorts'] ), $index + 1 ) );
+                if ( ! empty( $plan['skipped'] ) ) {
+                    // Story repeats: the plan left this story out because it was already told.
+                    $note = PressHub_Social_Story_Check::describe( (array) $plan['skipped'] );
+                    PressHub_Social_Queue::update_job( $job_id, [ 'last_error' => 'Not posted: story already posted. ' . $note ] );
+                    PressHub_Social_Logger::info( sprintf( 'TikTok short job #%d (%s) cancelled: the plan for post #%d has %d stories after leaving out stories already posted (%s).', $job_id, (string) ( $job['platform'] ?? '' ), $post_id, count( $plan['shorts'] ), $note ) );
+                } else {
+                    PressHub_Social_Logger::warning( sprintf( 'TikTok short job #%d cancelled: the plan for post #%d has %d stories, so story %d does not exist.', $job_id, $post_id, count( $plan['shorts'] ), $index + 1 ) );
+                }
                 continue;
             }
 
@@ -992,6 +1011,11 @@ class PressHub_Social_TikTok_Shorts {
                 $prepared['brief']   = true;
                 $prepared['stories'] = $short['stories'];
                 $prepared['words']   = (int) $short['words'];
+            } else {
+                // Story repeats: what this post tells, for the next plans to compare with.
+                $prepared['story_key'] = (string) ( $short['story_key'] ?? '' );
+                $prepared['whats_new'] = (string) ( $short['whats_new'] ?? '' );
+                $prepared['dev_hash']  = (string) ( $short['dev_hash'] ?? '' );
             }
             $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], $prepared );
             PressHub_Social_Queue::update_job( $job_id, [
@@ -1154,9 +1178,12 @@ class PressHub_Social_TikTok_Shorts {
      *
      * @param bool $brief Write the podcast's daily brief (one multi-story video) instead
      *                    of one short per story. Ignored for an article.
-     * @return array{hash:string,shorts:array}|WP_Error
+     * @param string[] $platforms Platforms the post's shorts go to, for the story repeat
+     *                           check (PressHub_Social_Story_Check); empty = all of them.
+     * @return array{hash:string,shorts:array,skipped?:array}|WP_Error `skipped` lists the
+     *         stories dropped as repeats (each with its reason).
      */
-    public static function get_plan( int $post_id, int $count, bool $brief = false ) {
+    public static function get_plan( int $post_id, int $count, bool $brief = false, array $platforms = [] ) {
         $source = self::source_type( $post_id );
         if ( '' === $source ) {
             return new WP_Error( 'tiktok_short_no_script', sprintf( 'post #%d is neither a podcast post with a script nor an article with text.', $post_id ) );
@@ -1207,9 +1234,35 @@ class PressHub_Social_TikTok_Shorts {
             return $stored;
         }
 
+        // Story repeats: the stories other posts already told on these platforms, and the
+        // editorial memory's stories. With any told, a podcast's plan asks for spare stories
+        // so a repeat can be replaced by the next one.
+        $check  = class_exists( 'PressHub_Social_Story_Check' ) && PressHub_Social_Story_Check::enabled();
+        $told   = [];
+        $memory = [];
+        $block  = '';
+        if ( $check ) {
+            $told   = PressHub_Social_Story_Check::told( $post_id, $platforms );
+            $memory = PressHub_Social_Story_Check::memory_stories( self::plan_date( $post_id ) );
+            try {
+                $block = PressHub_Social_Story_Check::prompt_block(
+                    $told,
+                    $memory,
+                    PressHub_Social_Settings_Storage::get_story_repeat_hours(),
+                    $brief ? 'σε κάθε story του brief' : ( $article ? 'στο short' : 'σε κάθε short' )
+                );
+            } catch ( \Throwable $e ) {
+                PressHub_Social_Logger::warning( sprintf( 'Story repeats: the prompt block for post #%d could not be built (%s); the plan is checked in code only.', $post_id, $e->getMessage() ) );
+            }
+        }
+        $ask_count = ( $check && ! $article && ! $brief && ! empty( $told ) ) ? $count + self::SPARE_STORIES : $count;
+
         $user_prompt = $article
-            ? self::build_prompt( $post_id, $prompt, '', $count, $max_words, $images, $script )
-            : self::build_prompt( $post_id, $prompt, $script, $count, $max_words, $images );
+            ? self::build_prompt( $post_id, $prompt, '', $ask_count, $max_words, $images, $script )
+            : self::build_prompt( $post_id, $prompt, $script, $ask_count, $max_words, $images );
+        if ( '' !== $block ) {
+            $user_prompt .= "\n\n" . $block;
+        }
         $sys_prompt  = PressHub_Social_Settings_Storage::get_system_prompt();
 
         if ( $brief ) {
@@ -1223,6 +1276,7 @@ class PressHub_Social_TikTok_Shorts {
         // A response the plan cannot use (broken JSON, a script over the cap, an empty
         // answer) is asked for once more, with the reason, before the preparation fails.
         $shorts     = null;
+        $skipped    = [];
         $record_ids = [];
         $prompt_now = $user_prompt;
         // Every attempt records the article text cut; once the loop is over
@@ -1244,12 +1298,24 @@ class PressHub_Social_TikTok_Shorts {
                 if ( is_wp_error( $raw ) ) {
                     $shorts = $raw;
                 } else {
-                    $shorts = $brief ? self::parse_brief( (string) $raw, $max_words, $images ) : self::parse_plan( (string) $raw, $count, $max_words, $images );
+                    $shorts = $brief ? self::parse_brief( (string) $raw, $max_words, $images ) : self::parse_plan( (string) $raw, $ask_count, $max_words, $images );
                 }
                 if ( ! is_wp_error( $shorts ) ) {
                     if ( ! empty( self::$last_repairs ) ) {
                         $note = PressHub_Social_AI_Json::note_repair( self::$last_record_id, self::$last_repairs );
                         PressHub_Social_Logger::warning( sprintf( 'TikTok shorts plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
+                    }
+                    if ( $check ) {
+                        $shorts  = PressHub_Social_Story_Check::annotate( $shorts, $memory );
+                        $repeats = PressHub_Social_Story_Check::find_repeats( $shorts, $told, $memory );
+                        if ( ! empty( $repeats ) && $attempt < self::PLAN_ATTEMPTS ) {
+                            PressHub_Social_Logger::info( sprintf( 'TikTok shorts plan for post #%d repeats stories already posted (attempt %d of %d): %s Asking the AI again.', $post_id, $attempt, self::PLAN_ATTEMPTS, PressHub_Social_Story_Check::describe( $repeats ) ), [ 'record_ids' => $record_ids ] );
+                            $prompt_now = PressHub_Social_Story_Check::retry_prompt( $user_prompt, $repeats, $article );
+                            continue;
+                        }
+                        if ( ! empty( $repeats ) ) {
+                            [ $shorts, $skipped ] = self::drop_repeats( $post_id, $shorts, $repeats, (string) $raw, $brief, $max_words, $images, $memory );
+                        }
                     }
                     break;
                 }
@@ -1277,14 +1343,54 @@ class PressHub_Social_TikTok_Shorts {
         if ( is_wp_error( $shorts ) ) {
             return new WP_Error( $shorts->get_error_code(), $shorts->get_error_message() . PressHub_Social_AI_Json::records_suffix( $record_ids ) );
         }
+        // Spare stories asked for in case of repeats are not posted.
+        $shorts = array_slice( $shorts, 0, max( 1, $count ) );
 
         $plan = [
             'hash'         => $hash,
             'generated_at' => gmdate( 'c' ),
             'shorts'       => $shorts,
         ];
+        if ( ! empty( $skipped ) ) {
+            $plan['skipped'] = $skipped;
+        }
         update_post_meta( $post_id, self::PLAN_META, $plan );
         return $plan;
+    }
+
+    /**
+     * The plan without the stories PressHub_Social_Story_Check found to be repeats after the
+     * AI was asked once more: a podcast's or an article's repeated shorts are left out (their
+     * jobs are then cancelled), a brief's repeated story parts are cut from its script. A
+     * brief that would keep fewer than two stories is kept whole, with a WARNING.
+     *
+     * @return array{0: array, 1: array} The plan's shorts, and the skipped stories.
+     */
+    private static function drop_repeats( int $post_id, array $shorts, array $repeats, string $raw, bool $brief, int $max_words, int $images, array $memory ): array {
+        if ( $brief ) {
+            $trimmed = PressHub_Social_Story_Check::drop_brief_stories( $raw, $repeats );
+            $parsed  = null === $trimmed ? null : self::parse_brief( $trimmed, $max_words, $images );
+            if ( null === $parsed || is_wp_error( $parsed ) ) {
+                PressHub_Social_Logger::warning( sprintf( 'Daily brief of post #%d keeps stories already posted, because cutting them would leave fewer than two: %s', $post_id, PressHub_Social_Story_Check::describe( $repeats ) ) );
+                return [ $shorts, [] ];
+            }
+            $shorts = PressHub_Social_Story_Check::annotate( $parsed, $memory );
+        } else {
+            $shorts = PressHub_Social_Story_Check::drop_shorts( $shorts, $repeats );
+        }
+        foreach ( $repeats as $r ) {
+            PressHub_Social_Logger::info( sprintf( 'Story "%s" left out of the %s of post #%d: %s.', '' !== $r['topic'] ? $r['topic'] : $r['key'], $brief ? 'daily brief' : 'shorts', $post_id, $r['reason'] ) );
+        }
+        return [ $shorts, array_map( fn( $r ) => [ 'key' => $r['key'], 'topic' => $r['topic'], 'reason' => $r['reason'] ], $repeats ) ];
+    }
+
+    /** The day a post's stories belong to: its briefing date, else its publish date, else today. */
+    public static function plan_date( int $post_id ): string {
+        $date = function_exists( 'get_post_meta' ) ? (string) get_post_meta( $post_id, '_presshub_briefing_date', true ) : '';
+        if ( '' === $date && function_exists( 'get_the_date' ) ) {
+            $date = (string) get_the_date( 'Y-m-d', $post_id );
+        }
+        return '' !== $date ? $date : gmdate( 'Y-m-d' );
     }
 
     /**
@@ -1388,9 +1494,21 @@ class PressHub_Social_TikTok_Shorts {
                 'caption' => $caption,
                 'visuals' => array_slice( $visuals, 0, max( 0, $image_count ) ),
                 'mood'    => PressHub_Social_TikTok_Music::normalize_mood( $item['mood'] ?? '' ),
-            ];
+            ] + self::story_tags( $item );
         }
         return $shorts;
+    }
+
+    /**
+     * The story repeat tags of a plan item (PressHub_Social_Story_Check): its editorial
+     * memory `story_key` and, when it retells a story, `whats_new`. Both '' when missing.
+     */
+    private static function story_tags( array $item ): array {
+        $whats_new = trim( (string) preg_replace( '/\s+/u', ' ', is_string( $item['whats_new'] ?? null ) ? $item['whats_new'] : '' ) );
+        return [
+            'story_key' => class_exists( 'PressHub_Social_Story_Check' ) ? PressHub_Social_Story_Check::key( is_string( $item['story_key'] ?? null ) ? $item['story_key'] : '' ) : '',
+            'whats_new' => function_exists( 'mb_substr' ) ? mb_substr( $whats_new, 0, 300 ) : substr( $whats_new, 0, 300 ),
+        ];
     }
 
     /**
@@ -1458,7 +1576,7 @@ class PressHub_Social_TikTok_Shorts {
                 'visual' => $visual,
                 'from'   => $words,
                 'to'     => $words + $count,
-            ];
+            ] + self::story_tags( $story );
             $parts[] = $script;
             $words  += $count;
         }

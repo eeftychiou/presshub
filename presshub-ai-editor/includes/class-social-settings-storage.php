@@ -301,6 +301,20 @@ class PressHub_Social_Settings_Storage {
             'default'           => self::DEFAULT_TIKTOK_BRIEF_MAX_WORDS,
         ] );
 
+        // Story repeats (2.84.0, PressHub_Social_Story_Check): how far back the shorts look for
+        // stories already posted, and how often one story may go out in a day.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_story_repeat_hours', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_story_repeat_hours' ],
+            'default'           => self::DEFAULT_STORY_REPEAT_HOURS,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_story_max_per_day', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_story_max_per_day' ],
+            'default'           => self::DEFAULT_STORY_MAX_PER_DAY,
+        ] );
+
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_slides_words', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_slides_words' ],
@@ -1590,6 +1604,32 @@ class PressHub_Social_Settings_Storage {
 
     public static function sanitize_tiktok_brief_max_words( $value ): int {
         return max( 150, min( 380, (int) $value ) );
+    }
+
+    /**
+     * Story Repeat Window: hours the shorts look back for stories already posted (0-168,
+     * default 36). A story told in the window goes out again only with a new development
+     * in the editorial memory. 0 turns the check off.
+     */
+    public const DEFAULT_STORY_REPEAT_HOURS = 36;
+
+    public static function get_story_repeat_hours(): int {
+        return self::sanitize_story_repeat_hours( get_option( 'presshub_social_story_repeat_hours', self::DEFAULT_STORY_REPEAT_HOURS ) );
+    }
+
+    public static function sanitize_story_repeat_hours( $value ): int {
+        return max( 0, min( 168, (int) $value ) );
+    }
+
+    /** Most Posts per Story a Day: posts of one story per platform in 24 hours (1-6, default 2). */
+    public const DEFAULT_STORY_MAX_PER_DAY = 2;
+
+    public static function get_story_max_per_day(): int {
+        return self::sanitize_story_max_per_day( get_option( 'presshub_social_story_max_per_day', self::DEFAULT_STORY_MAX_PER_DAY ) );
+    }
+
+    public static function sanitize_story_max_per_day( $value ): int {
+        return max( 1, min( 6, (int) $value ) );
     }
 
     /** Minutes between consecutive shorts of the same podcast (0-720, default 180). */
