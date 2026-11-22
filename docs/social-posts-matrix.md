@@ -43,7 +43,7 @@ Read a cell from left to right. The post gets the first option whose condition h
 
 ## The social post gate
 
-`PressHub_Social_Post_Gate` is the single place every post on every platform passes through, including any platform added later. It runs a list of checks, which the filter `presshub_social_post_gate_checks` can extend. The first check that returns a reason stops the post. A stopped post stays in the Social Queue as cancelled, with `Not posted: <reason>`. A manual repost skips the gate (`metadata.gate_bypass`).
+`PressHub_Social_Post_Gate` is the single place every post on every platform passes through, including any platform added later. It runs a list of checks, which the filter `presshub_social_post_gate_checks` can extend. The first check that returns a reason stops the post. A stopped post stays in the Social Queue as cancelled, with `Not posted: <reason>`. Re-post in the Social Queue skips the gate (`metadata.gate_bypass`); Retry and Dispatch now check it again. At the queue and plan stages, other posts' waiting jobs count as already posted, so two posts queued close together do not both tell a story.
 
 1. **Queue.** In `PressHub_Social_Dispatcher::enqueue_for_post()`, every platform is checked before any AI copy, caption, image or shorts plan is made. This includes an article's shorts. Before the check, a single-story post is tagged with its story by `tag_post()`. That is one Social copy model call, and it is made only when something was posted inside the window.
 2. **Plan.** In `PressHub_Social_TikTok_Shorts::get_plan()`:
