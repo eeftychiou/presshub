@@ -32,6 +32,8 @@ export interface PostOptions {
   aiGenerated?: boolean;
   /** TikTok: post mediaPaths as a photo post (carousel) instead of a video (#333). */
   photoPost?: boolean;
+  /** Folder for the worker's small state files (the recently used TikTok sounds). */
+  stateDir?: string;
   /** TikTok photo post: words to search in the sound picker; empty keeps TikTok's own sound. */
   soundQuery?: string;
   /** Facebook: most milliseconds to wait for a video upload (default FACEBOOK_VIDEO_UPLOAD_TIMEOUT_MS). */
@@ -1087,13 +1089,70 @@ export function isOriginalSound(title: string): boolean {
   return /^(?:original sound|πρωτότυπος ήχος|αυθεντικός ήχος)\b/i.test((title || '').trim());
 }
 
+/** How many of the top music tracks in the sound search a photo post chooses from. */
+export const TIKTOK_SOUND_CHOICES = 5;
+/** How many recently used sounds a photo post avoids. */
+export const TIKTOK_RECENT_SOUNDS = 12;
+const RECENT_SOUNDS_FILE = 'tiktok-recent-sounds.json';
+
+/**
+ * Which of the top search results to use, so photo posts don't all get the same track: a
+ * random one among those not used recently, else the one used longest ago. `recent` is
+ * newest first. -1 when there is nothing to choose.
+ */
+export function chooseTikTokSound(candidates: string[], recent: string[], rand: () => number = Math.random): number {
+  if (candidates.length === 0) return -1;
+  const norm = (t: string) => t.trim().toLowerCase();
+  const used = recent.map(norm);
+  const fresh = candidates.map((c, i) => i).filter((i) => !used.includes(norm(candidates[i])));
+  if (fresh.length > 0) {
+    return fresh[Math.min(fresh.length - 1, Math.floor(rand() * fresh.length))];
+  }
+  let best = 0;
+  for (let i = 1; i < candidates.length; i++) {
+    if (used.indexOf(norm(candidates[i])) > used.indexOf(norm(candidates[best]))) best = i;
+  }
+  return best;
+}
+
+/** The sounds recent photo posts used, newest first. */
+export function readRecentTikTokSounds(dir?: string): string[] {
+  if (!dir) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(dir, RECENT_SOUNDS_FILE), 'utf8'));
+    return Array.isArray(data) ? data.filter((t) => typeof t === 'string').slice(0, TIKTOK_RECENT_SOUNDS) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Remember a sound a photo post used. Never throws. */
+export function recordTikTokSound(dir: string | undefined, name: string): void {
+  if (!dir || name.trim() === '') return;
+  try {
+    const list = [name.trim(), ...readRecentTikTokSounds(dir).filter((t) => t.trim().toLowerCase() !== name.trim().toLowerCase())].slice(0, TIKTOK_RECENT_SOUNDS);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, RECENT_SOUNDS_FILE), JSON.stringify(list, null, 2));
+  } catch {
+    // Only a preference: a post never fails over it.
+  }
+}
+
+/**
+ * The link of a photo post. TikTok Studio's content list links every post as /video/<id>,
+ * photo posts too; a photo post's own page is /photo/<id>.
+ */
+export function asTikTokPhotoUrl(url: string): string {
+  return url.replace(/(tiktok\.com\/@[^/]+)\/video\/(\d+)/, '$1/photo/$2');
+}
+
 /**
  * Pick a sound for a photo post in the editor's sound picker ("Add sound"): search the
- * words and use the first result that is a music track (people's "original sound" clips
- * are skipped). Never throws: on any problem the post keeps the sound TikTok added itself
+ * words and use one of the first music tracks in the results (people's "original sound"
+ * clips are skipped), preferring one not used recently (see chooseTikTokSound). Never throws: on any problem the post keeps the sound TikTok added itself
  * and the reason is returned.
  */
-export async function pickTikTokSound(page: Page, query: string): Promise<TikTokSoundResult> {
+export async function pickTikTokSound(page: Page, query: string, recent: string[] = []): Promise<TikTokSoundResult> {
   const close = async () => {
     await page.keyboard.press('Escape').catch(() => {});
     await page.waitForTimeout(500);
@@ -1135,16 +1194,16 @@ export async function pickTikTokSound(page: Page, query: string): Promise<TikTok
       await close();
       return { picked: false, reason: `no sound found for "${query}"` };
     }
-    let pick = -1;
-    let name = '';
-    for (let i = 0; i < Math.min(count, 20); i++) {
+    const candidates: Array<{ index: number; title: string }> = [];
+    for (let i = 0; i < Math.min(count, 20) && candidates.length < TIKTOK_SOUND_CHOICES; i++) {
       const title = ((await rows.nth(i).locator(TIKTOK_SOUND_PICKER.title).first().innerText().catch(() => '')) || '').trim();
       if (title !== '' && !isOriginalSound(title)) {
-        pick = i;
-        name = title;
-        break;
+        candidates.push({ index: i, title });
       }
     }
+    const chosen = chooseTikTokSound(candidates.map((c) => c.title), recent);
+    const pick = chosen < 0 ? -1 : candidates[chosen].index;
+    const name = chosen < 0 ? '' : candidates[chosen].title;
     if (pick < 0) {
       await close();
       return { picked: false, reason: `only "original sound" clips were found for "${query}"` };
@@ -1596,7 +1655,10 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     await dismissTikTokOverlays();
 
     if (options.photoPost && (options.soundQuery || '').trim() !== '') {
-      const sound = await pickTikTokSound(page, (options.soundQuery || '').trim());
+      const sound = await pickTikTokSound(page, (options.soundQuery || '').trim(), readRecentTikTokSounds(options.stateDir));
+      if (sound.picked && sound.name) {
+        recordTikTokSound(options.stateDir, sound.name);
+      }
       if (!sound.picked) {
         note = `Posted with the sound TikTok chose: ${sound.reason}`;
         WorkerLogger.warn('TikTok Automation', `${note}.`);
@@ -1848,6 +1910,10 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     // Issue #191: report the real video URL (or at least the profile) instead of a made-up one.
     const resolved = await resolveTikTokPostUrl(page, options.copy);
+    if (options.photoPost && resolved.kind === 'video') {
+      resolved.kind = 'photo';
+      resolved.url = asTikTokPhotoUrl(resolved.url);
+    }
     const generatedId = resolved.videoId || `tt-${Date.now()}`;
     const postUrl = resolved.url;
     WorkerLogger.info('TikTok Automation', `Post completed! URL: ${postUrl} (${resolved.kind}), ID: ${generatedId}`);
