@@ -18,6 +18,7 @@ import crypto from 'crypto';
 import { escapeXml, fetchImageBuffer } from './card-generator';
 import { logoPath } from './short-video';
 import { WorkerLogger } from '../logger';
+import { trimFlatBorders } from './image-borders';
 
 export const SLIDE_WIDTH = 1080;
 export const SLIDE_HEIGHT = 1920;
@@ -151,7 +152,9 @@ export function endSlideSvg(line: string, siteName: string, hasLogo: boolean): s
 async function background(image: Buffer | null): Promise<sharp.Sharp> {
   if (image) {
     try {
-      return sharp(await sharp(image).resize(SLIDE_WIDTH, SLIDE_HEIGHT, { fit: 'cover', position: 'attention' }).toBuffer());
+      // A letterboxed story image loses its flat strips first, so it fills the slide.
+      const { buffer } = await trimFlatBorders(image);
+      return sharp(await sharp(buffer).resize(SLIDE_WIDTH, SLIDE_HEIGHT, { fit: 'cover', position: 'attention' }).toBuffer());
     } catch (err: any) {
       WorkerLogger.warn('PhotoSlides', `A story image could not be read (${err?.message || err}); using the branded background.`);
     }

@@ -28,6 +28,8 @@ import crypto from 'crypto';
 import sharp from 'sharp';
 import { probeAudioDuration } from './video-generator';
 import { WorkerLogger } from '../logger';
+import { trimFlatBorders } from './image-borders';
+import { PostCard, renderPostCard } from './post-card';
 
 const execFileAsync = util.promisify(execFile);
 
@@ -82,6 +84,17 @@ export interface GenerateShortOptions {
   musicVolume?: number;
   /** Last line of the end card; default END_CARD_TEXT.bio (TikTok's "link in bio"). */
   endCardLine?: string;
+  /** Social media posts the voice talks about (trending roundup), drawn as post cards. */
+  postCards?: PostCard[];
+  /** When each post card is on screen, in seconds of the voice track. */
+  cardSpans?: CardSpan[];
+}
+
+/** A post card shown from `start` to `end` (seconds of the voice track). */
+export interface CardSpan {
+  card: number;
+  start: number;
+  end: number;
 }
 
 export interface ShortVideoResult {
@@ -91,6 +104,8 @@ export interface ShortVideoResult {
   duration: number;
   captions: number;
   images: number;
+  /** Post cards shown (trending roundup). */
+  cards?: number;
   /** Whether background music was mixed in. */
   music: boolean;
 }
@@ -328,6 +343,29 @@ export function planSlots(totalDuration: number, imageCount: number): MotionSlot
   return slots;
 }
 
+/**
+ * Puts the post cards on the slots whose middle falls inside a card's span, so a post is
+ * on screen while the voice talks about it. `cardImage[i]` is the image index of card i
+ * (-1 when it could not be drawn). A card slot zooms in or out, never pans, so the card
+ * stays whole; two card slots in a row alternate.
+ */
+export function applyCardSpans(slots: MotionSlot[], spans: CardSpan[], cardImage: number[]): MotionSlot[] {
+  let t = 0;
+  let prev: MotionSlot['motion'] | null = null;
+  return slots.map((slot) => {
+    const mid = t + slot.duration / 2;
+    t += slot.duration;
+    const span = spans.find((s) => mid >= s.start && mid < s.end && (cardImage[s.card] ?? -1) >= 0);
+    if (!span) {
+      prev = slot.motion;
+      return slot;
+    }
+    const motion: MotionSlot['motion'] = prev === 'in' ? 'out' : 'in';
+    prev = motion;
+    return { ...slot, image: cardImage[span.card], motion };
+  });
+}
+
 /** zoompan expressions for one slot of `frames` frames on a 2x source image. */
 export function zoompanFor(motion: MotionSlot['motion'], frames: number, width: number, height: number, fps: number): string {
   const d = Math.max(1, frames);
@@ -457,10 +495,18 @@ export async function download(url: string, dest: string): Promise<boolean> {
   }
 }
 
-/** Crops a story image to a 2x 9:16 frame, so the zoom stays sharp and smooth. */
-async function prepareImage(src: string, dest: string, width: number, height: number): Promise<boolean> {
+/**
+ * Crops a story image to a 2x 9:16 frame, so the zoom stays sharp and smooth. Flat
+ * borders baked into the image (a letterboxed AI picture) are cut first, so the picture
+ * fills the frame instead of a grey band.
+ */
+export async function prepareImage(src: string, dest: string, width: number, height: number): Promise<boolean> {
   try {
-    await sharp(src)
+    const { buffer, trimmed, box } = await trimFlatBorders(src);
+    if (trimmed && box) {
+      WorkerLogger.info('ShortVideo', `Cut flat borders off story image ${path.basename(src)} (kept ${box.width}x${box.height} at ${box.left},${box.top}).`);
+    }
+    await sharp(buffer)
       .resize(width * 2, height * 2, { fit: 'cover', position: sharp.strategy.attention })
       .modulate({ saturation: 1.08 })
       .jpeg({ quality: 90 })
@@ -723,6 +769,22 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       WorkerLogger.warn('ShortVideo', 'TikTok short has no usable story image; rendering it on the branded background.');
       images.push(...(await brandedBackgrounds(work, width, height)));
     }
+    const backgroundCount = images.length;
+
+    // Post cards of the social media posts the voice talks about (trending roundup).
+    const cardImage: number[] = [];
+    const spans = (options.cardSpans || []).filter((s) => Number.isInteger(s.card) && s.card >= 0 && s.end > s.start);
+    for (const [i, card] of (options.postCards || []).entries()) {
+      const used = spans.some((s) => s.card === i);
+      const dest = path.join(work, `card-${i}.jpg`);
+      if (used && (await renderPostCard(card, dest))) {
+        cardImage.push(images.length);
+        images.push(dest);
+      } else {
+        cardImage.push(-1);
+      }
+    }
+    const cardCount = cardImage.filter((i) => i >= 0).length;
 
     // PressHub logo, copied into the work directory like every other input.
     const logoSrc = logoPath();
@@ -771,7 +833,7 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
     fs.writeFileSync(path.join(work, 'captions.ass'), ass, 'utf8');
     const shade = await shadeOverlay(work, width, height);
 
-    const slots = planSlots(total, images.length);
+    const slots = applyCardSpans(planSlots(total, backgroundCount), spans, cardImage);
     const outName = `short-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.mp4`;
     const args = buildFfmpegArgs({
       slots,
@@ -790,14 +852,14 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       musicVolume: options.musicVolume,
     });
 
-    WorkerLogger.info('ShortVideo', `Rendering short (${total.toFixed(1)}s, ${storyImages} story image(s), ${chunks.length} caption chunks, ${slots.length} shots, ${music ? 'with' : 'no'} music)`);
+    WorkerLogger.info('ShortVideo', `Rendering short (${total.toFixed(1)}s, ${storyImages} story image(s), ${cardCount ? `${cardCount} post card(s), ` : ''}${chunks.length} caption chunks, ${slots.length} shots, ${music ? 'with' : 'no'} music)`);
     const started = Date.now();
     await runFfmpeg(ffmpegBin, args, work);
     const finalPath = path.join(outputDir, outName);
     fs.renameSync(path.join(work, outName), finalPath);
     WorkerLogger.info('ShortVideo', `Short rendered in ${((Date.now() - started) / 1000).toFixed(1)}s: ${finalPath}`);
 
-    return { filePath: finalPath, width, height, duration: total, captions: chunks.length, images: storyImages, music: Boolean(music) };
+    return { filePath: finalPath, width, height, duration: total, captions: chunks.length, images: storyImages, cards: cardCount, music: Boolean(music) };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }

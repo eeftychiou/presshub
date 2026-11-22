@@ -25,6 +25,7 @@ import crypto from 'crypto';
 import sharp from 'sharp';
 import { probeAudioDuration } from './video-generator';
 import { WorkerLogger } from '../logger';
+import { trimFlatBorders } from './image-borders';
 import {
   ShortSegment,
   CaptionChunk,
@@ -310,8 +311,9 @@ async function prepareEpisodeImage(src: string, dest: string): Promise<boolean> 
   const w = Math.round(EPISODE_CANVAS.width * SOURCE_SCALE);
   const h = Math.round(EPISODE_CANVAS.height * SOURCE_SCALE);
   try {
-    // Turned upright first, by the camera's EXIF orientation.
-    const upright = await sharp(src).rotate().png().toBuffer();
+    // Turned upright first, by the camera's EXIF orientation, and without flat
+    // borders baked into a letterboxed AI picture.
+    const upright = (await trimFlatBorders(src)).buffer;
     const meta = await sharp(upright).metadata();
     const ratio = (meta.width || 1) / (meta.height || 1);
     if (ratio >= 1.4) {
