@@ -308,7 +308,11 @@ export const TWITTER_VIDEO_UPLOAD_TIMEOUT_MS = 300_000;
  */
 export async function waitForTwitterVideo(page: any, scope: any, timeoutMs: number = TWITTER_VIDEO_UPLOAD_TIMEOUT_MS, pollMs: number = 1000): Promise<number> {
   const started = Date.now();
-  const button = scope.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"], button[data-slot="xds-button"]:has-text("Post")').first();
+  // The composer's own Post button, never the sidebar's "Post" / "New Post" (as in Tier 2).
+  const button = scope.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"], button[data-slot="xds-button"]:has-text("Post")')
+    .filter({ hasNotText: 'New Post' })
+    .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"], [data-testid="SideNav_NewTweet_Button"]') })
+    .first();
   const progress = scope.locator('[role="progressbar"], [data-testid="attachments"] [aria-valuenow]');
   let lastLog = 0;
   while (Date.now() - started < timeoutMs) {

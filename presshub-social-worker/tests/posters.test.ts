@@ -1982,8 +1982,8 @@ describe('waitForTwitterVideo', () => {
     return {
       locator: (sel: string) => (sel.includes('progressbar')
         ? { count: async () => current().progress }
-        : { first: () => button }),
-      page: { waitForTimeout: async () => { i++; } }
+        : { filter: () => ({ filter: () => ({ first: () => button }) }) }),
+      page: { waitForTimeout: async () => { i++; }, locator: () => ({}) }
     };
   };
 
