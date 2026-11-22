@@ -55,6 +55,9 @@
  * posted by the worker's browser session as a video, which Facebook makes a Reel. Facebook
  * and YouTube shorts are extra posts (`EXTRA_PLATFORMS`): Facebook keeps its usual link
  * post, so a failed short there fails instead of falling back to a normal post.
+ * Every platform's jobs are queued by PressHub_Social_Dispatcher::enqueue_shorts() from one
+ * story schedule (the platforms a few minutes apart), and the music is picked per story
+ * (story_seed()), so the worker renders each story once and posts that file everywhere.
  *
  * TikTok photo slides (#333, `presshub_social_tiktok_slides_enabled`, default on): each
  * short also becomes a TikTok photo post (`metadata.tiktok_short.format = slides`, queued by
@@ -745,7 +748,9 @@ class PressHub_Social_TikTok_Shorts {
                 $job['tiktok_short']['images'] = $sequence;
             }
         }
-        $job['tiktok_short'] = array_merge( $job['tiktok_short'], self::music_for( $short, $job_id ) );
+        // One track per story, not per job: every platform's copy of the story then has the
+        // same music, so the worker renders the video once and reuses it.
+        $job['tiktok_short'] = array_merge( $job['tiktok_short'], self::music_for( $short, self::story_seed( $job ) ) );
         return $job;
     }
 
@@ -818,6 +823,17 @@ class PressHub_Social_TikTok_Shorts {
         }
         $name = mb_strtoupper( $name, 'UTF-8' );
         return strtr( $name, [ 'Ά' => 'Α', 'Έ' => 'Ε', 'Ή' => 'Η', 'Ί' => 'Ι', 'Ό' => 'Ο', 'Ύ' => 'Υ', 'Ώ' => 'Ω', 'Ϊ' => 'Ι', 'Ϋ' => 'Υ' ] );
+    }
+
+    /**
+     * Seed that picks a story's music track: the same for every platform's job of one story
+     * (post and story index), different between the stories of a post.
+     */
+    public static function story_seed( array $job ): int {
+        $short = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? [];
+        $post  = (int) ( $job['post_id'] ?? 0 );
+        $index = (int) ( is_array( $short ) ? ( $short['index'] ?? 0 ) : 0 );
+        return $post > 0 ? $post * 100 + $index : (int) ( $job['id'] ?? 0 );
     }
 
     /**

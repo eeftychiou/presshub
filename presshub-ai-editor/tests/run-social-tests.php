@@ -3899,9 +3899,9 @@ assert_equals( 'facebook', $fb_first['platform'], 'The Reel job is a Facebook jo
 assert_true( PressHub_Social_TikTok_Shorts::is_short_job( $fb_first ), 'The Facebook Reel job is a short job' );
 assert_true( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) $fb_first['post_copy'] ), 'The Reel keeps the placeholder until the short\'s own caption fills it' );
 assert_equals(
-    gmdate( 'Y-m-d H:i:s', $fb_link_time + PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60 ),
+    gmdate( 'Y-m-d H:i:s', $fb_link_time + PressHub_Social_Dispatcher::shorts_stagger_minutes() * 60 ),
     (string) $fb_first['scheduled_at'],
-    'The first Reel follows the link post by the time between shorts'
+    'The first Reel follows the link post by the platform stagger'
 );
 
 update_option( 'presshub_social_facebook_shorts_enabled', false );
@@ -3928,6 +3928,77 @@ delete_option( 'presshub_social_engine_facebook' );
 delete_option( 'presshub_social_facebook_shorts_enabled' );
 null === $fb_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $fb_saved_platforms );
 null === $fb_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $fb_saved_sessions );
+
+// ----------------------------------------------------------------------
+// Suite: One story schedule for every platform's shorts
+// ----------------------------------------------------------------------
+echo "\n--- Suite: One story schedule for every platform's shorts ---\n";
+
+foreach ( [ 'tiktok', 'instagram', 'facebook', 'youtube' ] as $us_p ) {
+    update_option( 'presshub_social_' . $us_p . '_shorts_enabled', true );
+}
+PressHub_Social_Queue::reset_memory_store();
+$us_start   = time() + 300;
+$us_targets = [ 'facebook' => 'automation', 'youtube' => 'automation', 'tiktok' => 'automation', 'instagram' => 'automation' ];
+$us_ids     = PressHub_Social_Dispatcher::enqueue_shorts( $fb_short_post_id, $us_targets, null, null, $us_start );
+$us_jobs    = array_map( [ 'PressHub_Social_Queue', 'get_job' ], $us_ids );
+$us_by      = [];
+foreach ( $us_jobs as $us_j ) {
+    $us_by[ $us_j['platform'] ][] = $us_j;
+}
+assert_equals( [ 'tiktok', 'instagram', 'youtube', 'facebook' ], array_keys( $us_by ), 'Shorts are queued per platform in the fixed order, whatever order the targets come in' );
+$us_counts = array_map( 'count', $us_by );
+assert_equals( 1, count( array_unique( $us_counts ) ), 'Every platform gets the same number of story jobs' );
+$us_stagger = PressHub_Social_Dispatcher::shorts_stagger_minutes() * 60;
+assert_equals( 300, $us_stagger, 'Platforms of one story are 5 minutes apart by default' );
+foreach ( [ 'tiktok' => 0, 'instagram' => 1, 'youtube' => 2, 'facebook' => 3 ] as $us_p => $us_pos ) {
+    assert_equals( gmdate( 'Y-m-d H:i:s', $us_start + $us_pos * $us_stagger ), (string) $us_by[ $us_p ][0]['scheduled_at'], "The first story goes to {$us_p} in its place in the story slot" );
+}
+if ( count( $us_by['tiktok'] ) > 1 ) {
+    $us_gap = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+    assert_equals( gmdate( 'Y-m-d H:i:s', $us_start + $us_gap + $us_stagger ), (string) $us_by['instagram'][1]['scheduled_at'], 'The second story keeps the same platform offset one spacing later' );
+}
+assert_equals( 'automation', $us_by['facebook'][0]['engine'], 'A Facebook Reel stays a worker job' );
+
+// A Facebook Reel never goes out before the Facebook link post.
+PressHub_Social_Queue::reset_memory_store();
+$us_link = $us_start + 3600;
+$us_two  = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_shorts( $fb_short_post_id, [ 'tiktok' => 'automation', 'facebook' => 'api' ], null, null, $us_start, [], $us_link ) );
+$us_fb   = array_values( array_filter( $us_two, fn( $j ) => 'facebook' === $j['platform'] ) )[0] ?? [];
+assert_equals( 'facebook', $us_fb['platform'] ?? '', 'The Reel is queued with the TikTok shorts' );
+assert_equals( gmdate( 'Y-m-d H:i:s', $us_link + $us_stagger ), (string) ( $us_fb['scheduled_at'] ?? '' ), 'A Reel whose slot comes before the link post waits until the stagger after it' );
+
+// The same story picks the same music on every platform, so the worker renders it once.
+$us_seed_a = PressHub_Social_TikTok_Shorts::story_seed( [ 'id' => 11, 'post_id' => 77, 'metadata' => [ 'tiktok_short' => [ 'index' => 1 ] ] ] );
+$us_seed_b = PressHub_Social_TikTok_Shorts::story_seed( [ 'id' => 12, 'post_id' => 77, 'metadata' => [ 'tiktok_short' => [ 'index' => 1 ] ] ] );
+$us_seed_c = PressHub_Social_TikTok_Shorts::story_seed( [ 'id' => 13, 'post_id' => 77, 'metadata' => [ 'tiktok_short' => [ 'index' => 2 ] ] ] );
+assert_equals( $us_seed_a, $us_seed_b, 'Two platforms\' jobs of one story share the music seed' );
+assert_true( $us_seed_a !== $us_seed_c, 'Two stories of a post take turns between tracks' );
+
+// Through the dispatcher: TikTok and Instagram shorts come from the same schedule.
+$us_saved_platforms = get_option( 'presshub_social_enabled_platforms', null );
+$us_saved_sessions  = get_option( 'presshub_social_worker_sessions', null );
+update_option( 'presshub_social_enabled_platforms', [ 'tiktok', 'instagram' ] );
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true, 'instagram' => true ] );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_engine_instagram', 'automation' );
+update_option( 'presshub_social_tiktok_slides_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+$us_all  = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $fb_short_post_id, [ 'tiktok', 'instagram' ] ) );
+$us_tt   = array_values( array_filter( $us_all, fn( $j ) => 'tiktok' === $j['platform'] ) );
+$us_ig   = array_values( array_filter( $us_all, fn( $j ) => 'instagram' === $j['platform'] ) );
+assert_true( count( $us_tt ) > 0 && count( $us_tt ) === count( $us_ig ), 'The dispatcher queues the same stories for TikTok and Instagram' );
+assert_true( (bool) array_filter( $us_all, [ 'PressHub_Social_TikTok_Shorts', 'is_short_job' ] ) && count( $us_all ) === count( array_filter( $us_all, [ 'PressHub_Social_TikTok_Shorts', 'is_short_job' ] ) ), 'With shorts on, TikTok and Instagram get only short jobs' );
+assert_equals( $us_stagger, strtotime( $us_ig[0]['scheduled_at'] . ' UTC' ) - strtotime( $us_tt[0]['scheduled_at'] . ' UTC' ), 'Instagram posts the story one stagger after TikTok' );
+PressHub_Social_Queue::reset_memory_store();
+delete_option( 'presshub_social_engine_tiktok' );
+delete_option( 'presshub_social_engine_instagram' );
+delete_option( 'presshub_social_tiktok_slides_enabled' );
+foreach ( [ 'tiktok', 'instagram', 'facebook', 'youtube' ] as $us_p ) {
+    delete_option( 'presshub_social_' . $us_p . '_shorts_enabled' );
+}
+null === $us_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $us_saved_platforms );
+null === $us_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $us_saved_sessions );
 
 // ----------------------------------------------------------------------
 // Suite: TikTok photo slides (#333)

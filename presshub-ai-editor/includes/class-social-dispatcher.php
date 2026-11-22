@@ -171,6 +171,12 @@ class PressHub_Social_Dispatcher {
         $job_ids      = [];
         $needs_images = false;
 
+        // Platforms that get the post's shorts (platform => engine), the article captions
+        // already made for them, and the Facebook link post's time (its Reels follow it).
+        $short_targets      = [];
+        $short_copies       = [];
+        $facebook_link_time = null;
+
         foreach ( $platforms as $index => $platform ) {
             // Determine engine for platform
             $engine = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_platform_engine' )
@@ -180,7 +186,11 @@ class PressHub_Social_Dispatcher {
             // YouTube only gets videos: the shorts (as YouTube Shorts) and, for a podcast
             // post, the full episode for the podcast playlist. Anything else is not posted there.
             if ( 'youtube' === $platform ) {
-                $job_ids = array_merge( $job_ids, self::enqueue_youtube( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ) ) );
+                $yt_shorts = self::shorts_wanted( $post_id, 'youtube', $engine );
+                if ( $yt_shorts ) {
+                    $short_targets['youtube'] = $engine;
+                }
+                $job_ids = array_merge( $job_ids, self::enqueue_youtube( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ), $yt_shorts ) );
                 continue;
             }
 
@@ -193,31 +203,17 @@ class PressHub_Social_Dispatcher {
                     && PressHub_Social_TikTok_Shorts::slides_wanted( $post_id, $engine, false ) ) {
                     $article_copy = self::article_short_copy( $post_id, 'tiktok' );
                 }
-                $job_ids = array_merge( $job_ids, self::enqueue_tiktok_slides( $post_id, $engine, $base_time + ( $index * $interval ), $article_copy ) );
+                // The slides sit between the TikTok shorts, which start at the story slot.
+                $job_ids = array_merge( $job_ids, self::enqueue_tiktok_slides( $post_id, $engine, $base_time, $article_copy ) );
+                if ( null !== $article_copy ) {
+                    $short_copies['tiktok'] = $article_copy;
+                }
             }
 
-            // Podcast posts can go to TikTok and Instagram as several short videos, one per top story.
-            // Their copy is written with the short when the worker claims the job.
-            // Articles go there as one short each, with the platform's usual AI caption as its
-            // post text (when that fails, the short's own caption is used).
-            if ( in_array( $platform, [ 'tiktok', 'instagram' ], true ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, $platform ) ) {
-                $short_copy = null;
-                if ( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE === PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
-                    $short_copy = $article_copy ?? self::article_short_copy( $post_id, $platform );
-                } else {
-                    PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, $platform );
-                }
-                $short_jobs = PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ), false, $platform, $short_copy );
-                foreach ( $short_jobs as $short_job ) {
-                    $job_id = PressHub_Social_Queue::enqueue( $short_job );
-                    if ( is_wp_error( $job_id ) ) {
-                        PressHub_Social_Logger::error( sprintf( 'Failed to enqueue %s short for post #%d: %s', $platform, $post_id, $job_id->get_error_message() ) );
-                    } elseif ( $job_id > 0 ) {
-                        $job_ids[] = $job_id;
-                        PressHub_Social_Logger::info( sprintf( 'Enqueued %s short job #%d for post #%d (scheduled: %s)', $platform, $job_id, $post_id, $short_job['scheduled_at'] ) );
-                    }
-                }
-                PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );
+            // TikTok and Instagram get the shorts instead of their usual post. They are queued
+            // with the other platforms' shorts after this loop, on one story schedule.
+            if ( in_array( $platform, [ 'tiktok', 'instagram' ], true ) && self::shorts_wanted( $post_id, $platform, $engine ) ) {
+                $short_targets[ $platform ] = $engine;
                 continue;
             }
 
@@ -289,9 +285,15 @@ class PressHub_Social_Dispatcher {
 
             // Facebook Reels: the shorts go to the Page too, after its link post (which is
             // kept), with the short's own caption.
-            if ( 'facebook' === $platform ) {
-                $job_ids = array_merge( $job_ids, self::enqueue_facebook_shorts( $post_id, $engine, $media_url, $media_type, strtotime( $scheduled_at . ' UTC' ) ?: $base_time ) );
+            if ( 'facebook' === $platform && self::shorts_wanted( $post_id, 'facebook', $engine ) ) {
+                $short_targets['facebook'] = $engine;
+                $facebook_link_time        = strtotime( $scheduled_at . ' UTC' ) ?: $base_time;
             }
+        }
+
+        // The shorts of every platform, from one story schedule.
+        if ( ! empty( $short_targets ) ) {
+            $job_ids = array_merge( $job_ids, self::enqueue_shorts( $post_id, $short_targets, $media_url, $media_type, $base_time, $short_copies, $facebook_link_time ) );
         }
 
         if ( ! empty( $needs_images ) ) {
@@ -358,39 +360,96 @@ class PressHub_Social_Dispatcher {
         return $ids;
     }
 
+    /** Order of the platforms inside one story's slot. Facebook last: its link post goes first. */
+    public const SHORTS_PLATFORM_ORDER = [ 'tiktok', 'instagram', 'youtube', 'facebook' ];
+
     /**
-     * Queue a post's shorts as Facebook Reels when Facebook Reels are on: Shorts per Podcast
-     * jobs for a podcast post, one for an article. The first Reel follows the link post by
-     * the time between shorts. The Reel's text is the short's own caption, so no AI call is
-     * made here.
-     *
-     * @param int $link_time Unix time of the post's Facebook link post.
-     * @return int[] IDs of the queued Reel jobs.
+     * Minutes between two platforms' posts of the same story (filter
+     * `presshub_social_shorts_platform_stagger_minutes`, 0 to 60).
      */
-    public static function enqueue_facebook_shorts( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $link_time ): array {
-        if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, 'facebook' ) ) {
-            return [];
+    public const SHORTS_PLATFORM_STAGGER_MINUTES = 5;
+
+    public static function shorts_stagger_minutes(): int {
+        $minutes = function_exists( 'apply_filters' )
+            ? (int) apply_filters( 'presshub_social_shorts_platform_stagger_minutes', self::SHORTS_PLATFORM_STAGGER_MINUTES )
+            : self::SHORTS_PLATFORM_STAGGER_MINUTES;
+        return max( 0, min( 60, $minutes ) );
+    }
+
+    /**
+     * Whether a platform gets this post's shorts now: its shorts switch, a source to cut
+     * them from and an engine that can post them (should_split()), and for Facebook on the
+     * Graph API, a short of 90 seconds or less (the two-minute daily brief is not).
+     */
+    public static function shorts_wanted( int $post_id, string $platform, string $engine ): bool {
+        if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, $platform ) ) {
+            return false;
         }
-        if ( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE !== PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
-            PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, 'facebook' );
+        if ( 'facebook' === $platform && 'api' === $engine
+            && PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE !== PressHub_Social_TikTok_Shorts::source_type( $post_id )
+            && PressHub_Social_Settings_Storage::get_tiktok_brief_enabled() ) {
             // The Graph API takes Reels of 3 to 90 seconds, so the two-minute daily brief
             // cannot go there; the browser session posts it as a video.
-            if ( 'api' === $engine && PressHub_Social_Settings_Storage::get_tiktok_brief_enabled() ) {
-                PressHub_Social_Logger::warning( sprintf( 'Facebook Reels are on but podcast post #%d gets no Reel: the daily brief is about two minutes and the Graph API takes Reels of up to 90 seconds. Use the Facebook automation engine, or set Podcast Shorts Format to one short per story.', $post_id ) );
-                return [];
-            }
+            PressHub_Social_Logger::warning( sprintf( 'Facebook Reels are on but podcast post #%d gets no Reel: the daily brief is about two minutes and the Graph API takes Reels of up to 90 seconds. Use the Facebook automation engine, or set Podcast Shorts Format to one short per story.', $post_id ) );
+            return false;
         }
-        $start = $link_time + PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
-        $ids   = [];
-        // A Reel is always the worker's job (it renders the video), also when the link post
-        // goes through the API: the worker then uploads it through the Graph API.
-        foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $post_id, 'automation', $media_url, $media_type, $start, false, 'facebook' ) as $short_job ) {
-            $job_id = PressHub_Social_Queue::enqueue( $short_job );
-            if ( is_wp_error( $job_id ) ) {
-                PressHub_Social_Logger::error( sprintf( 'Failed to enqueue Facebook Reel for post #%d: %s', $post_id, $job_id->get_error_message() ) );
-            } elseif ( $job_id > 0 ) {
-                $ids[] = (int) $job_id;
-                PressHub_Social_Logger::info( sprintf( 'Enqueued Facebook Reel job #%d for post #%d (scheduled: %s)', $job_id, $post_id, $short_job['scheduled_at'] ) );
+        return true;
+    }
+
+    /**
+     * Queue a post's shorts for every platform that gets them, from one story schedule:
+     * story n goes out at $start_time + n x the time between shorts on every platform, the
+     * platforms SHORTS_PLATFORM_STAGGER_MINUTES apart in SHORTS_PLATFORM_ORDER. A Facebook
+     * Reel never goes out before the post's Facebook link post. The superseded shorts of
+     * earlier podcasts are cancelled once per platform, and the preparation (one plan, one
+     * voice track and image set per story, whatever the platforms) is scheduled once.
+     *
+     * Article shorts take each platform's usual caption ($copies, else made here); a
+     * Facebook Reel and a podcast short take the short's own caption at claim time.
+     *
+     * @param array<string,string> $targets   Platform => engine.
+     * @param array<string,string> $copies    Article captions already made, by platform.
+     * @param int|null             $link_time Unix time of the Facebook link post, if any.
+     * @return int[] IDs of the queued short jobs.
+     */
+    public static function enqueue_shorts( int $post_id, array $targets, ?string $media_url, ?string $media_type, int $start_time, array $copies = [], ?int $link_time = null ): array {
+        if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || empty( $targets ) ) {
+            return [];
+        }
+        $article = PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE === PressHub_Social_TikTok_Shorts::source_type( $post_id );
+        $stagger = self::shorts_stagger_minutes() * 60;
+        $ids     = [];
+        $slot    = 0;
+        foreach ( self::SHORTS_PLATFORM_ORDER as $platform ) {
+            if ( ! isset( $targets[ $platform ] ) ) {
+                continue;
+            }
+            $engine = (string) $targets[ $platform ];
+            if ( ! $article ) {
+                PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, $platform );
+            }
+            $start = $start_time + ( $slot * $stagger );
+            ++$slot;
+            $copy = null;
+            if ( 'facebook' === $platform ) {
+                // A Reel is always the worker's job (it renders the video), also when the link
+                // post goes through the API: the worker then uploads it through the Graph API.
+                $engine = 'automation';
+                if ( null !== $link_time ) {
+                    $start = max( $start, $link_time + $stagger );
+                }
+            } elseif ( $article ) {
+                $copy = $copies[ $platform ] ?? self::article_short_copy( $post_id, $platform );
+            }
+            $label = 'facebook' === $platform ? 'Facebook Reel' : $platform . ' short';
+            foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $start, false, $platform, $copy ) as $short_job ) {
+                $job_id = PressHub_Social_Queue::enqueue( $short_job );
+                if ( is_wp_error( $job_id ) ) {
+                    PressHub_Social_Logger::error( sprintf( 'Failed to enqueue %s for post #%d: %s', $label, $post_id, $job_id->get_error_message() ) );
+                } elseif ( $job_id > 0 ) {
+                    $ids[] = (int) $job_id;
+                    PressHub_Social_Logger::info( sprintf( 'Enqueued %s job #%d for post #%d (scheduled: %s)', $label, $job_id, $post_id, $short_job['scheduled_at'] ) );
+                }
             }
         }
         if ( $ids ) {
@@ -400,14 +459,29 @@ class PressHub_Social_Dispatcher {
     }
 
     /**
-     * Queue a post's YouTube videos: its shorts when YouTube Shorts are on, and the full
-     * episode of a podcast post when podcast episodes are on. The description is the
-     * YouTube post copy (an editor's copy, else the AI copywriter's); a podcast short
-     * uses its own caption.
+     * Queue a post's shorts as Facebook Reels when Facebook Reels are on: Shorts per Podcast
+     * jobs for a podcast post, one for an article, the first one the stagger after the link post.
+     *
+     * @param int $link_time Unix time of the post's Facebook link post.
+     * @return int[] IDs of the queued Reel jobs.
+     */
+    public static function enqueue_facebook_shorts( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $link_time ): array {
+        if ( ! self::shorts_wanted( $post_id, 'facebook', $engine ) ) {
+            return [];
+        }
+        return self::enqueue_shorts( $post_id, [ 'facebook' => $engine ], $media_url, $media_type, $link_time, [], $link_time );
+    }
+
+    /**
+     * Queue a post's full YouTube podcast episode when podcast episodes are on (its YouTube
+     * Shorts are queued with the other platforms' shorts by enqueue_shorts()). The
+     * description is the YouTube post copy (an editor's copy, else the AI copywriter's).
+     *
+     * @param bool $with_shorts Whether the post's shorts go to YouTube (only for the log line).
      *
      * @return array<int> Enqueued job IDs.
      */
-    private static function enqueue_youtube( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time ): array {
+    private static function enqueue_youtube( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time, bool $with_shorts = false ): array {
         $job_ids = [];
 
         $copy_for = static function () use ( $post_id ): array {
@@ -422,28 +496,6 @@ class PressHub_Social_Dispatcher {
             }
             return [ (string) $generated, null ];
         };
-
-        if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, 'youtube' ) ) {
-            $short_copy = null;
-            if ( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE === PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
-                [ $short_copy, $copy_error ] = $copy_for();
-                if ( null !== $copy_error ) {
-                    PressHub_Social_Logger::warning( sprintf( 'YouTube description for the article short of post #%d failed (%s); the short\'s own caption is used.', $post_id, $copy_error ) );
-                }
-            } else {
-                PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, 'youtube' );
-            }
-            foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $start_time, false, 'youtube', $short_copy ) as $short_job ) {
-                $job_id = PressHub_Social_Queue::enqueue( $short_job );
-                if ( is_wp_error( $job_id ) ) {
-                    PressHub_Social_Logger::error( sprintf( 'Failed to enqueue YouTube short for post #%d: %s', $post_id, $job_id->get_error_message() ) );
-                } elseif ( $job_id > 0 ) {
-                    $job_ids[] = $job_id;
-                    PressHub_Social_Logger::info( sprintf( 'Enqueued YouTube short job #%d for post #%d (scheduled: %s)', $job_id, $post_id, $short_job['scheduled_at'] ) );
-                }
-            }
-            PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );
-        }
 
         if ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::wants_episode( $post_id ) ) {
             [ $copy, $copy_error ] = $copy_for();
@@ -466,7 +518,7 @@ class PressHub_Social_Dispatcher {
             }
         }
 
-        if ( empty( $job_ids ) ) {
+        if ( empty( $job_ids ) && ! $with_shorts ) {
             PressHub_Social_Logger::info( sprintf( 'Post #%d is not posted to YouTube: it gets only shorts (YouTube Shorts off, or no short for this post) and podcast episodes (podcast episodes off, or not a podcast post).', $post_id ) );
         }
         return $job_ids;
