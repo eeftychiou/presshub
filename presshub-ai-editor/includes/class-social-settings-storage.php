@@ -301,6 +301,20 @@ class PressHub_Social_Settings_Storage {
             'default'           => self::DEFAULT_TIKTOK_BRIEF_MAX_WORDS,
         ] );
 
+        // Social post gate (2.84.0, PressHub_Social_Post_Gate): the story ledger's window, and
+        // how often one story may go out on one platform inside it.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_story_repeat_hours', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_story_repeat_hours' ],
+            'default'           => self::DEFAULT_STORY_REPEAT_HOURS,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_story_max_posts', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_story_max_posts' ],
+            'default'           => self::DEFAULT_STORY_MAX_POSTS,
+        ] );
+
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_slides_words', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_slides_words' ],
@@ -1590,6 +1604,32 @@ class PressHub_Social_Settings_Storage {
 
     public static function sanitize_tiktok_brief_max_words( $value ): int {
         return max( 150, min( 380, (int) $value ) );
+    }
+
+    /**
+     * Story Window: hours the social post gate looks back for stories already posted on a
+     * platform (0-168, default 36). A story told in the window goes out again on that
+     * platform only with a new development. 0 turns the story check off.
+     */
+    public const DEFAULT_STORY_REPEAT_HOURS = 36;
+
+    public static function get_story_repeat_hours(): int {
+        return self::sanitize_story_repeat_hours( get_option( 'presshub_social_story_repeat_hours', self::DEFAULT_STORY_REPEAT_HOURS ) );
+    }
+
+    public static function sanitize_story_repeat_hours( $value ): int {
+        return max( 0, min( 168, (int) $value ) );
+    }
+
+    /** Most Posts per Story per Platform: posts of one story on one platform inside Story Window (1-6, default 2). */
+    public const DEFAULT_STORY_MAX_POSTS = 2;
+
+    public static function get_story_max_posts(): int {
+        return self::sanitize_story_max_posts( get_option( 'presshub_social_story_max_posts', self::DEFAULT_STORY_MAX_POSTS ) );
+    }
+
+    public static function sanitize_story_max_posts( $value ): int {
+        return max( 1, min( 6, (int) $value ) );
     }
 
     /** Minutes between consecutive shorts of the same podcast (0-720, default 180). */

@@ -453,6 +453,10 @@ __( 'Auto-Publish on Post', 'presshub-ai-editor' );
 __( 'Queues social posts automatically when an article is published. Default: on.', 'presshub-ai-editor' );
 __( 'Active Platforms', 'presshub-ai-editor' );
 __( 'Enable or disable social media platforms. Posts will only be queued for platforms that are both enabled and configured.', 'presshub-ai-editor' );
+__( 'Story Window', 'presshub-ai-editor' );
+__( 'Every social post, on every platform, is checked before it is prepared and again before it goes out. A story a platform already posted in this time goes out there again only with a new development, and then it leads with what is new. Stopped posts stay in the Social Queue as cancelled, with the reason. 0 turns the story check off.', 'presshub-ai-editor' );
+__( 'Most Posts per Story per Platform', 'presshub-ai-editor' );
+__( 'How many times one story may go out on one platform within Story Window, even when it keeps developing. Used while Story Window is above 0.', 'presshub-ai-editor' );
 __( 'Copy Generation Mode', 'presshub-ai-editor' );
 __( 'In AI mode, each platform receives uniquely tailored editorial copy. In template mode, placeholders like {title} and {url} are replaced statically.', 'presshub-ai-editor' );
 __( 'Twitter Engine', 'presshub-ai-editor' );
@@ -532,7 +536,7 @@ __( 'Posts the same short videos to Instagram as Reels. Default: off.', 'presshu
 __( 'Facebook Reels (Shorts)', 'presshub-ai-editor' );
 __( 'Posts the same short videos to the Facebook Page as Reels, after the usual Facebook link post, which is still made. With the API engine the worker uploads them through the Graph API (the Meta token needs pages_manage_posts); with the automation engine it uses the browser session. Default: off.', 'presshub-ai-editor' );
 __( 'TikTok Photo Slides', 'presshub-ai-editor' );
-__( "Also posts each short to TikTok as a photo post: the hook and the script as text over the story images, with no voice, and a TikTok sound found for the story's mood. Each one goes out halfway between two shorts; the video shorts are not changed. Needs the automation engine, Pull Mode and worker 1.10.0. Default: on.", 'presshub-ai-editor' );
+__( "Posts a story to TikTok as a photo post when TikTok gets no video of it: the hook and the script as text over the story images, with no voice, and a TikTok sound found for the story's mood. With TikTok Shorts on, TikTok gets the videos and no photo posts, so a story is not posted twice. Needs the automation engine, Pull Mode and worker 1.10.0. Default: on.", 'presshub-ai-editor' );
 __( 'YouTube Shorts', 'presshub-ai-editor' );
 __( 'Uploads the same short videos to YouTube, where every vertical video of three minutes or less is a Short. Needs a connected YouTube channel. Default: off.', 'presshub-ai-editor' );
 __( 'YouTube Podcast Episodes', 'presshub-ai-editor' );
@@ -554,7 +558,7 @@ __( "Turns every article and opinion piece into one short narrated video, like t
 __( 'Shorts per Podcast', 'presshub-ai-editor' );
 __( 'How many top stories of each podcast become their own TikTok video, when Podcast Shorts Format is one short per story.', 'presshub-ai-editor' );
 __( 'Podcast Shorts Format', 'presshub-ai-editor' );
-__( "What each podcast becomes on the shorts platforms. Daily brief: one video of about two minutes with the day's top stories, each with its own image, and no photo slides. One short per story: Shorts per Podcast videos of 30-60 seconds, one story each, each with photo slides when they are on. Articles are not affected. Default: Daily brief.", 'presshub-ai-editor' );
+__( "What each podcast becomes on the shorts platforms. Daily brief: one video of about two minutes with the day's top stories, each with its own image, and no photo slides. One short per story: Shorts per Podcast videos of 30-60 seconds, one story each. Articles are not affected. Default: Daily brief.", 'presshub-ai-editor' );
 __( 'Daily Brief Script Length', 'presshub-ai-editor' );
 __( "Most words in the daily brief script, about 150 words a minute. 300 is about two minutes; the top stays under YouTube's three-minute limit for Shorts.", 'presshub-ai-editor' );
 __( 'Words per Photo Slide', 'presshub-ai-editor' );

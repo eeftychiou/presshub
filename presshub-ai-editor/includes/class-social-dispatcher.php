@@ -177,15 +177,30 @@ class PressHub_Social_Dispatcher {
         $short_copies       = [];
         $facebook_link_time = null;
 
+        // A post whose stories another post tells in video gets no video of its own (the
+        // written daily brief, 2.84.0).
+        $no_video = self::no_video_reason( $post_id );
+
         foreach ( $platforms as $index => $platform ) {
             // Determine engine for platform
             $engine = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_platform_engine' )
                 ? PressHub_Social_Settings_Storage::get_platform_engine( $platform )
                 : 'api';
 
+            if ( '' !== $no_video && in_array( $platform, self::VIDEO_PLATFORMS, true ) ) {
+                PressHub_Social_Logger::info( sprintf( 'Post #%d is not queued for %s: %s', $post_id, $platform, $no_video ) );
+                continue;
+            }
+
             // YouTube only gets videos: the shorts (as YouTube Shorts) and, for a podcast
             // post, the full episode for the podcast playlist. Anything else is not posted there.
             if ( 'youtube' === $platform ) {
+                // Social post gate, before the episode's AI description and the shorts.
+                $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                    continue;
+                }
                 $yt_shorts = self::shorts_wanted( $post_id, 'youtube', $engine );
                 if ( $yt_shorts ) {
                     $short_targets['youtube'] = $engine;
@@ -194,26 +209,45 @@ class PressHub_Social_Dispatcher {
                 continue;
             }
 
-            // TikTok photo slides (#333): each short also as a photo post, between the shorts.
-            // An article's slides and video short share one caption, made once.
-            $article_copy = null;
-            if ( 'tiktok' === $platform ) {
-                if ( class_exists( 'PressHub_Social_TikTok_Shorts' )
-                    && PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE === PressHub_Social_TikTok_Shorts::source_type( $post_id )
-                    && PressHub_Social_TikTok_Shorts::slides_wanted( $post_id, $engine, false ) ) {
-                    $article_copy = self::article_short_copy( $post_id, 'tiktok' );
+            // TikTok photo slides (#333): a story goes to TikTok once, as a video short or,
+            // when TikTok gets no video of it, as a photo post in place of the classic post
+            // (2.84.0). An article's slides use its usual TikTok caption.
+            $platform_shorts = in_array( $platform, [ 'tiktok', 'instagram' ], true ) && self::shorts_wanted( $post_id, $platform, $engine );
+            if ( 'tiktok' === $platform && ! $platform_shorts
+                && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::slides_wanted( $post_id, $engine, false ) ) {
+                // Social post gate, before the slides' AI copy and images.
+                $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                    continue;
                 }
-                // The slides sit between the TikTok shorts, which start at the story slot.
-                $job_ids = array_merge( $job_ids, self::enqueue_tiktok_slides( $post_id, $engine, $base_time, $article_copy ) );
-                if ( null !== $article_copy ) {
-                    $short_copies['tiktok'] = $article_copy;
+                $slide_ids = self::enqueue_tiktok_slides( $post_id, $engine, $base_time + ( $index * $interval ), null, false );
+                if ( ! empty( $slide_ids ) ) {
+                    $job_ids = array_merge( $job_ids, $slide_ids );
+                    continue;
                 }
             }
 
             // TikTok and Instagram get the shorts instead of their usual post. They are queued
             // with the other platforms' shorts after this loop, on one story schedule.
-            if ( in_array( $platform, [ 'tiktok', 'instagram' ], true ) && self::shorts_wanted( $post_id, $platform, $engine ) ) {
+            if ( $platform_shorts ) {
+                // Social post gate, before any caption or plan is made: an article's short
+                // tells its one story, checked now; a podcast's stories are checked when planned.
+                $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                    continue;
+                }
                 $short_targets[ $platform ] = $engine;
+                continue;
+            }
+
+            // Social post gate, before any AI copy or images are made for the post.
+            $gate_reason = PressHub_Social_Post_Gate::check_post( $post_id, $platform );
+            if ( '' !== $gate_reason ) {
+                PressHub_Social_Post_Gate::record_blocked( $post_id, $platform, $engine, $gate_reason );
+                // The post's Reels are stopped with its link post: an article's Reel tells the
+                // same story, and any other post is only stopped here by another check.
                 continue;
             }
 
@@ -262,6 +296,11 @@ class PressHub_Social_Dispatcher {
             $with_images = class_exists( 'PressHub_Social_Post_Images' ) && PressHub_Social_Post_Images::applies( $post_id, $platform );
             if ( $with_images ) {
                 $job_data['metadata'] = PressHub_Social_Post_Images::job_metadata( $platform );
+            }
+            // The post's story tag, so the story ledger knows what this job told.
+            $with_story = PressHub_Social_Post_Gate::with_story( $post_id, $job_data['metadata'] ?? null );
+            if ( null !== $with_story ) {
+                $job_data['metadata'] = $with_story;
             }
 
             $job_id = PressHub_Social_Queue::enqueue( $job_data );
@@ -324,15 +363,18 @@ class PressHub_Social_Dispatcher {
 
     /**
      * Queue a post's TikTok photo slides when TikTok Photo Slides are on: one photo post per
-     * short, each halfway between two shorts. A podcast's slides take the short's own caption
-     * at claim time; an article's take its usual TikTok caption, as its video short does.
+     * story. A podcast's slides take the short's own caption at claim time; an article's
+     * take its usual TikTok caption. enqueue_for_post() queues them only when TikTok gets no
+     * video short of the post (2.84.0), so a story is not posted to TikTok twice.
      *
      * @param int         $start_time Unix time of the post's first TikTok post.
      * @param string|null $copy       An article's TikTok caption when the caller already has it;
      *                                null makes it here.
+     * @param bool        $between    Place each photo post halfway between two shorts (true),
+     *                                or on the story's own slot (false, no shorts on TikTok).
      * @return int[] IDs of the queued slide jobs.
      */
-    public static function enqueue_tiktok_slides( int $post_id, string $engine, int $start_time, ?string $copy = null ): array {
+    public static function enqueue_tiktok_slides( int $post_id, string $engine, int $start_time, ?string $copy = null, bool $between = true ): array {
         if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::slides_wanted( $post_id, $engine ) ) {
             return [];
         }
@@ -345,7 +387,7 @@ class PressHub_Social_Dispatcher {
             PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, 'tiktok' );
         }
         $ids = [];
-        foreach ( PressHub_Social_TikTok_Shorts::build_slides_jobs( $post_id, $start_time, $copy ) as $slides_job ) {
+        foreach ( PressHub_Social_TikTok_Shorts::build_slides_jobs( $post_id, $start_time, $copy, $between ) as $slides_job ) {
             $job_id = PressHub_Social_Queue::enqueue( $slides_job );
             if ( is_wp_error( $job_id ) ) {
                 PressHub_Social_Logger::error( sprintf( 'Failed to enqueue TikTok photo slides for post #%d: %s', $post_id, $job_id->get_error_message() ) );
@@ -358,6 +400,32 @@ class PressHub_Social_Dispatcher {
             PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );
         }
         return $ids;
+    }
+
+    /** Platforms that take only video (or photo posts) of a post's stories. */
+    public const VIDEO_PLATFORMS = [ 'tiktok', 'instagram', 'youtube' ];
+
+    /** Post meta that marks a trending roundup (PressHub_AI_Social_Trending::META_KEY). */
+    public const TRENDING_META_KEY = '_presshub_social_trending_key';
+
+    /**
+     * Why a post gets no video posts (TikTok, Instagram, YouTube, Facebook Reels), or ''.
+     * - The written daily brief (`_presshub_briefing_type` = text): its podcast follows and
+     *   tells the same stories in video. Filter `presshub_social_briefing_text_video`
+     *   (default false) gives it videos again, e.g. on a site without podcasts.
+     * Its X and Facebook link posts go out as usual.
+     */
+    public static function no_video_reason( int $post_id ): string {
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) ) {
+            return '';
+        }
+        if ( 'text' === (string) get_post_meta( $post_id, '_presshub_briefing_type', true ) ) {
+            $video = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_social_briefing_text_video', false, $post_id ) : false;
+            if ( ! $video ) {
+                return 'it is the written daily brief, and its podcast tells the same stories in video.';
+            }
+        }
+        return '';
     }
 
     /** Order of the platforms inside one story's slot. Facebook last: its link post goes first. */
@@ -384,6 +452,9 @@ class PressHub_Social_Dispatcher {
     public static function shorts_wanted( int $post_id, string $platform, string $engine ): bool {
         if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, $platform ) ) {
             return false;
+        }
+        if ( 'facebook' === $platform && '' !== self::no_video_reason( $post_id ) ) {
+            return false; // No Reel either; the Facebook link post stays.
         }
         if ( 'facebook' === $platform && 'api' === $engine
             && PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE !== PressHub_Social_TikTok_Shorts::source_type( $post_id )
@@ -527,10 +598,11 @@ class PressHub_Social_Dispatcher {
     /**
      * Dispatch an individual social job immediately.
      *
-     * @param int $job_id
+     * @param int  $job_id
+     * @param bool $gate False skips the social post gate (a job reposted by hand).
      * @return bool|WP_Error True on success, WP_Error on failure.
      */
-    public static function dispatch_job( int $job_id ): bool|WP_Error {
+    public static function dispatch_job( int $job_id, bool $gate = true ): bool|WP_Error {
         $job = PressHub_Social_Queue::get_job( $job_id );
         if ( ! $job ) {
             return new WP_Error( 'job_not_found', sprintf( __( 'Social job #%d not found.', 'presshub-social-autopost' ), $job_id ) );
@@ -544,6 +616,16 @@ class PressHub_Social_Dispatcher {
         $platform = sanitize_key( (string) ( $job['platform'] ?? '' ) );
         $engine   = sanitize_key( (string) ( $job['engine'] ?? 'api' ) );
         $post_id  = (int) ( $job['post_id'] ?? 0 );
+
+        // Social post gate: checked again, before any copy is rewritten or anything
+        // is sent, against what went out since the job was queued. A manual repost skips it.
+        if ( $gate ) {
+            $gate_reason = PressHub_Social_Post_Gate::check_job( $job );
+            if ( '' !== $gate_reason ) {
+                PressHub_Social_Post_Gate::block_job( $job_id, $gate_reason );
+                return new WP_Error( PressHub_Social_Post_Gate::BLOCKED_CODE, 'Not posted: ' . $gate_reason );
+            }
+        }
 
         // If this job previously failed during AI copy generation, regenerate copy BEFORE
         // entering Pull Mode or dispatching so an error placeholder is never queued as pending.
@@ -737,6 +819,8 @@ class PressHub_Social_Dispatcher {
                 $summary['succeeded']++;
             } elseif ( is_wp_error( $res ) && in_array( $res->get_error_code(), [ PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE, 'social_post_images_pending' ], true ) ) {
                 $summary['deferred']++;
+            } elseif ( is_wp_error( $res ) && PressHub_Social_Post_Gate::BLOCKED_CODE === $res->get_error_code() ) {
+                $summary['skipped']++;
             } else {
                 $summary['failed']++;
             }

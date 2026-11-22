@@ -349,6 +349,14 @@ class PressHub_Social_REST_Controller {
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
+                // Social post gate: checked again against what went out since the job was
+                // queued, before anything more is prepared for it; a stopped job is cancelled with the reason as its note.
+                $gate_reason = PressHub_Social_Post_Gate::check_job( $candidate );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::block_job( (int) $candidate['id'], $gate_reason );
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
                 if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) && ! PressHub_Social_TikTok_Shorts::is_ready( $candidate ) ) {
                     PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $candidate['post_id'] ?? 0 ) );
                     $skipped[] = (int) $candidate['id'];

@@ -230,6 +230,20 @@ hp_check( 'matrix: policy switch off shows a dash', '—' === ( $by['Daily brief
 delete_option( 'presshub_ai_policy_fiches_enabled' );
 delete_option( 'presshub_ai_stakeholders_enabled' );
 
+// Social posts matrix (2.84.0): the matrix, the live settings and the gate.
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+update_option( 'presshub_social_story_repeat_hours', 0 );
+$html = PressHub_AI_Help_Admin::build_page();
+hp_check( 'social: the section is on the page', false !== strpos( $html, 'id="presshub-help-social"' ) );
+hp_check( 'social: the matrix has a row per platform', 1 === substr_count( $html, '<th scope="row">TikTok</th>' ) && 1 === substr_count( $html, '<th scope="row">YouTube</th>' ) );
+hp_check( 'social: the written brief gets no video', false !== strpos( $html, 'The written daily brief gets no video' ) );
+hp_check( 'social: live switch shown', (bool) preg_match( '#<th scope="row">TikTok Shorts</th><td>On</td>#', $html ) );
+hp_check( 'social: Story Window 0 shows Off', (bool) preg_match( '#<th scope="row">Story Window</th><td>Off</td>#', $html ) );
+hp_check( 'social: the gate is explained', false !== strpos( $html, 'The social post gate' ) && false !== strpos( $html, 'Not posted:' ) );
+delete_option( 'presshub_social_tiktok_shorts_enabled' );
+delete_option( 'presshub_social_story_repeat_hours' );
+hp_check( 'social: default Story Window is 36 hours', (bool) preg_match( '#<th scope="row">Story Window</th><td>36 hours</td>#', PressHub_AI_Help_Admin::build_page() ) );
+
 // url() and wiring in the plugin bootstrap.
 hp_check( 'url: Help page URL', false !== strpos( PressHub_AI_Help_Admin::url(), 'page=presshub-ai-help' ) );
 hp_check( 'url: with anchor', '#presshub-help-limits' === substr( PressHub_AI_Help_Admin::url( 'presshub-help-limits' ), -strlen( '#presshub-help-limits' ) ) );
