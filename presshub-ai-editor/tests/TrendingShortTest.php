@@ -36,7 +36,7 @@ $items = [
 
 // 1. items()
 $GLOBALS['POSTS_STORE'][700] = [ 'ID' => 700, 'post_title' => 'Τι συζητά η Κύπρος στα social – 22/11/2026', 'post_content' => '<p>Τρεις αναρτήσεις συζητήθηκαν σήμερα: για τον Αϊκούτ, τον Μαζωτό και ένα TikTok.</p>', 'post_excerpt' => '', 'post_status' => 'publish' ];
-update_post_meta( 700, PressHub_AI_Social_Trending::META_ITEMS, wp_json_encode( $items ) );
+update_post_meta( 700, PressHub_AI_Social_Trending::META_ITEMS, wp_slash( wp_json_encode( $items ) ) );
 $GLOBALS['POSTS_STORE'][701] = [ 'ID' => 701, 'post_title' => 'Άρθρο', 'post_content' => '<p>Ένα απλό άρθρο για την ακρίβεια στην Κύπρο.</p>', 'post_excerpt' => '', 'post_status' => 'publish' ];
 ts_check( 'A roundup has its posts', 3 === count( PressHub_Social_Trending_Short::items( 700 ) ) );
 ts_check( 'An article has no roundup posts', [] === PressHub_Social_Trending_Short::items( 701 ) );
@@ -143,7 +143,7 @@ PressHub_Social_TikTok_Shorts::get_plan( 700, 1 );
 ts_check( 'The stored plan is reused', 1 === count( $ai_prompts ) );
 $items2 = $items;
 array_pop( $items2 );
-update_post_meta( 700, PressHub_AI_Social_Trending::META_ITEMS, wp_json_encode( $items2 ) );
+update_post_meta( 700, PressHub_AI_Social_Trending::META_ITEMS, wp_slash( wp_json_encode( $items2 ) ) );
 PressHub_Social_TikTok_Shorts::get_plan( 700, 1 );
 ts_check( 'A new set of posts makes a new plan', 2 === count( $ai_prompts ) );
 PressHub_Social_TikTok_Shorts::get_plan( 701, 1 );

@@ -76,7 +76,8 @@ if ( ! function_exists( 'get_post_meta' ) ) {
 
 if ( ! function_exists( 'update_post_meta' ) ) {
     function update_post_meta( $post_id, $key, $value ) {
-        $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] = $value;
+        // As WordPress: the value is unslashed before it is stored.
+        $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] = function_exists( 'wp_unslash' ) ? wp_unslash( $value ) : $value;
         return true;
     }
 }
@@ -494,7 +495,7 @@ if ( ! function_exists( 'wp_insert_post' ) ) {
         $GLOBALS['POSTS_STORE'][ $id ] = array_merge( [ 'ID' => $id ], $postarr );
         if ( ! empty( $postarr['meta_input'] ) && is_array( $postarr['meta_input'] ) ) {
             foreach ( $postarr['meta_input'] as $k => $v ) {
-                $GLOBALS['POST_META_STORE'][ $id ][ $k ] = $v;
+                $GLOBALS['POST_META_STORE'][ $id ][ $k ] = function_exists( 'wp_unslash' ) ? wp_unslash( $v ) : $v;
             }
         }
         return $id;
@@ -864,6 +865,16 @@ if ( ! function_exists( 'add_query_arg' ) ) {
         }
         $combined = array_merge( $existing, $qs );
         return $base . ( ! empty( $combined ) ? '?' . http_build_query( $combined ) : '' );
+    }
+}
+
+if ( ! function_exists( 'wp_slash' ) ) {
+    function wp_slash( $value ) {
+        // As WordPress: strings, and every string inside arrays.
+        if ( is_array( $value ) ) {
+            return array_map( 'wp_slash', $value );
+        }
+        return is_string( $value ) ? addslashes( $value ) : $value;
     }
 }
 

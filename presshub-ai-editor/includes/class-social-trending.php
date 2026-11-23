@@ -1227,7 +1227,13 @@ class PressHub_AI_Social_Trending {
         $map     = is_array( $map ) ? $map : [];
         $title   = self::build_title( $now );
         $status  = PressHub_AI_Settings_Storage::get_social_trending_post_status();
-        $items_meta = function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : json_encode( $items );
+        // update_post_meta() (and wp_insert_post()'s meta_input) unslash the value, which
+        // strips the backslashes out of JSON: a quote in a post's text then breaks the
+        // whole value and Greek letters turn into "u03c4". Slashed first, it is stored as
+        // encoded (read back by PressHub_Social_Trending_Short::items() for the short).
+        $flags      = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+        $items_json = function_exists( 'wp_json_encode' ) ? wp_json_encode( $items, $flags ) : json_encode( $items, $flags );
+        $items_meta = function_exists( 'wp_slash' ) ? wp_slash( (string) $items_json ) : addslashes( (string) $items_json );
 
         $existing = (int) ( $map[ $key ] ?? 0 );
         if ( $existing > 0 ) {

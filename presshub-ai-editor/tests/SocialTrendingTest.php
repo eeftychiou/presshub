@@ -728,6 +728,25 @@ st_check( 'legacy: bare Facebook link loses the plugin class, keeps its link', f
 st_check( 'legacy: reel and posts links untouched', false !== strpos( $fixed, '<div class="fb-video" data-href="https://www.facebook.com/reel/1026139433848847"' ) && false !== strpos( $fixed, '<div class="fb-post" data-href="https://www.facebook.com/VoltCyprus/posts/pfbid0j9"' ) );
 st_check( 'legacy: other content untouched', '<div class="fb-video" data-href="https://www.facebook.com/123"></div>' === $T::filter_legacy_facebook_embeds( '<div class="fb-video" data-href="https://www.facebook.com/123"></div>' ) );
 
+// Items meta survives WordPress's unslash (2.87.1): update_post_meta() and meta_input
+// strip backslashes, so unslashed JSON lost its quotes' escapes and its \uXXXX letters.
+st_reset();
+$GLOBALS['ST_NOW'] = $now;
+$plan   = $T::get_worker_plan( false, $now );
+$tricky = 'Ο "Πρόεδρος" είπε: C:\\path 😀';
+$res    = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 500, 60, [ 'text' => $tricky ] ) ], [], $now );
+// The stubs unslash meta as WordPress does, so the store holds what the site would.
+$back   = json_decode( (string) ( $GLOBALS['POST_META_STORE'][ $res['post_id'] ][ $T::META_ITEMS ] ?? '' ), true );
+st_check( 'items meta: decodes after unslash (new post)', is_array( $back ) && $tricky === ( $back[0]['text'] ?? null ) );
+// Same day: the update path (update_post_meta), read back by the short's items().
+$later = $now + 6 * 3600 + 5;
+$GLOBALS['ST_NOW'] = $later;
+$plan  = $T::get_worker_plan( false, $later );
+$T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '72', 800, 10, [ 'text' => $tricky ] ) ], [], $later );
+$short_items = PressHub_Social_Trending_Short::items( $res['post_id'] );
+st_check( 'items meta: decodes after unslash (update), the short sees the posts', 1 <= count( $short_items ) && $tricky === ( $short_items[0]['text'] ?? null ) );
+unset( $GLOBALS['ST_NOW'] );
+
 // Quiet hours: no scheduled run overnight, Refresh now still works.
 $day   = 1794614400 - 7200; // 2026-11-14 00:00 local (gmt_offset 2)
 st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 0, 'presshub_ai_social_trending_quiet_until_hour' => 6 ] );
