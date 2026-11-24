@@ -41,14 +41,19 @@ class SettingsSelectDefaultsTest {
             $failures[] = 'The stored voice name must be escaped.';
         }
 
-        // #262: co-author provider select source.
-        $src = file_get_contents( __DIR__ . '/../includes/class-settings-render.php' );
-        if ( ! preg_match( "/get_option\\( 'presshub_ai_coauthor_provider', '' \\)/", $src ) ) {
-            $failures[] = 'Co-Author provider must read the stored value with an empty default.';
+        // #262, moved by #236: the co-author provider reads its stored value with
+        // an empty default and offers "Default" first, now in the AI models table.
+        require_once __DIR__ . '/../includes/class-model-tasks.php';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_coauthor_provider'] = 'my-gemini';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [];
+        $table = PressHub_Model_Tasks::render_table();
+        if ( ! preg_match( '/<select name="presshub_ai_coauthor_provider"[^>]*>\s*<option value="">Default<\/option>/', $table ) ) {
+            $failures[] = 'Co-Author provider select must offer the default-provider entry first.';
         }
-        if ( ! preg_match( '/get_active_providers_options\( \$cur_coauthor_prov, __\( \'-- Use Active Provider Default --\'/', $src ) ) {
-            $failures[] = 'Co-Author provider select must offer the default-provider entry.';
+        if ( false === strpos( $table, '<option value="my-gemini" selected="selected">' ) ) {
+            $failures[] = 'Co-Author provider must show the stored value, even when that provider is gone.';
         }
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_coauthor_provider'] );
 
         if ( $failures ) {
             echo "FAIL\n";

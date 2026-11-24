@@ -36,6 +36,20 @@ export interface GenerateVideoOptions {
   duration?: number;
   maxDuration?: number;
   outputDir?: string;
+  /**
+   * The video must carry the whole audio (a podcast episode): no audio file, or a duration
+   * that cannot be read, fails instead of rendering a short still-image video.
+   */
+  requireAudio?: boolean;
+}
+
+/** Deletes temporary files of a render that stops before FFmpeg runs. */
+function removeTemp(...files: Array<string | null | undefined>): void {
+  for (const file of files) {
+    if (file && fs.existsSync(file)) {
+      try { fs.unlinkSync(file); } catch {}
+    }
+  }
 }
 
 export interface VideoResult {
@@ -203,10 +217,18 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
         WorkerLogger.info('VideoGenerator', `Audio duration clamped to explicit maxDuration: ${duration}s`);
       }
     } else {
+      if (options.requireAudio) {
+        removeTemp(downloadedTempAudio, generatedTempImage ? resolvedImagePath : null);
+        throw new Error('Could not read the podcast audio duration, so the episode would be cut short; not rendering it.');
+      }
       WorkerLogger.warn('VideoGenerator', `Could not probe audio duration. Falling back to default duration.`);
       duration = clampDuration(options.duration, 10, 5, 60);
     }
   } else {
+    if (options.requireAudio) {
+      removeTemp(downloadedTempAudio, generatedTempImage ? resolvedImagePath : null);
+      throw new Error('The podcast audio could not be downloaded, so there is no episode to render.');
+    }
     duration = clampDuration(options.duration, 10, 5, 60);
     WorkerLogger.debug('VideoGenerator', `No audio track attached. Using still-image duration: ${duration}s`);
   }
@@ -307,6 +329,8 @@ export interface GenerateVideoParams {
   backgroundUrl?: string;
   audioUrl?: string;
   isPodcast?: boolean;
+  /** See GenerateVideoOptions.requireAudio. */
+  requireAudio?: boolean;
 }
 
 export async function generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
@@ -325,6 +349,7 @@ export async function generateVideo(params: GenerateVideoParams): Promise<VideoR
     height: params.height,
     duration: params.durationSec ?? params.duration,
     maxDuration: params.maxDuration,
-    outputDir: params.outputDir
+    outputDir: params.outputDir,
+    requireAudio: params.requireAudio
   });
 }

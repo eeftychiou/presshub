@@ -74,7 +74,7 @@ class SocialMetaTagsTest {
         // 3. Featured Image Resolution with Pool Fallback
         // -------------------------------------------------------------
         // Initially no post thumbnail, fallback to pool
-        update_option( 'presshub_ai_briefing_featured_image_ids', '777, 888' );
+        update_option( 'presshub_ai_briefing_featured_image_ids_morning', '777, 888' );
         $pool_img = $social->get_social_image_url( $mock_post );
         if ( 'https://example.com/wp-content/uploads/image-777.jpg' !== $pool_img ) {
             $failures[] = 'get_social_image_url() failed to fall back to pool image; got: ' . $pool_img;
@@ -239,7 +239,7 @@ class SocialMetaTagsTest {
         delete_option( 'presshub_ai_social_meta_enabled' );
 
         // Cleanup
-        delete_option( 'presshub_ai_briefing_featured_image_ids' );
+        delete_option( 'presshub_ai_briefing_featured_image_ids_morning' );
         delete_option( 'presshub_ai_social_meta_all_posts' );
 
         if ( ! empty( $failures ) ) {

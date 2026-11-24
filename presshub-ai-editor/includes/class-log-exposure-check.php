@@ -137,15 +137,20 @@ class PressHub_AI_Log_Exposure_Check {
         ];
         $class = $classes[ $state ] ?? 'notice-warning';
 
-        echo '<div id="presshub-log-exposure" class="presshub-log-exposure notice inline ' . esc_attr( $class ) . '" style="padding:10px 12px;margin:15px 0;">';
+        echo '<div id="presshub-log-exposure" class="presshub-log-exposure notice inline ' . esc_attr( $class ) . '">';
         echo '<p><strong>' . esc_html__( 'Log folder exposure check', 'presshub-ai-editor' ) . '</strong></p>';
 
         if ( 'exposed' === $state ) {
             echo '<p><strong>' . esc_html__( 'Your log files can be downloaded by anyone on the internet.', 'presshub-ai-editor' ) . '</strong> ';
             echo esc_html__( 'They contain prompts, drafts and generated content. Block web access to the folder now.', 'presshub-ai-editor' ) . '</p>';
             echo '<p>' . esc_html__( 'Nginx ignores .htaccess files. Add a rule like this to your server block and reload nginx:', 'presshub-ai-editor' ) . '</p>';
-            echo '<pre style="background:#f6f7f7;padding:8px;overflow:auto;">' . esc_html( 'location ~* /wp-content/uploads/presshub-ai/ { deny all; }' ) . '</pre>';
-            echo '<p>' . esc_html__( 'Alternatively, define PRESSHUB_AI_LOG_DIR in wp-config.php to store logs in a folder outside the web root.', 'presshub-ai-editor' ) . '</p>';
+            echo '<pre class="presshub-log-exposure-rule">' . esc_html( 'location ~* /wp-content/uploads/presshub-ai/ { deny all; }' ) . '</pre>';
+            echo '<p>' . sprintf(
+                /* translators: 1: the constant to define, 2: the file it goes in */
+                esc_html__( 'Alternatively, define %1$s in %2$s to store logs in a folder outside the web root.', 'presshub-ai-editor' ),
+                '<code>PRESSHUB_AI_LOG_DIR</code>',
+                '<code>wp-config.php</code>'
+            ) . '</p>';
         } elseif ( 'protected' === $state ) {
             echo '<p>' . esc_html__( 'Log files are not reachable from the web.', 'presshub-ai-editor' ) . '</p>';
         } elseif ( 'not_applicable' === $state ) {

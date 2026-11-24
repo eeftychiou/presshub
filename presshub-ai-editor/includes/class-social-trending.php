@@ -45,6 +45,18 @@ class PressHub_AI_Social_Trending {
     const BRIEFING_TEXT_CHARS = 500;
 
     const CRON_HOOK  = 'presshub_ai_social_trending_tick';
+    /** One-off job that draws a roundup's AI featured image outside the worker's request. */
+    const AI_IMAGE_HOOK = 'presshub_ai_social_trending_ai_image';
+    /** Post meta: the AI image job for this roundup was queued (once per post). */
+    const AI_IMAGE_META = '_presshub_trending_ai_image_queued';
+    /** Post meta: the QA gate release waits for the AI image job, so social shares get the AI image. */
+    const AI_RELEASE_META = '_presshub_trending_ai_release_pending';
+    /** What ai_image_texts() cut when the AI image job was queued (agents.md rule 13). */
+    const AI_IMAGE_CUTS_META = '_presshub_trending_ai_image_cuts';
+    /** Longest wait for the AI image job before the roundup is released with the stand-in picture. */
+    const AI_IMAGE_MAX_WAIT = 900;
+    /** Post meta: the watchdog released this roundup before its AI image arrived. */
+    const AI_WATCHDOG_META = '_presshub_trending_ai_watchdog_release';
     const RUN_ACTION = 'presshub_ai_social_trending_run_now';
 
     /** Post meta on roundup posts: the run key and the items shown. */
@@ -97,6 +109,7 @@ class PressHub_AI_Social_Trending {
     public static function register_hooks(): void {
         add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
         add_action( self::CRON_HOOK, [ __CLASS__, 'cron_tick' ] );
+        add_action( self::AI_IMAGE_HOOK, [ __CLASS__, 'run_ai_featured_image' ], 10, 2 );
         add_action( 'admin_post_' . self::RUN_ACTION, [ __CLASS__, 'handle_run_now' ] );
         add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_front_assets' ] );
         add_action( 'wp_body_open', [ __CLASS__, 'print_fb_root' ] );
@@ -193,6 +206,10 @@ class PressHub_AI_Social_Trending {
         if ( ! $force && ( $now - (int) $state['last_run'] ) < $interval ) {
             return null;
         }
+        // Quiet hours: no scheduled run overnight ("Refresh now" still works).
+        if ( ! $force && self::in_quiet_hours( $now ) ) {
+            return null;
+        }
         $worker = self::worker_platforms();
         $ig     = self::instagram_ready();
         if ( empty( $worker ) && ! $ig ) {
@@ -231,6 +248,7 @@ class PressHub_AI_Social_Trending {
      */
     public static function tick( ?int $now = null ): void {
         $now   = $now ?? time();
+        self::release_stale_ai_waits( $now );
         $state = self::get_state();
         if ( ! empty( $state['open'] ) && ( $now - (int) $state['started'] ) >= self::WORKER_WAIT_SEC ) {
             self::log( 'warning', sprintf( 'Social trending: the worker did not report run %s; publishing with what was collected.', $state['run_id'] ) );
@@ -687,6 +705,21 @@ class PressHub_AI_Social_Trending {
     }
 
     /**
+     * Is $now inside the roundup's quiet hours (site time zone)? The window runs
+     * from the "from" hour up to, not including, the "until" hour and may wrap
+     * past midnight (22 → 6). Equal hours mean no quiet hours.
+     */
+    public static function in_quiet_hours( int $now ): bool {
+        $from  = PressHub_AI_Settings_Storage::get_trending_quiet_from_hour();
+        $until = PressHub_AI_Settings_Storage::get_trending_quiet_until_hour();
+        if ( $from === $until ) {
+            return false;
+        }
+        $hour = (int) ( function_exists( 'wp_date' ) ? wp_date( 'G', $now ) : gmdate( 'G', $now ) );
+        return $from < $until ? ( $hour >= $from && $hour < $until ) : ( $hour >= $from || $hour < $until );
+    }
+
+    /**
      * When a new roundup created at $now should go live, as [ local 'Y-m-d H:i:s', GMT
      * 'Y-m-d H:i:s' ], or null to publish now.
      *
@@ -1030,6 +1063,14 @@ class PressHub_AI_Social_Trending {
             return $b['score'] <=> $a['score'];
         } );
         $picked = array_slice( $cands, 0, PressHub_AI_Settings_Storage::get_social_trending_briefing_count(), true );
+        if ( count( $cands ) > count( $picked ) ) {
+            // Design principle: a limit that leaves content out says so.
+            self::log( 'info', 'Social trending: the briefing count left out lower-scored posts.', [
+                'picked'    => count( $picked ),
+                'left_out'  => count( $cands ) - count( $picked ),
+                'limit'     => PressHub_AI_Settings_Storage::get_social_trending_briefing_count(),
+            ] );
+        }
         foreach ( array_keys( $picked ) as $key ) {
             $pool[ $key ]['used_in'] = $date . '|' . $edition;
         }
@@ -1049,12 +1090,14 @@ class PressHub_AI_Social_Trending {
         $lines   = [];
         $lines[] = 'Δημοφιλείς αναρτήσεις για την Κύπρο στα μέσα κοινωνικής δικτύωσης, με βάση τις αντιδράσεις των χρηστών. Δείχνουν τι συζητά το κοινό: είναι απόψεις και ισχυρισμοί λογαριασμών, όχι επιβεβαιωμένες ειδήσεις. Αν χρησιμοποιηθούν, να παρουσιαστούν ως σύντομη αναφορά στη δημόσια συζήτηση, με απόδοση στον λογαριασμό.';
         $keys    = [];
+        $cut     = [];
         foreach ( $items as $i => $it ) {
             $keys[] = (string) $it['key'];
             $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? $it['platform'];
             $name   = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : (string) $it['handle'];
             $text   = trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) );
             if ( ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text ) ) > self::BRIEFING_TEXT_CHARS ) {
+                $cut[] = '@' . $it['handle'] . ' (' . ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text ) ) . ')';
                 $text = ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, self::BRIEFING_TEXT_CHARS ) : substr( $text, 0, self::BRIEFING_TEXT_CHARS ) ) . '…';
             }
             $lines[] = sprintf(
@@ -1075,6 +1118,9 @@ class PressHub_AI_Social_Trending {
         $url     = $roundup_id > 0 && function_exists( 'get_permalink' ) ? (string) get_permalink( $roundup_id ) : '';
         if ( '' === $url ) {
             $url = (string) ( $items[0]['url'] ?? '' );
+        }
+        if ( $cut ) {
+            self::log( 'info', sprintf( 'Social trending: %d post text(s) cut to %d characters for the briefing.', count( $cut ), self::BRIEFING_TEXT_CHARS ), [ 'posts' => $cut ] );
         }
         return [
             'id'             => 'st_' . substr( md5( implode( ',', $keys ) ), 0, 12 ),
@@ -1163,24 +1209,62 @@ class PressHub_AI_Social_Trending {
     /**
      * @return int|WP_Error
      */
+    /** Whether the QA gate is holding this roundup in Pending Review. */
+    private static function held_by_gate( int $post_id, $post ): bool {
+        if ( ! class_exists( 'PressHub_AI_Publish_Gate' ) || 'pending' !== ( $post->post_status ?? '' ) ) {
+            return false;
+        }
+        if ( '' === (string) get_post_meta( $post_id, PressHub_AI_Publish_Gate::META_TARGET_STATUS, true ) ) {
+            return false;
+        }
+        $review = get_post_meta( $post_id, PressHub_AI_Publish_Gate::META_REVIEW, true );
+        return is_array( $review ) && PressHub_AI_Publish_Gate::holds( $review );
+    }
+
     public static function upsert_post( array $items, int $now, string $run_id ) {
         $key     = self::post_key( $now, $run_id );
         $map     = get_option( self::OPTION_POSTS, [] );
         $map     = is_array( $map ) ? $map : [];
         $title   = self::build_title( $now );
         $status  = PressHub_AI_Settings_Storage::get_social_trending_post_status();
-        $items_meta = function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : json_encode( $items );
+        // update_post_meta() (and wp_insert_post()'s meta_input) unslash the value, which
+        // strips the backslashes out of JSON: a quote in a post's text then breaks the
+        // whole value and Greek letters turn into "u03c4". Slashed first, it is stored as
+        // encoded (read back by PressHub_Social_Trending_Short::items() for the short).
+        $flags      = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+        $items_json = function_exists( 'wp_json_encode' ) ? wp_json_encode( $items, $flags ) : json_encode( $items, $flags );
+        $items_meta = function_exists( 'wp_slash' ) ? wp_slash( (string) $items_json ) : addslashes( (string) $items_json );
 
         $existing = (int) ( $map[ $key ] ?? 0 );
+        if ( $existing > 0 ) {
+            self::maybe_release_stale_ai_wait( $existing, $now );
+        }
         $post     = $existing > 0 ? get_post( $existing ) : null;
         $update   = $post && 'trash' !== ( $post->post_status ?? '' );
-        $summary  = self::summary_for( $items, $update ? $existing : 0 );
-        $content  = self::build_content( $items, $now, $summary['text'] );
+        $new_set  = true;
         if ( $update ) {
+            $prev_items = json_decode( (string) get_post_meta( $existing, self::META_ITEMS, true ), true );
+            $new_set    = self::summary_hash( $items ) !== self::summary_hash( is_array( $prev_items ) ? $prev_items : [] );
+            // A roundup the gate is holding keeps the text it was reviewed on
+            // until a new set of posts arrives, so "Publish anyway" still
+            // matches (and no summary is asked for).
+            if ( ! $new_set && self::held_by_gate( $existing, $post ) ) {
+                return $existing;
+            }
+        }
+        $summary  = self::summary_for( $items, $update ? $existing : 0 );
+        $content  = self::build_content( $items, $now, $summary['text'], (array) ( $summary['notes'] ?? [] ) );
+        if ( $update ) {
+            // A new set of posts is not shown until the QA gate has read it.
+            if ( $new_set && class_exists( 'PressHub_AI_Publish_Gate' ) && PressHub_AI_Publish_Gate::applies( 'trending' ) ) {
+                PressHub_AI_Publish_Gate::hold_for_review( $existing );
+            }
+            $fresh_post = get_post( $existing );
             $res = wp_update_post( [
                 'ID'           => $existing,
                 'post_title'   => $title,
                 'post_content' => $content,
+                'post_status'  => (string) ( $fresh_post->post_status ?? $post->post_status ),
             ], true );
             if ( is_wp_error( $res ) ) {
                 return $res;
@@ -1188,6 +1272,11 @@ class PressHub_AI_Social_Trending {
             update_post_meta( $existing, self::META_ITEMS, $items_meta );
             self::save_summary_meta( $existing, $summary );
             self::maybe_set_featured_image( $existing, $items );
+            // A new set of posts is checked again (whether or not the AI
+            // summary is on); the numbers changing alone is not.
+            if ( $new_set && ! self::release_waits_for_ai_image( $existing ) ) {
+                self::release_through_gate( $existing );
+            }
             return $existing;
         }
 
@@ -1213,6 +1302,16 @@ class PressHub_AI_Social_Trending {
             $postarr['post_date_gmt'] = $held[1];
             self::log( 'info', sprintf( 'Social trending: roundup scheduled for %s (site time) so its social posts go out then.', $held[0] ) );
         }
+        // QA gate: saved as pending and released once the summary and image are in place.
+        if ( class_exists( 'PressHub_AI_Publish_Gate' ) ) {
+            $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'trending' );
+            // An AI image is drawn after this request: hold the roundup as pending even when the
+            // gate does not check Trending, so it and its social posts go out with that image.
+            if ( self::ai_image_planned() && in_array( $postarr['post_status'], [ 'publish', 'future' ], true ) ) {
+                $postarr['meta_input'][ PressHub_AI_Publish_Gate::META_TARGET_STATUS ] = $postarr['post_status'];
+                $postarr['post_status'] = 'pending';
+            }
+        }
         $id = wp_insert_post( $postarr, true );
         if ( is_wp_error( $id ) ) {
             return $id;
@@ -1227,7 +1326,67 @@ class PressHub_AI_Social_Trending {
         update_option( self::OPTION_POSTS, $map, false );
         self::save_summary_meta( (int) $id, $summary );
         self::maybe_set_featured_image( (int) $id, $items );
+        if ( ! self::release_waits_for_ai_image( (int) $id ) ) {
+            self::release_through_gate( (int) $id );
+        }
         return (int) $id;
+    }
+
+    /** The roundup's featured image will be an AI image (the source and the feature are on). */
+    private static function ai_image_planned(): bool {
+        return 'auto_generate' === PressHub_AI_Settings_Storage::get_social_trending_image_source() && PressHub_AI_Settings_Storage::get_image_feature_enabled();
+    }
+
+    /**
+     * Watchdog: a roundup whose AI image job has not run within AI_IMAGE_MAX_WAIT
+     * (WP-Cron off, the job killed, the plugin deactivated) is released with the
+     * stand-in picture, so it never stays pending.
+     */
+    public static function maybe_release_stale_ai_wait( int $post_id, ?int $now = null ): bool {
+        if ( ! self::release_waits_for_ai_image( $post_id ) ) {
+            return false;
+        }
+        $now    = $now ?? time();
+        $queued = (int) get_post_meta( $post_id, self::AI_IMAGE_META, true );
+        if ( $queued > 0 && ( $now - $queued ) < self::AI_IMAGE_MAX_WAIT ) {
+            return false;
+        }
+        if ( false === delete_post_meta( $post_id, self::AI_RELEASE_META ) ) {
+            return false; // The job claimed it first.
+        }
+        update_post_meta( $post_id, self::AI_WATCHDOG_META, (string) $now );
+        self::log( 'warning', 'Social trending: the AI roundup image did not arrive in time; releasing with the top post picture.', [ 'post_id' => $post_id ] );
+        self::release_through_gate( $post_id );
+        return true;
+    }
+
+    private static function released_by_watchdog( int $post_id ): bool {
+        return '' !== (string) get_post_meta( $post_id, self::AI_WATCHDOG_META, true );
+    }
+
+    /** The watchdog over the latest roundups. */
+    private static function release_stale_ai_waits( int $now ): void {
+        $map = get_option( self::OPTION_POSTS, [] );
+        foreach ( array_slice( is_array( $map ) ? array_values( $map ) : [], -30 ) as $post_id ) {
+            self::maybe_release_stale_ai_wait( (int) $post_id, $now );
+        }
+    }
+
+    /** True while the AI image job for this roundup has not run: the job releases the post. */
+    private static function release_waits_for_ai_image( int $post_id ): bool {
+        return function_exists( 'get_post_meta' ) && '1' === (string) get_post_meta( $post_id, self::AI_RELEASE_META, true );
+    }
+
+    /** Legal check of the summary and quoted posts plus the measured SEO checks; then the configured status. */
+    private static function release_through_gate( int $post_id ): void {
+        if ( ! class_exists( 'PressHub_AI_Publish_Gate' ) ) {
+            return;
+        }
+        try {
+            PressHub_AI_Publish_Gate::release( $post_id, 'trending', 'trending_roundup' );
+        } catch ( Throwable $t ) {
+            self::log( 'warning', 'Social trending: the QA gate could not run: ' . $t->getMessage() );
+        }
     }
 
     /* ------------------------------------------------------------------
@@ -1252,15 +1411,17 @@ class PressHub_AI_Social_Trending {
      * @return array{hash:string,text:string,fresh:bool}
      */
     public static function summary_for( array $items, int $post_id ): array {
-        $hash = self::summary_hash( $items );
-        $none = [ 'hash' => $hash, 'text' => '', 'fresh' => false ];
+        $hash  = self::summary_hash( $items );
+        $facts = self::fact_check_signature( $items );
+        $none  = [ 'hash' => $hash, 'text' => '', 'notes' => [], 'facts' => $facts, 'fresh' => false ];
         if ( empty( $items ) || ! PressHub_AI_Settings_Storage::get_social_trending_summary_enabled() ) {
             return $none;
         }
         if ( $post_id > 0 ) {
             $prev = get_post_meta( $post_id, self::META_SUMMARY, true );
-            if ( is_array( $prev ) && $hash === ( $prev['hash'] ?? '' ) && '' !== (string) ( $prev['text'] ?? '' ) ) {
-                return [ 'hash' => $hash, 'text' => (string) $prev['text'], 'fresh' => false ];
+            // Reused while the posts and the fact checks they match stay the same.
+            if ( is_array( $prev ) && $hash === ( $prev['hash'] ?? '' ) && $facts === (string) ( $prev['facts'] ?? '' ) && '' !== (string) ( $prev['text'] ?? '' ) ) {
+                return [ 'hash' => $hash, 'text' => (string) $prev['text'], 'notes' => is_array( $prev['notes'] ?? null ) ? $prev['notes'] : [], 'facts' => $facts, 'fresh' => false ];
             }
         }
         $text = self::generate_summary( $items, $post_id );
@@ -1268,7 +1429,28 @@ class PressHub_AI_Social_Trending {
             self::log( 'warning', 'Social trending: the summary was not written, the roundup is saved without it: ' . $text->get_error_message() );
             return $none;
         }
-        return [ 'hash' => $hash, 'text' => $text, 'fresh' => true ];
+        return [ 'hash' => $hash, 'text' => $text, 'notes' => self::$last_summary_notes, 'facts' => $facts, 'fresh' => true ];
+    }
+
+    /**
+     * Which fact checks in the editorial memory these posts' texts match ('' when
+     * none): a summary is written again when this changes, so a fact check
+     * recorded after the roundup was first written still gets noted.
+     */
+    public static function fact_check_signature( array $items ): string {
+        if ( ! class_exists( 'PressHub_AI_Fact_Checks' ) || ! PressHub_AI_Fact_Checks::is_enabled() ) {
+            return '';
+        }
+        $text = implode( "\n", array_map( static function ( $it ) {
+            return (string) ( $it['text'] ?? '' );
+        }, array_values( $items ) ) );
+        $hits = PressHub_AI_Fact_Checks::find_in_text( $text );
+        if ( empty( $hits ) ) {
+            return '';
+        }
+        return md5( implode( '|', array_map( static function ( $fc ) {
+            return PressHub_AI_Fact_Checks::fold( $fc['claim'] ) . '#' . $fc['verdict'];
+        }, $hits ) ) );
     }
 
     private static function save_summary_meta( int $post_id, array $summary ): void {
@@ -1278,17 +1460,33 @@ class PressHub_AI_Social_Trending {
         update_post_meta( $post_id, self::META_SUMMARY, [
             'hash'         => (string) $summary['hash'],
             'text'         => (string) $summary['text'],
+            'notes'        => (array) ( $summary['notes'] ?? [] ),
+            'facts'        => (string) ( $summary['facts'] ?? '' ),
             'generated_at' => gmdate( 'c' ),
         ] );
     }
 
-    /** The posts as the prompt lists them: rank, platform, author, numbers, text. */
+    /**
+     * The posts as the prompt lists them: rank, platform, author, numbers, text.
+     * Each post text cut to SUMMARY_POST_TEXT_CHARS is noted for the summary
+     * call (social_trending_summary).
+     */
     public static function summary_posts_text( array $items ): string {
+        $cuts = class_exists( 'PressHub_AI_Knowledge_Cuts' );
+        if ( $cuts ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_trending_summary' );
+        }
         $lines = [];
         foreach ( array_values( $items ) as $i => $it ) {
             $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? (string) $it['platform'];
             $author = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : ( '' !== (string) $it['handle'] ? '@' . $it['handle'] : $label );
+            $full   = self::strlen( trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) ) );
             $text   = self::excerpt( (string) $it['text'], self::SUMMARY_POST_TEXT_CHARS );
+            if ( $cuts && $full > self::SUMMARY_POST_TEXT_CHARS ) {
+                // Kept: the text sent, without the closing "…".
+                /* translators: 1: rank, 2: author */
+                PressHub_AI_Knowledge_Cuts::note_material( 'social_trending_summary', sprintf( __( 'Trending post %1$d (%2$s)', 'presshub-ai-editor' ), $i + 1, $author ), 'clipped', self::SUMMARY_POST_TEXT_CHARS, $full, self::strlen( $text ) - 1 );
+            }
             $lines[] = sprintf(
                 '%d. [%s] %s (%s likes/reactions, %s comments, %s shares): %s',
                 $i + 1,
@@ -1324,15 +1522,25 @@ class PressHub_AI_Social_Trending {
             '{posts}'     => self::summary_posts_text( $items ),
         ] );
         $sys = 'You are a careful Greek-language news editor. You reply with a single valid JSON object and nothing else.';
+        self::$last_summary_notes = [];
+        $refs = [];
 
         if ( is_callable( self::$summary_caller ) ) {
+            // Tests: add the fact checks here, as call_provider() does.
+            if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+                $sys  = PressHub_AI_Fact_Checks::apply( $sys, $user . "\n" . $sys, 'social_trending_summary' );
+                $refs = (array) ( PressHub_AI_Fact_Checks::last_applied()['refs'] ?? [] );
+                PressHub_AI_Fact_Checks::clear_last_applied();
+            }
             $raw = call_user_func( self::$summary_caller, $sys, $user );
         } else {
             if ( ! class_exists( 'PressHub_AI_API_Client' ) || ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+                self::forget_summary_cuts();
                 return new WP_Error( 'missing_api_client', 'The AI client is not loaded.' );
             }
             $config = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
             if ( is_wp_error( $config ) ) {
+                self::forget_summary_cuts();
                 return $config;
             }
             $client = null;
@@ -1342,6 +1550,8 @@ class PressHub_AI_Social_Trending {
                 $client->set_action( 'social_trending_summary' );
                 $client->suppress_provider_prompt_log = true;
                 $raw = $client->call_provider( $sys, $user, true, [], 0.3, [ 'purpose' => 'social_trending_summary' ] );
+                // The fact checks call_provider() added, before the record consumes them.
+                $refs = class_exists( 'PressHub_AI_Fact_Checks' ) ? (array) ( PressHub_AI_Fact_Checks::last_applied()['refs'] ?? [] ) : [];
             } catch ( Throwable $t ) {
                 $raw = new WP_Error( 'ai_dispatch_exception', $t->getMessage() );
             }
@@ -1353,10 +1563,61 @@ class PressHub_AI_Social_Trending {
                 ] );
             }
         }
+        self::forget_summary_cuts();
         if ( is_wp_error( $raw ) ) {
             return $raw;
         }
-        return self::parse_summary( (string) $raw );
+        $text = self::parse_summary( (string) $raw );
+        if ( ! is_wp_error( $text ) ) {
+            self::$last_summary_notes = self::parse_fact_check_notes( (string) $raw, $refs, $items );
+            if ( ! empty( self::$last_summary_notes ) ) {
+                self::log( 'info', sprintf( 'Social trending: %d post(s) noted with a fact check from the editorial memory.', count( self::$last_summary_notes ) ), [ 'posts' => array_keys( self::$last_summary_notes ) ] );
+            }
+        }
+        return $text;
+    }
+
+    /** Notes of the last generate_summary() call: item key => {text, url}. */
+    public static array $last_summary_notes = [];
+
+    /**
+     * The posts the summary reply says repeat a fact check
+     * ({"fact_checks":[{"post":1,"check":"FC1"}]}), as notes keyed by the
+     * post's item key. Only fact checks that were sent count (an unknown
+     * reference or post number is dropped), and the note is written from
+     * the stored fact check, never from the model's words.
+     *
+     * @param array<string,array> $refs FC reference => fact check, as sent.
+     * @return array<string,array{text:string,url:string}>
+     */
+    public static function parse_fact_check_notes( string $raw, array $refs, array $items ): array {
+        if ( empty( $refs ) || ! class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            return [];
+        }
+        $data  = class_exists( 'PressHub_AI_SEO' ) ? PressHub_AI_SEO::decode_json_object( $raw ) : json_decode( trim( $raw ), true );
+        $list  = is_array( $data ) && is_array( $data['fact_checks'] ?? null ) ? $data['fact_checks'] : [];
+        $items = array_values( $items );
+        $notes = [];
+        foreach ( $list as $row ) {
+            if ( ! is_array( $row ) ) {
+                continue;
+            }
+            $n   = (int) ( $row['post'] ?? 0 );
+            $ref = strtoupper( trim( (string) ( $row['check'] ?? '' ) ) );
+            if ( $n < 1 || $n > count( $items ) || ! isset( $refs[ $ref ] ) ) {
+                continue;
+            }
+            $key = (string) ( $items[ $n - 1 ]['key'] ?? '' );
+            if ( '' === $key || isset( $notes[ $key ] ) ) {
+                continue;
+            }
+            $fc            = $refs[ $ref ];
+            $notes[ $key ] = [
+                'text' => PressHub_AI_Fact_Checks::note_text( $fc ),
+                'url'  => (string) ( $fc['source_url'] ?? '' ),
+            ];
+        }
+        return $notes;
     }
 
     /**
@@ -1402,6 +1663,9 @@ class PressHub_AI_Social_Trending {
     /** @var callable|null fn( string $image_url, int $post_id, string $desc ): int|WP_Error — sideload override for tests. */
     public static $sideload = null;
 
+    /** @var callable|null fn( string $content, string $title, array $template, int $post_id ): int|WP_Error — AI featured image override for tests. */
+    public static $ai_image = null;
+
     /** TikTok photo image URLs whose copy failed in this request, so one roundup build downloads each at most once. */
     private static $photo_failed = [];
 
@@ -1426,6 +1690,13 @@ class PressHub_AI_Social_Trending {
             $ok = true;
         }
         return self::$oembed_cache[ $url ] = $ok;
+    }
+
+    /** The summary call has run (or will not): its post cuts are dropped. */
+    private static function forget_summary_cuts(): void {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_trending_summary' );
+        }
     }
 
     private static function excerpt( string $text, int $max = 400 ): string {
@@ -1515,7 +1786,7 @@ class PressHub_AI_Social_Trending {
      * Block-editor content: intro, then one card (group block) per post with a
      * heading (rank, author, platform badge), the engagement line and the embed.
      */
-    public static function build_content( array $items, int $now, string $summary = '' ): string {
+    public static function build_content( array $items, int $now, string $summary = '', array $notes = [] ): string {
         $platforms = [];
         foreach ( $items as $it ) {
             $platforms[ $it['platform'] ] = self::PLATFORM_LABELS[ $it['platform'] ];
@@ -1560,6 +1831,7 @@ class PressHub_AI_Social_Trending {
                 . "<!-- wp:heading {\"level\":3,\"className\":\"presshub-trending-title\"} -->\n<h3 class=\"wp-block-heading presshub-trending-title\">" . $head . "</h3>\n<!-- /wp:heading -->\n\n"
                 . "<!-- wp:paragraph {\"className\":\"presshub-trending-stats\"} -->\n<p class=\"presshub-trending-stats\">" . esc_html( implode( ' · ', $stats ) ) . "</p>\n<!-- /wp:paragraph -->\n\n"
                 . self::embed_block( $it )
+                . ( isset( $notes[ (string) ( $it['key'] ?? '' ) ] ) && class_exists( 'PressHub_AI_Fact_Checks' ) ? "\n\n" . PressHub_AI_Fact_Checks::note_block( (array) $notes[ (string) $it['key'] ] ) : '' )
                 . "</div>\n<!-- /wp:group -->";
         }
         return implode( "\n\n", $out );
@@ -1645,7 +1917,8 @@ class PressHub_AI_Social_Trending {
             . '.presshub-trending-card .presshub-tiktok-photo-card{margin:0 auto;}'
             . '.presshub-tiktok-photo-card img{max-width:min(100%,420px);height:auto;}'
             . '.presshub-trending-summary{font-size:1.1em;line-height:1.6;border-left:4px solid currentColor;padding:.25rem 0 .25rem 1rem;margin:0 0 1.5rem;}'
-            . '@media (prefers-color-scheme:dark){.presshub-trending-card{border-color:rgba(255,255,255,.15);}}';
+            . '.presshub-trending-factcheck{margin:.75rem 0 0;padding:.6rem .8rem;border-left:4px solid #b32d2e;background:rgba(179,45,46,.08);font-size:.95em;}'
+            . '@media (prefers-color-scheme:dark){.presshub-trending-card{border-color:rgba(255,255,255,.15);}.presshub-trending-factcheck{background:rgba(255,120,120,.12);border-left-color:#ff8a8a;}}';
     }
 
     /* ------------------------------------------------------------------
@@ -1723,13 +1996,25 @@ class PressHub_AI_Social_Trending {
     }
 
     /**
-     * Give a roundup post without a featured image the picture of its top
-     * post. The image is copied into the Media Library (platform image links
-     * are signed and expire), once per post, so a daily post adds one image a day.
+     * Give a roundup post without a featured image its picture, once per post.
+     * With "Roundup featured image" set to an AI image (and Generate featured
+     * images on), the image is drawn from the roundup with the Trending in
+     * Cyprus prompt template; otherwise, or if that fails, it is the picture
+     * of the top post, copied into the Media Library (platform image links
+     * are signed and expire), so a daily post adds one image a day.
      */
     public static function maybe_set_featured_image( int $post_id, array $items ): int {
         if ( $post_id <= 0 || ( function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id ) ) ) {
             return 0;
+        }
+        if ( 'auto_generate' === PressHub_AI_Settings_Storage::get_social_trending_image_source() ) {
+            if ( PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
+                // Two AI calls can take a minute: draw it in a job of its own, not in
+                // the worker's request. The top post's picture below stands in until then.
+                self::queue_ai_featured_image( $post_id, $items );
+            } else {
+                self::log( 'info', 'Social trending: AI roundup image chosen, but Generate featured images is off; using the top post picture.', [ 'post_id' => $post_id ] );
+            }
         }
         $pick = null;
         foreach ( $items as $it ) {
@@ -1755,6 +2040,178 @@ class PressHub_AI_Social_Trending {
         }
         set_post_thumbnail( $post_id, (int) $att );
         return (int) $att;
+    }
+
+    /**
+     * Queue the AI image job for a roundup, once per post. Only the post texts
+     * travel with the job (at most 10 × 300 characters).
+     */
+    private static function queue_ai_featured_image( int $post_id, array $items ): void {
+        if ( function_exists( 'get_post_meta' ) && '' !== (string) get_post_meta( $post_id, self::AI_IMAGE_META, true ) ) {
+            return;
+        }
+        $cuts  = [];
+        $texts = self::ai_image_texts( $items, $cuts );
+        if ( empty( $texts ) ) {
+            self::log( 'info', 'Social trending: no post text for an AI image; using the top post picture.', [ 'post_id' => $post_id ] );
+            return;
+        }
+        if ( ! function_exists( 'wp_schedule_single_event' ) || false === wp_schedule_single_event( time(), self::AI_IMAGE_HOOK, [ $post_id, $texts ] ) ) {
+            self::log( 'warning', 'Social trending: could not queue the AI roundup image; using the top post picture.', [ 'post_id' => $post_id ] );
+            return;
+        }
+        update_post_meta( $post_id, self::AI_IMAGE_META, (string) time() );
+        // The job runs in another request: keep the cuts with the post so the
+        // image prompt call records them (agents.md rule 13).
+        if ( ! empty( $cuts ) ) {
+            update_post_meta( $post_id, self::AI_IMAGE_CUTS_META, $cuts );
+        } elseif ( function_exists( 'delete_post_meta' ) ) {
+            delete_post_meta( $post_id, self::AI_IMAGE_CUTS_META );
+        }
+        // Release (and so the social shares, which copy the featured image) waits for the AI image.
+        update_post_meta( $post_id, self::AI_RELEASE_META, '1' );
+    }
+
+    /**
+     * Up to 10 post texts, each cut to 300 characters. $cuts gets what the
+     * two limits left out: [ 'what', 'reason', 'limit', 'needed', 'kept' ].
+     */
+    private static function ai_image_texts( array $items, ?array &$cuts = null ): array {
+        $texts = [];
+        $cuts  = [];
+        foreach ( array_slice( $items, 0, 10 ) as $i => $it ) {
+            $text = trim( (string) ( $it['text'] ?? '' ) );
+            if ( '' === $text ) {
+                continue;
+            }
+            $cut     = self::excerpt( $text, 300 );
+            $texts[] = $cut;
+            $full    = self::strlen( (string) preg_replace( '/\s+/u', ' ', $text ) );
+            if ( $full > 300 ) {
+                $cuts[] = [ 'what' => sprintf( 'Trending post %d', $i + 1 ), 'reason' => 'clipped', 'limit' => 300, 'needed' => $full, 'kept' => self::strlen( $cut ) - 1 ];
+            }
+        }
+        $with_text_after = count( array_filter( array_slice( $items, 10 ), static function ( $it ) {
+            return '' !== trim( (string) ( is_array( $it ) ? ( $it['text'] ?? '' ) : '' ) );
+        } ) );
+        if ( $with_text_after > 0 ) {
+            $cuts[] = [ 'what' => 'Trending posts', 'reason' => 'max_items', 'limit' => 10, 'needed' => count( $items ), 'kept' => min( 10, count( $items ) ) ];
+        }
+        return $texts;
+    }
+
+    /** Note the cuts queue_ai_featured_image() kept with the post, for the image prompt call. */
+    private static function note_ai_image_cuts( int $post_id ): void {
+        if ( ! class_exists( 'PressHub_AI_Knowledge_Cuts' ) || ! function_exists( 'get_post_meta' ) ) {
+            return;
+        }
+        $cuts = get_post_meta( $post_id, self::AI_IMAGE_CUTS_META, true );
+        foreach ( is_array( $cuts ) ? array_slice( $cuts, 0, 20 ) : [] as $c ) {
+            if ( is_array( $c ) && isset( $c['what'], $c['reason'] ) ) {
+                PressHub_AI_Knowledge_Cuts::note_material( 'generate_image_prompt', (string) $c['what'], (string) $c['reason'], (int) ( $c['limit'] ?? 0 ), (int) ( $c['needed'] ?? 0 ), (int) ( $c['kept'] ?? -1 ) );
+            }
+        }
+    }
+
+    /**
+     * The AI image job: draw the image and make it the roundup's featured
+     * image, replacing the top post's picture. On failure the picture stays.
+     *
+     * @param int   $post_id Roundup post.
+     * @param array $texts   Post texts from queue_ai_featured_image().
+     */
+    public static function run_ai_featured_image( $post_id, $texts = [] ): int {
+        $post_id = (int) $post_id;
+        $post    = ( $post_id > 0 && function_exists( 'get_post' ) ) ? get_post( $post_id ) : null;
+        if ( ! $post || 'trash' === (string) ( $post->post_status ?? '' ) ) {
+            if ( $post_id > 0 && function_exists( 'delete_post_meta' ) ) {
+                delete_post_meta( $post_id, self::AI_RELEASE_META );
+            }
+            return 0;
+        }
+        $att = 0;
+        try {
+            // The settings may have changed since the job was queued.
+            if ( self::ai_image_planned() ) {
+                if ( function_exists( 'set_time_limit' ) ) {
+                    @set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- may be disabled by the host.
+                }
+                $items = [];
+                foreach ( (array) $texts as $text ) {
+                    $items[] = [ 'text' => (string) $text ];
+                }
+                $att = self::ai_featured_image( $post_id, $items );
+                // A job that ran past the watchdog finds the roundup already released
+                // with the top post picture; its shares carry that one, so it stays.
+                if ( $att > 0 && self::released_by_watchdog( $post_id ) ) {
+                    self::log( 'info', 'Social trending: AI roundup image arrived after the release; keeping the top post picture.', [ 'post_id' => $post_id ] );
+                    $att = 0;
+                } elseif ( $att > 0 ) {
+                    set_post_thumbnail( $post_id, $att );
+                }
+            } else {
+                self::log( 'info', 'Social trending: AI roundup image no longer chosen; keeping the top post picture.', [ 'post_id' => $post_id ] );
+            }
+        } finally {
+            // Released now, with the AI image or the top post picture, so its shares carry it.
+            // Claimed by deleting the meta, so the watchdog and the job never both release.
+            if ( self::release_waits_for_ai_image( $post_id ) && false !== delete_post_meta( $post_id, self::AI_RELEASE_META ) ) {
+                self::release_through_gate( $post_id );
+            }
+        }
+        return $att;
+    }
+
+    /**
+     * Draw an AI featured image for a roundup from its title and the text of
+     * its top posts, with the Trending in Cyprus prompt template.
+     *
+     * @return int Attachment id, or 0 when it failed (logged).
+     */
+    private static function ai_featured_image( int $post_id, array $items ): int {
+        $lines = array_map( static function ( $text ) { return '- ' . $text; }, self::ai_image_texts( $items ) );
+        if ( empty( $lines ) ) {
+            self::log( 'info', 'Social trending: no post text for an AI image; using the top post picture.' );
+            return 0;
+        }
+        $title   = function_exists( 'get_the_title' ) ? (string) get_the_title( $post_id ) : '';
+        $content = "What people in Cyprus are posting about on social media:\n" . implode( "\n", $lines );
+        try {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+            $tpl = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_auto_image_template( 'social_trending' ), 'social_trending', PressHub_AI_Settings_Storage::default_social_trending_image_template() );
+            if ( is_callable( self::$ai_image ) ) {
+                $att = call_user_func( self::$ai_image, $content, $title, $tpl, $post_id );
+                return is_wp_error( $att ) ? 0 : max( 0, (int) $att );
+            }
+            require_once __DIR__ . '/class-api-client.php';
+            $client = new PressHub_AI_API_Client();
+            // The texts were cut when the job was queued: record those cuts with this call.
+            self::note_ai_image_cuts( $post_id );
+            try {
+                $prompt = $client->analyze_article_for_image_prompt( $content, $title, $tpl['template'], $tpl['id'] );
+            } finally {
+                if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    PressHub_AI_Knowledge_Cuts::forget_material( 'generate_image_prompt' );
+                }
+                if ( function_exists( 'delete_post_meta' ) ) {
+                    delete_post_meta( $post_id, self::AI_IMAGE_CUTS_META );
+                }
+            }
+            if ( is_wp_error( $prompt ) || '' === trim( (string) $prompt ) ) {
+                self::log( 'warning', 'Social trending: AI image prompt failed; using the top post picture.', [ 'error' => is_wp_error( $prompt ) ? $prompt->get_error_message() : 'empty prompt' ] );
+                return 0;
+            }
+            $img = $client->generate_featured_image( (string) $prompt, '', $post_id );
+            if ( is_wp_error( $img ) || empty( $img['id'] ) ) {
+                self::log( 'warning', 'Social trending: AI image failed; using the top post picture.', [ 'error' => is_wp_error( $img ) ? $img->get_error_message() : 'no attachment' ] );
+                return 0;
+            }
+            self::log( 'info', 'Social trending: AI featured image set.', [ 'post_id' => $post_id, 'template_id' => $tpl['id'] ] );
+            return (int) $img['id'];
+        } catch ( Throwable $t ) {
+            self::log( 'warning', 'Social trending: AI image failed; using the top post picture.', [ 'error' => $t->getMessage() ] );
+            return 0;
+        }
     }
 
     /* ------------------------------------------------------------------

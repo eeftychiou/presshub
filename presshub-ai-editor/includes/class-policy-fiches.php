@@ -82,16 +82,21 @@ class PressHub_AI_Policy_Fiches {
         'coauthor_draft'       => 2500,
         'copilot_chat'         => 2500,
         'coauthor_scorecard'   => 1500,
-        'social_tiktok_shorts' => 800,
-        'social_copy_'         => 800,
+        'social_tiktok_shorts' => 1200,
+        'social_copy_'         => 1200,
     ];
+
+    /** Social budgets before 2.52.0; a stored value still equal to this is raised once (see presshub_ai_migrate_social_fiche_budgets()). */
+    const OLD_SOCIAL_BUDGET = 800;
 
     /** Which parts each kind of call gets (see parts_for()). */
     const PARTS = [
         'full'    => [ 'principles', 'framing', 'facts', 'claims', 'questions' ],
         'podcast' => [ 'principles', 'framing', 'claims' ],
         'qa'      => [ 'framing', 'claims' ],
-        'social'  => [ 'framing' ],
+        // Social copy and Shorts: the framing, plus the claims a fiche marks
+        // as not confirmed (short form), so a post never states one as fact.
+        'social'  => [ 'framing', 'claims' ],
     ];
 
     private static ?array $last_applied = null;
@@ -591,6 +596,11 @@ class PressHub_AI_Policy_Fiches {
     }
 
     /** The parts an action gets. */
+    /** Social copy and the Shorts plan: short block, framing first, then claims. */
+    public static function is_social( string $action ): bool {
+        return 'social_tiktok_shorts' === $action || 0 === strpos( $action, 'social_copy_' );
+    }
+
     public static function parts_for( string $action ): array {
         if ( 'coauthor_scorecard' === $action ) {
             return self::PARTS['qa'];
@@ -598,7 +608,7 @@ class PressHub_AI_Policy_Fiches {
         if ( 'podcast_script' === $action ) {
             return self::PARTS['podcast'];
         }
-        if ( 'social_tiktok_shorts' === $action || 0 === strpos( $action, 'social_copy_' ) ) {
+        if ( self::is_social( $action ) ) {
             return self::PARTS['social'];
         }
         return self::PARTS['full'];
@@ -688,8 +698,15 @@ class PressHub_AI_Policy_Fiches {
         return array_slice( $claims, 0, $max );
     }
 
-    /** One fiche as prompt text, with the parts listed (in that order). */
-    public static function render_fiche( array $f, array $parts ): string {
+    /** Claims sent to the short social calls (see render_fiche( $compact )). */
+    const SOCIAL_MAX_CLAIMS = 3;
+
+    /**
+     * One fiche as prompt text, with the parts listed (in that order).
+     * $compact (social copy, Shorts): at most SOCIAL_MAX_CLAIMS claims, each
+     * with its status, source and counter only, to fit the small budget.
+     */
+    public static function render_fiche( array $f, array $parts, bool $compact = false ): string {
         $lines = [ '## ' . $f['title'] ];
         foreach ( $parts as $part ) {
             if ( 'principles' === $part && '' !== $f['principles'] ) {
@@ -700,6 +717,21 @@ class PressHub_AI_Policy_Fiches {
                 $lines[] = 'Επιβεβαιωμένα στοιχεία:';
                 foreach ( $f['facts'] as $x ) {
                     $lines[] = '- ' . $x['text'];
+                }
+            } elseif ( 'claims' === $part && $compact ) {
+                $claims = self::claims_to_send( $f, self::SOCIAL_MAX_CLAIMS );
+                if ( ! empty( $claims ) ) {
+                    $lines[] = 'Μην τα παρουσιάζεις ως γεγονός:';
+                    foreach ( $claims as $c ) {
+                        $line = '- [' . self::claim_tag( $c['status'] ) . '] «' . rtrim( (string) $c['claim'], ' .' ) . '»';
+                        if ( '' !== $c['by'] ) {
+                            $line .= ' — ' . $c['by'];
+                        }
+                        if ( '' !== $c['counter'] ) {
+                            $line .= '. Αντίλογος: ' . $c['counter'];
+                        }
+                        $lines[] = $line;
+                    }
                 }
             } elseif ( 'claims' === $part ) {
                 $claims = self::claims_to_send( $f );
@@ -738,31 +770,126 @@ class PressHub_AI_Policy_Fiches {
      */
     public static function render( array $hits, string $action, int $budget ): array {
         if ( $budget <= 0 || empty( $hits ) ) {
-            return [ 'text' => '', 'slugs' => [] ];
+            return [ 'text' => '', 'slugs' => [], 'left_out' => [] ];
         }
         if ( 'coauthor_scorecard' === $action ) {
             $header = "=== ΕΛΕΓΧΟΣ ΜΕ ΒΑΣΗ ΤΟΥΣ ΦΑΚΕΛΟΥΣ ΠΟΛΙΤΙΚΩΝ ===\n"
                 . "Έλεγξε επιπλέον αν το κείμενο παρουσιάζει ως γεγονός κάποιον από τους παρακάτω αμφισβητούμενους, μη ελεγμένους ή ανακριβείς ισχυρισμούς χωρίς απόδοση και χωρίς τον αντίλογο, ή αν παραβιάζει τους κανόνες πλαισίωσης. Αν ναι, μείωσε τη βαθμολογία και γράψε στο feedback ποιον ισχυρισμό ή κανόνα αφορά.\n";
+        } elseif ( self::is_social( $action ) ) {
+            // Social copy, shorts: a short header, so the small budget is left
+            // for the fiches themselves.
+            $header = "=== ΦΑΚΕΛΟΙ ΠΟΛΙΤΙΚΩΝ (συντακτική γραμμή) ===\n"
+                . "Δεσμευτικοί κανόνες πλαισίωσης του αρχισυντάκτη για τα θέματα πολιτικής του υλικού. Δεν είναι σημερινή είδηση. Τους ισχυρισμούς που σημειώνονται ως μη ελεγμένους, αμφισβητούμενους ή ανακριβείς μην τους παρουσιάζεις ως γεγονός, ακόμη κι αν το υλικό το κάνει· απόδωσέ τους ή παράλειψέ τους.\n";
         } else {
             $header = "=== ΦΑΚΕΛΟΙ ΠΟΛΙΤΙΚΩΝ (συντακτική γραμμή) ===\n"
                 . "Οδηγίες του αρχισυντάκτη για τα θέματα πολιτικής που εμφανίζονται στο υλικό. Οι αρχές και οι κανόνες πλαισίωσης είναι δεσμευτικοί. Τα επιβεβαιωμένα στοιχεία μπορείς να τα χρησιμοποιείς ως υπόβαθρο. Τους αμφισβητούμενους και μη ελεγμένους ισχυρισμούς απόδωσέ τους σε όποιον τους διατυπώνει και δώσε τον αντίλογο. Τους ανακριβείς ισχυρισμούς μην τους αναπαράγεις ως αληθινούς. Τίποτα από τους φακέλους δεν είναι σημερινή είδηση αν δεν υπάρχει στο σημερινό υλικό.\n";
         }
-        $footer = '=== ΤΕΛΟΣ ΦΑΚΕΛΩΝ ΠΟΛΙΤΙΚΩΝ ===';
-        $parts  = self::parts_for( $action );
-        $text   = $header;
-        $slugs  = [];
-        foreach ( array_slice( $hits, 0, self::MAX_INJECTED, true ) as $slug => $hit ) {
+        $footer   = '=== ΤΕΛΟΣ ΦΑΚΕΛΩΝ ΠΟΛΙΤΙΚΩΝ ===';
+        if ( self::is_social( $action ) ) {
+            return self::render_social( $hits, $budget, $header, $footer );
+        }
+        $parts    = self::parts_for( $action );
+        $body     = '';
+        $slugs    = [];
+        $left_out = [];
+        $position = 0;
+        // The budget counts the fiches' own text; the fixed header and footer
+        // are not charged to it, so the number an editor sets is the room the
+        // fiches get. Every cut is reported (design principle: a limit that
+        // cuts content says so).
+        foreach ( $hits as $slug => $hit ) {
+            $slug = (string) $slug;
+            if ( $position++ >= self::MAX_INJECTED ) {
+                $left_out[] = [ 'item' => $slug, 'reason' => 'max_items', 'limit' => self::MAX_INJECTED ];
+                continue;
+            }
             $tries = [ $parts, array_values( array_diff( $parts, [ 'questions', 'facts' ] ) ), array_values( array_intersect( $parts, [ 'principles', 'framing' ] ) ) ];
+            $added = false;
+            $need  = 0;
             foreach ( $tries as $try ) {
                 $block = '' !== implode( '', $try ) ? self::render_fiche( $hit['fiche'], $try ) : '';
-                if ( '' !== $block && self::len( $text . $block . $footer ) <= $budget ) {
-                    $text   .= $block;
-                    $slugs[] = (string) $slug;
+                if ( '' === $block ) {
+                    continue;
+                }
+                $need = $need ?: self::len( $block );
+                if ( self::len( $body . $block ) <= $budget ) {
+                    $body   .= $block;
+                    $slugs[] = $slug;
+                    $added   = true;
+                    $dropped = array_values( array_diff( $parts, $try ) );
+                    if ( $dropped && array_filter( $dropped, static function ( $part ) use ( $hit ) { return ! empty( $hit['fiche'][ $part ] ); } ) ) {
+                        $left_out[] = [ 'item' => $slug, 'reason' => 'shortened', 'parts' => array_values( array_filter( $dropped, static function ( $part ) use ( $hit ) { return ! empty( $hit['fiche'][ $part ] ); } ) ), 'limit' => $budget, 'needed' => $need ];
+                    }
                     break;
                 }
             }
+            if ( ! $added && $need > 0 ) {
+                $left_out[] = [ 'item' => $slug, 'reason' => 'no_room', 'limit' => $budget, 'room' => max( 0, $budget - self::len( $body ) ), 'needed' => $need ];
+            }
         }
-        return empty( $slugs ) ? [ 'text' => '', 'slugs' => [] ] : [ 'text' => $text . $footer, 'slugs' => $slugs ];
+        $text = empty( $slugs ) ? '' : $header . $body . $footer;
+        return [ 'text' => $text, 'slugs' => $slugs, 'left_out' => $left_out ];
+    }
+
+    /**
+     * Social copy and Shorts: every fiche's framing first (in order, so one
+     * fiche's claims never push out another's framing), then each sent
+     * fiche's claims while room remains. Every cut is reported: a fiche left
+     * out, claims that did not fit (shortened), claims over SOCIAL_MAX_CLAIMS.
+     */
+    private static function render_social( array $hits, int $budget, string $header, string $footer ): array {
+        $left_out = [];
+        $fiches   = [];
+        $position = 0;
+        foreach ( $hits as $slug => $hit ) {
+            $slug = (string) $slug;
+            if ( $position++ >= self::MAX_INJECTED ) {
+                $left_out[] = [ 'item' => $slug, 'reason' => 'max_items', 'limit' => self::MAX_INJECTED ];
+                continue;
+            }
+            $fiches[ $slug ] = $hit['fiche'];
+        }
+        // Pass 1: framing. A fiche without framing waits for pass 2.
+        $blocks = [];
+        $used   = 0;
+        foreach ( $fiches as $slug => $f ) {
+            $block = self::render_fiche( $f, [ 'framing' ], true );
+            if ( '' === $block ) {
+                $blocks[ $slug ] = '';
+                continue;
+            }
+            if ( $used + self::len( $block ) <= $budget ) {
+                $blocks[ $slug ] = $block;
+                $used           += self::len( $block );
+            } else {
+                $left_out[] = [ 'item' => $slug, 'reason' => 'no_room', 'limit' => $budget, 'room' => max( 0, $budget - $used ), 'needed' => self::len( $block ) ];
+            }
+        }
+        // Pass 2: claims not to state as fact, fiche by fiche.
+        foreach ( $blocks as $slug => $block ) {
+            $f      = $fiches[ $slug ];
+            $claims = self::claims_to_send( $f, PHP_INT_MAX );
+            if ( empty( $claims ) ) {
+                continue;
+            }
+            $full  = self::render_fiche( $f, [ 'framing', 'claims' ], true );
+            $extra = self::len( $full ) - self::len( $block );
+            if ( $used + $extra <= $budget ) {
+                $blocks[ $slug ] = $full;
+                $used           += $extra;
+                if ( count( $claims ) > self::SOCIAL_MAX_CLAIMS ) {
+                    /* translators: %s: policy fiche slug */
+                    $left_out[] = [ 'item' => sprintf( __( '%s claims', 'presshub-ai-editor' ), $slug ), 'reason' => 'max_items', 'limit' => self::SOCIAL_MAX_CLAIMS, 'needed' => count( $claims ) ];
+                }
+            } elseif ( '' === $block ) {
+                $left_out[] = [ 'item' => $slug, 'reason' => 'no_room', 'limit' => $budget, 'room' => max( 0, $budget - $used ), 'needed' => self::len( $full ) ];
+            } else {
+                $left_out[] = [ 'item' => $slug, 'reason' => 'shortened', 'parts' => [ 'claims' ], 'limit' => $budget, 'needed' => self::len( $full ) ];
+            }
+        }
+        $blocks = array_filter( $blocks, static function ( $b ) { return '' !== $b; } );
+        $text   = empty( $blocks ) ? '' : $header . implode( '', $blocks ) . $footer;
+        return [ 'text' => $text, 'slugs' => array_map( 'strval', array_keys( $blocks ) ), 'left_out' => $left_out ];
     }
 
     /**
@@ -782,20 +909,22 @@ class PressHub_AI_Policy_Fiches {
             }
             $hits = self::find_in_text( $material );
             $out  = self::render( $hits, $action, $budget );
-            if ( '' === $out['text'] ) {
+            if ( '' === $out['text'] && empty( $out['left_out'] ) ) {
                 return $sys_prompt;
             }
             $all      = self::all();
-            $prompt   = rtrim( $sys_prompt ) . "\n\n" . $out['text'];
+            $prompt   = '' === $out['text'] ? $sys_prompt : rtrim( $sys_prompt ) . "\n\n" . $out['text'];
             self::$last_applied = [
                 'action'        => $action,
                 'fiches'        => array_map( static function ( $s ) use ( $all ) {
                     return $s . '@v' . (int) ( $all[ $s ]['version'] ?? 0 );
                 }, $out['slugs'] ),
                 'chars'         => self::len( $out['text'] ),
+                'left_out'      => $out['left_out'],
                 'original_hash' => md5( $sys_prompt ),
                 'prompt'        => $prompt,
             ];
+            class_exists( 'PressHub_AI_Knowledge_Cuts' ) && PressHub_AI_Knowledge_Cuts::log( 'policy_fiches', $action, $out['left_out'] );
             return $prompt;
         } catch ( \Throwable $e ) {
             return $sys_prompt;
@@ -861,10 +990,42 @@ class PressHub_AI_Policy_Fiches {
         wp_schedule_single_event( time() + 120, self::CRON_HOOK, [ $post_id ] );
     }
 
+    /** Post meta: hash of the brief text the fiches were last updated from. */
+    const META_SOURCE_HASH = '_presshub_policy_source_hash';
+
     public static function handle_update_cron( $post_id ): void {
-        $res = self::update_from_post( (int) $post_id );
-        if ( is_wp_error( $res ) && class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( 'Policy fiche update failed', [ 'post_id' => (int) $post_id, 'error' => $res->get_error_message() ] );
+        $post_id = (int) $post_id;
+        // WP-Cron can run the same event twice when two cron requests overlap
+        // (seen on 18/11: two identical updates 2.5 minutes apart). Skip a brief
+        // already processed, and one another request is processing right now.
+        $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+        // The hash covers everything the prompt is built from: the text, date and edition.
+        $hash = $post ? md5( trim( wp_strip_all_tags( (string) ( $post->post_content ?? '' ) ) ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_date', true ) . '|' . substr( (string) ( $post->post_date ?? '' ), 0, 10 ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_edition', true ) ) : '';
+        $lock = 'presshub_ai_policy_update_lock_' . $post_id;
+        if ( '' !== $hash && (string) get_post_meta( $post_id, self::META_SOURCE_HASH, true ) === $hash ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Policy fiche update skipped: this brief was already processed', [ 'post_id' => $post_id ] );
+            }
+            return;
+        }
+        if ( false !== get_transient( $lock ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Policy fiche update skipped: already running for this brief', [ 'post_id' => $post_id ] );
+            }
+            return;
+        }
+        set_transient( $lock, time(), 10 * MINUTE_IN_SECONDS );
+        try {
+            $res = self::update_from_post( $post_id );
+        } finally {
+            delete_transient( $lock );
+        }
+        if ( is_wp_error( $res ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( 'Policy fiche update failed', [ 'post_id' => $post_id, 'error' => $res->get_error_message() ] );
+            }
+        } elseif ( '' !== $hash && 'skipped' !== ( $res['status'] ?? '' ) ) {
+            update_post_meta( $post_id, self::META_SOURCE_HASH, $hash );
         }
     }
 
@@ -1541,7 +1702,11 @@ class PressHub_AI_Policy_Fiches {
             __( 'Open questions: what coverage has not answered yet. The AI may raise them, and the system marks them answered when a brief answers them.', 'presshub-ai-editor' ),
         ] );
         $html .= '<h4 style="margin: 10px 0 4px;">' . esc_html__( 'Do', 'presshub-ai-editor' ) . '</h4>' . $li( [
-            __( 'Put the most important rule first: when there is little room (podcast, social copy) the AI gets the principles and framing first, and social copy gets the framing only.', 'presshub-ai-editor' ),
+            sprintf(
+                /* translators: %d: most claims sent to social copy and shorts */
+                __( 'Put the most important rule first: when there is little room (podcast, social copy) the AI gets the principles and framing first, and social copy gets the framing and up to %d claims not to state as fact.', 'presshub-ai-editor' ),
+                self::SOCIAL_MAX_CLAIMS
+            ),
             __( 'Ask for attribution and the other side, not for a conclusion: «αποδίδεται στην κυβέρνηση και δίνεται η απάντηση της αντιπολίτευσης».', 'presshub-ai-editor' ),
             __( 'Give numbers with their limits: «έως 100 ευρώ, για όσους…», «σύμφωνα με το υπουργείο».', 'presshub-ai-editor' ),
             __( 'Use phrases for acronyms: «Ταμείο Κοινωνικών Ασφαλίσεων» rather than «ΤΚΑ»; one word under 6 letters never matches on its own.', 'presshub-ai-editor' ),
@@ -1565,6 +1730,49 @@ class PressHub_AI_Policy_Fiches {
         $html .= $pre( __( 'Not like this', 'presshub-ai-editor' ), "✗ Η κυβέρνηση λέει ψέματα για τις συντάξεις.\n✗ Χθες ο υπουργός δήλωσε ότι η Βουλή φταίει.\n✗ Γράψε σύντομα και με τίτλο.\n✗ Η αύξηση κοστίζει 40 εκατ. (χωρίς πηγή)" );
         $html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top: 8px;">' . self::hidden( self::POST_EXAMPLE ) . '<button class="button">' . esc_html__( 'Create this example as a locked draft', 'presshub-ai-editor' ) . '</button> <span class="description">' . esc_html__( 'It is never sent to the AI.', 'presshub-ai-editor' ) . '</span></form>';
         return $html . '</details>';
+    }
+
+    /**
+     * For each task with a policy fiche budget: how many published fiches fit
+     * on their own (the most a task can then get), and the titles that do
+     * not. Shown next to the budgets in Settings so an editor sees what a
+     * limit will cut before a call does.
+     *
+     * 'empty' lists the fiches with nothing for the task (not cut);
+     * 'shortened' the ones that fit only without some of their parts.
+     *
+     * @return array<string,array{budget:int,fit:int,total:int,too_long:string[],empty:string[],shortened:string[]}>
+     */
+    public static function fit_report(): array {
+        $published = array_filter( self::all(), static function ( $f ) { return 'published' === ( $f['status'] ?? '' ); } );
+        $out       = [];
+        foreach ( array_keys( self::BUDGETS ) as $action ) {
+            $probe  = '_' === substr( $action, -1 ) ? $action . 'x' : $action;
+            $budget = self::budget_for( $probe );
+            $row    = [ 'budget' => $budget, 'fit' => 0, 'total' => count( $published ), 'too_long' => [], 'empty' => [], 'shortened' => [] ];
+            foreach ( $published as $slug => $f ) {
+                $hit = [ (string) $slug => [ 'count' => 1, 'fiche' => $f ] ];
+                if ( $budget <= 0 ) {
+                    continue; // the task is off: nothing is sent, nothing is cut
+                }
+                $r = self::render( $hit, $probe, $budget );
+                if ( '' !== $r['text'] ) {
+                    $row['fit']++;
+                    if ( in_array( 'shortened', array_column( $r['left_out'], 'reason' ), true ) ) {
+                        // Sent, but without some parts (facts, questions, claims).
+                        $row['shortened'][] = (string) $f['title'];
+                    }
+                } elseif ( empty( $r['left_out'] ) ) {
+                    // Nothing of it goes to this task (e.g. no framing for the
+                    // social tasks): not cut, nothing to send.
+                    $row['empty'][] = (string) $f['title'];
+                } else {
+                    $row['too_long'][] = (string) $f['title'];
+                }
+            }
+            $out[ $action ] = $row;
+        }
+        return $out;
     }
 
     /**
@@ -1598,9 +1806,24 @@ class PressHub_AI_Policy_Fiches {
         if ( preg_match( '/αγνόησε|ignore (?:all |the )?(?:previous|other) instructions/iu', $f['principles'] . ' ' . $f['framing'] ) ) {
             $out[] = __( 'The core tells the AI to ignore other instructions. Remove that: it can break the call\'s own rules.', 'presshub-ai-editor' );
         }
-        foreach ( [ 'podcast_script' => __( 'podcast', 'presshub-ai-editor' ), 'social_copy_' => __( 'social copy', 'presshub-ai-editor' ) ] as $action => $label ) {
+        // Every task that gets policy fiches, so an editor sees each one a
+        // fiche will be left out of (design principle: cuts are never silent).
+        $calls = [
+            'briefing_curation'    => __( 'daily briefing', 'presshub-ai-editor' ),
+            'podcast_script'       => __( 'podcast', 'presshub-ai-editor' ),
+            'coauthor_draft'       => __( 'co-author', 'presshub-ai-editor' ),
+            'copilot_chat'         => __( 'co-pilot', 'presshub-ai-editor' ),
+            'coauthor_scorecard'   => __( 'QA gate', 'presshub-ai-editor' ),
+            'social_copy_'         => __( 'social copy', 'presshub-ai-editor' ),
+            'social_tiktok_shorts' => __( 'TikTok short plan', 'presshub-ai-editor' ),
+        ];
+        foreach ( $calls as $action => $label ) {
             $hit = [ $f['slug'] => [ 'count' => 1, 'fiche' => $f ] ];
-            if ( '' !== trim( $f['principles'] . $f['framing'] ) && '' === self::render( $hit, $action, self::budget_for( $action ) )['text'] ) {
+            if ( self::budget_for( $action ) <= 0 ) {
+                continue; // switched off for that task, nothing to warn about
+            }
+            $core = implode( '', array_map( static function ( $part ) use ( $f ) { return (string) $f[ $part ]; }, array_intersect( self::parts_for( $action ), [ 'principles', 'framing' ] ) ) );
+            if ( '' !== trim( $core ) && '' === self::render( $hit, $action, self::budget_for( $action ) )['text'] ) {
                 /* translators: 1: call name, 2: character budget */
                 $out[] = sprintf( __( 'Too long for the %1$s calls (room for %2$d characters): they skip this fiche. Shorten the principles and framing.', 'presshub-ai-editor' ), $label, self::budget_for( $action ) );
             }

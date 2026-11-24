@@ -90,16 +90,22 @@ class SettingsDefaultsTest {
         foreach ( $all as $key => $e ) {
             if ( isset( $e['depends_on'] ) ) {
                 ++$deps;
-                $target = $e['depends_on'];
-                $t      = is_string( $target ) ? ( $all[ $target ] ?? null ) : null;
-                if ( null === $t ) {
-                    $failures[] = "{$key} depends on " . var_export( $target, true ) . ', which is not a registered setting.';
-                } elseif ( empty( $t['checkbox'] ) ) {
-                    $failures[] = "{$key} depends on {$target}, which is not an on/off switch.";
-                } elseif ( ( $t['page'] ?? '' ) !== ( $e['page'] ?? '' ) ) {
-                    $failures[] = "{$key} depends on {$target}, which is on another settings page.";
-                } elseif ( $target === $key ) {
-                    $failures[] = "{$key} depends on itself.";
+                // One switch, or a non-empty list of switches (any one turns the field on).
+                $targets = is_array( $e['depends_on'] ) ? $e['depends_on'] : [ $e['depends_on'] ];
+                if ( [] === $targets ) {
+                    $failures[] = "{$key} has an empty depends_on list.";
+                }
+                foreach ( $targets as $target ) {
+                    $t = is_string( $target ) ? ( $all[ $target ] ?? null ) : null;
+                    if ( null === $t ) {
+                        $failures[] = "{$key} depends on " . var_export( $target, true ) . ', which is not a registered setting.';
+                    } elseif ( empty( $t['checkbox'] ) ) {
+                        $failures[] = "{$key} depends on {$target}, which is not an on/off switch.";
+                    } elseif ( ( $t['page'] ?? '' ) !== ( $e['page'] ?? '' ) ) {
+                        $failures[] = "{$key} depends on {$target}, which is on another settings page.";
+                    } elseif ( $target === $key ) {
+                        $failures[] = "{$key} depends on itself.";
+                    }
                 }
             }
             if ( isset( $e['aliases'] ) ) {

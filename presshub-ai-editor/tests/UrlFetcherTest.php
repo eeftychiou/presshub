@@ -110,7 +110,7 @@ uf_check( 'process_sources: disabled passthrough', false !== strpos( $out, 'http
 $GLOBALS['OPTIONS_STORE']['presshub_ai_fetch_urls'] = '1';
 
 // --- 7. generate_draft integration --------------------------------------------
-$GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
 $GLOBALS['CURRENT_USER_ID'] = 5;
 $GLOBALS['GET_RESPONSE_FILTER'] = function () {

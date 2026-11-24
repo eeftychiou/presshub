@@ -75,7 +75,42 @@ class PressHub_Setup_Check {
                 if ( $auto ) {
                     $automation[] = $p;
                 }
-                if ( ! PressHub_Social_Settings_Storage::is_platform_configured( $p ) ) {
+                if ( 'youtube' === $p ) {
+                    $yt        = class_exists( 'PressHub_Social_YouTube' );
+                    $videos_on = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() || PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
+                    if ( $yt && '' !== PressHub_Social_YouTube::reconnect_reason() ) {
+                        // With a YouTube video switch on, the Shorts check below says this.
+                        if ( ! $videos_on ) {
+                        /* translators: %s: Google's error */
+                        $add( sprintf( __( 'YouTube uploads stopped: Google refused the stored sign-in (%s). Connect YouTube again.', 'presshub-ai-editor' ), PressHub_Social_YouTube::reconnect_reason() ), 'social-accounts', __( 'Connect YouTube', 'presshub-ai-editor' ) );
+                        }
+                    } elseif ( ! ( $yt && PressHub_Social_YouTube::is_connected() ) ) {
+                        // With a YouTube video switch on, the Shorts check below says this.
+                        if ( ! $videos_on ) {
+                            $add( __( 'YouTube is switched on, but no YouTube channel is connected.', 'presshub-ai-editor' ), 'social-accounts', __( 'Connect YouTube', 'presshub-ai-editor' ) );
+                        }
+                    } elseif ( ! $pull ) {
+                        // With a YouTube video switch on, the Shorts check below says this.
+                        if ( ! $videos_on ) {
+                            $add( __( 'YouTube is switched on, but uploads need the worker in Pull mode.', 'presshub-ai-editor' ), 'automation-worker', __( 'Change worker mode', 'presshub-ai-editor' ) );
+                        }
+                    } elseif ( ! PressHub_Social_Settings_Storage::is_platform_configured( $p ) ) {
+                        $add( __( 'YouTube is switched on, but the worker has not said it can upload to YouTube yet. Update and restart the worker.', 'presshub-ai-editor' ), 'automation-worker', __( 'Check the worker', 'presshub-ai-editor' ) );
+                    }
+                    if ( $yt && PressHub_Social_YouTube::paused_until() > 0 ) {
+                        /* translators: %s: UTC date and time */
+                        $add( sprintf( __( 'The daily YouTube upload quota is used up. YouTube jobs wait until %s UTC.', 'presshub-ai-editor' ), gmdate( 'Y-m-d H:i', PressHub_Social_YouTube::paused_until() ) ), 'social-accounts', __( 'See YouTube', 'presshub-ai-editor' ), 'warning' );
+                    }
+                    if ( ! $videos_on ) {
+                        $off_text              = __( 'YouTube is on in the platform list, but YouTube Shorts and podcast episodes are both off, so nothing is uploaded.', 'presshub-ai-editor' );
+                        $problems[ $off_text ] = [
+                            'text'  => $off_text,
+                            'url'   => PressHub_Settings_Sections::url( 'social-publishing', 'shorts' ),
+                            'link'  => __( 'Turn on Shorts or episodes', 'presshub-ai-editor' ),
+                            'level' => 'warning',
+                        ];
+                    }
+                } elseif ( ! PressHub_Social_Settings_Storage::is_platform_configured( $p ) ) {
                     if ( $auto ) {
                         /* translators: %s: platform name */
                         $add( sprintf( __( '%s is switched on, but the worker has not reported a login for it.', 'presshub-ai-editor' ), $label ), 'automation-worker', __( 'Check the worker', 'presshub-ai-editor' ) );
@@ -150,8 +185,12 @@ class PressHub_Setup_Check {
         }
         if ( 0 === strpos( $id, 'social:' ) && $social ) {
             $p = substr( $id, 7 );
+            if ( 'youtube' === $p && class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason() ) {
+                return null; // The refused sign-in is already listed above.
+            }
             if ( PressHub_Social_Settings_Storage::is_platform_enabled( $p ) ) {
-                $auto = 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p );
+                // YouTube's sign-in is in Social platform accounts, not on the worker.
+                $auto = 'youtube' !== $p && 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p );
                 return [ 'label' => self::platform_label( $p ), 'anchor' => $auto ? 'automation-worker' : 'social-accounts' ];
             }
         }

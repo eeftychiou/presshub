@@ -190,6 +190,10 @@
         $('.presshub-field-error').remove();
         $('[aria-invalid="true"]').each(function () {
             var $el = $(this);
+            // A stored wrong model keeps its error until it is changed (#236).
+            if ($el.attr('data-stored-invalid') === '1') {
+                return;
+            }
             $el.removeAttr('aria-invalid');
             var describedBy = ($el.attr('aria-describedby') || '').split(/\s+/).filter(function (id) {
                 return id && id.indexOf('-presshub-error') === -1;
@@ -229,14 +233,16 @@
         $summary[0].focus();
     }
 
-    $(document).on('presshub:settings-invalid', function (_, invalid) {
+    /** Marks each { el, msg } as invalid, next to the field and in the summary. */
+    function markFields(pairs) {
         clearErrors();
         var items = [];
-        $.each(invalid || [], function (i, el) {
+        $.each(pairs, function (i, pair) {
+            var el = pair.el;
             if (!el.id) {
                 el.id = 'presshub-field-' + (el.name || 'field').replace(/[^a-z0-9_-]/gi, '_') + '-' + i;
             }
-            var msg = el.validationMessage || t.invalid_value || 'Enter a valid value.';
+            var msg = pair.msg;
             var errId = el.id + '-presshub-error';
             var $err = $('<p class="presshub-field-error"></p>').attr('id', errId).text(msg);
             var $anchor = $(el).closest('label').length ? $(el).closest('label') : $(el);
@@ -247,6 +253,29 @@
         });
         showSummary(items);
         $('#presshub-sticky-status-msg').removeClass('is-success').addClass('is-error').text(t.not_saved || 'Not saved. Fix the fields listed above.');
+    }
+
+    $(document).on('presshub:settings-invalid', function (_, invalid) {
+        markFields($.map(invalid || [], function (el) {
+            return { el: el, msg: el.validationMessage || t.invalid_value || 'Enter a valid value.' };
+        }));
+    });
+
+    // #236: errors the server found (a model of the wrong type), keyed by option.
+    $(document).on('presshub:settings-field-errors', function (_, errors, message) {
+        var pairs = [];
+        $.each(errors || {}, function (key, msg) {
+            var el = modelControl(key) || document.getElementById(key);
+            if (el) {
+                pairs.push({ el: el, msg: String(msg) });
+            }
+        });
+        if (pairs.length) {
+            markFields(pairs);
+        } else {
+            clearErrors();
+            showSummary([{ id: '', text: String(message || '') }]);
+        }
     });
 
     $(document).on('presshub:settings-save-failed', function (_, tabKey, message) {
@@ -254,10 +283,35 @@
         showSummary([{ id: '', text: String(message || '') }]);
     });
 
-    $(document).on('presshub:settings-saved', function () {
+    $(document).on('presshub:settings-saved', function (_, tabKey, res) {
         clearErrors();
         lastCount = -1;
         updateUnsaved();
+        // #236: an unknown model ID saved; say so on its row (admin.js says so in the status line).
+        var warnings = res && res.data && res.data.model_warning_fields;
+        if (warnings && typeof warnings === 'object' && !Array.isArray(warnings)) {
+            $.each(warnings, function (key, msg) {
+                var input = document.getElementById(key);
+                if (!input) {
+                    return;
+                }
+                var noteId = key + '-model-error';
+                $('#' + noteId).remove();
+                var $note = $('<p class="presshub-model-note is-warning"></p>').attr('id', noteId).text((t.warning_prefix || 'Warning:') + ' ' + String(msg));
+                $(input).closest('.presshub-model-other').after($note);
+                var ids = ($(input).attr('aria-describedby') || '').split(/\s+/).filter(function (id) { return id && id !== noteId; });
+                ids.push(noteId);
+                $(input).attr('aria-describedby', ids.join(' '));
+            });
+        }
+    });
+    // A changed model loses the error or warning shown for its stored value.
+    $(document).on('input change', '.presshub-model-other input', function () {
+        if (this.getAttribute('data-stored-invalid') === '1') {
+            this.removeAttribute('data-stored-invalid');
+            this.removeAttribute('aria-invalid');
+        }
+        $('#' + this.id + '-model-error').remove();
     });
 
     // An invalid field that becomes valid loses its message.
@@ -316,12 +370,18 @@
         if (e.section !== section || !e.depends_on) {
             return;
         }
-        var parents = controlsFor(e.depends_on);
+        // depends_on is one switch or a list of switches (any one on turns it on).
+        var parents = [];
+        $.each([].concat(e.depends_on), function (_, key) {
+            var found = controlsFor(key);
+            if (found.length) {
+                parents.push(found[0]);
+            }
+        });
         var mine = controlsFor(e.key);
         if (!parents.length || !mine.length) {
             return;
         }
-        var parent = parents[0];
         var reasonId = 'presshub-applies-' + e.key;
         var $reason = $('<p class="description presshub-applies-reason"></p>').attr('id', reasonId)
             .text((t.depends_reason || 'Used only when "%s" is on.').replace('%s', e.depends_label || e.depends_on));
@@ -330,7 +390,7 @@
         $anchor.after($reason);
 
         function apply() {
-            var on = switchIsOn(parent);
+            var on = parents.some(switchIsOn);
             $.each(mine, function (_, el) {
                 // Disabled fields are still sent on Save (admin.js reads every field).
                 el.disabled = !on;
@@ -347,8 +407,78 @@
             });
             $reason.prop('hidden', on);
         }
-        $(parent).on('change input', apply);
+        $(parents).on('change input', apply);
         apply();
+    });
+
+    // ------------------------------------------------------------------
+    // AI models (#236): a list of known models plus "Other model ID…",
+    // kept in step with the text field that is saved. Without JavaScript
+    // only the text field shows.
+    // ------------------------------------------------------------------
+    /** The visible control for a model option: its list, or its text field. */
+    function modelControl(key) {
+        var choice = document.querySelector('.presshub-model-choice[data-model-input="' + key + '"]');
+        if (!choice || choice.hidden) {
+            return null;
+        }
+        return choice.value === '__other' ? document.getElementById(key) : choice;
+    }
+    window.PressHubModelControl = modelControl;
+
+    function modelPicker(choice) {
+        var input = document.getElementById(choice.getAttribute('data-model-input'));
+        var wrap = input ? $(input).closest('.presshub-model-other') : $();
+        var providerSel = document.getElementById(choice.getAttribute('data-provider-select') || '');
+        if (!input) {
+            return;
+        }
+        function showOther(on) {
+            wrap.prop('hidden', !on);
+        }
+        // Shows the chosen provider's models and points the list at the stored
+        // value. It never changes the value: one the provider doesn't list
+        // shows as "Other model ID…" (#236 review).
+        function filterGroups() {
+            if (providerSel) {
+                var pid = providerSel.value || choice.getAttribute('data-default-provider') || '';
+                $(choice).find('optgroup').each(function () {
+                    var mine = this.getAttribute('data-provider') === pid;
+                    this.hidden = !mine;
+                    $(this).find('option').prop('disabled', !mine);
+                });
+            }
+            var match = null;
+            $(choice).find('option').each(function () {
+                if (!match && !this.disabled && this.value !== '__other' && this.value === input.value) {
+                    match = this;
+                }
+            });
+            if (match) {
+                match.selected = true; // this option, not a same-named one in a hidden group
+            } else {
+                choice.value = '__other';
+            }
+            showOther(choice.value === '__other');
+        }
+        choice.hidden = false;
+        filterGroups();
+        $(choice).on('change', function () {
+            if (choice.value === '__other') {
+                showOther(true);
+                input.focus();
+                return;
+            }
+            showOther(false);
+            input.value = choice.value;
+            $(input).trigger('input').trigger('change');
+        });
+        if (providerSel) {
+            $(providerSel).on('change', filterGroups);
+        }
+    }
+    $('.presshub-model-choice').each(function () {
+        modelPicker(this);
     });
 
     // ------------------------------------------------------------------

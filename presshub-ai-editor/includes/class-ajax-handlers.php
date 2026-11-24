@@ -44,11 +44,15 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_generate_image_prompt', [ $this, 'generate_image_prompt' ] );
         add_action( 'wp_ajax_presshub_ai_save_image_prompt_template', [ $this, 'save_image_prompt_template' ] );
         add_action( 'wp_ajax_presshub_ai_delete_image_prompt_template', [ $this, 'delete_image_prompt_template' ] );
+        add_action( 'wp_ajax_presshub_ai_update_image_prompt_template', [ $this, 'update_image_prompt_template' ] );
         add_action( 'wp_ajax_presshub_ai_generate_featured_image', [ $this, 'generate_featured_image' ] );
         add_action( 'wp_ajax_presshub_ai_set_featured_image', [ $this, 'set_featured_image' ] );
         // AJAX Settings Save
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
         add_action( 'wp_ajax_presshub_ai_save_settings_section', [ $this, 'save_settings_section' ] );
+        // #309 (E2): the same section save for a submit without JavaScript.
+        require_once __DIR__ . '/class-settings-sections.php';
+        add_action( 'admin_post_' . PressHub_Settings_Sections::POST_ACTION, [ $this, 'handle_section_post' ] );
         add_action( 'wp_ajax_presshub_dismiss_settings_whats_new', [ $this, 'dismiss_settings_whats_new' ] );
         // Dynamic AI Providers Manager AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_save_provider', [ $this, 'save_provider' ] );
@@ -288,58 +292,73 @@ class PressHub_AI_Ajax_Handlers {
 
         $this->enforce_rate_limit();
 
-        require_once __DIR__ . '/class-qa-reviewer.php';
-        $eval_result = PressHub_AI_QA_Reviewer::evaluate_content( $content, 'post', (int) $post_id );
+        require_once __DIR__ . '/class-seo.php';
+        require_once __DIR__ . '/class-publish-gate.php';
+        $seo_input = $this->collect_seo_review_input( (int) $post_id, $content );
+        $post      = $post_id ? get_post( $post_id ) : null;
+        if ( $post ) {
+            // The editor's unsaved title, excerpt and text are what gets reviewed.
+            $post               = clone $post;
+            $post->post_title   = $seo_input['title'];
+            $post->post_excerpt = $seo_input['excerpt'];
+            $post->post_content = $content;
+            $gate = PressHub_AI_Publish_Gate::review_post( $post, 'review_button', [
+                'force'     => true,
+                'seo_input' => $seo_input,
+                'content'   => $content,
+            ] );
+        } else {
+            $gate = PressHub_AI_Publish_Gate::run( $content, 'post', 0, $seo_input );
+        }
 
-        if ( ! empty( $eval_result['error'] ) ) {
-            $error_msg = ! empty( $eval_result['feedback'] ) ? $eval_result['feedback'] : __( 'AI QA review evaluation failed.', 'presshub-ai-editor' );
+        if ( 'error' === ( $gate['verdict'] ?? '' ) ) {
+            $error_msg = ! empty( $gate['feedback'] ) ? $gate['feedback'] : __( 'AI QA review evaluation failed.', 'presshub-ai-editor' );
             wp_send_json_error( $error_msg );
         }
 
         $scorecard = [
-            'score'          => $eval_result['score'],
-            'feedback'       => $eval_result['feedback'],
-            'libel_risk'     => $eval_result['libel_risk'] ?? 'Low',
-            'legal_concerns' => $eval_result['legal_concerns'] ?? 'None identified',
+            'score'          => $gate['score'],
+            'feedback'       => $gate['feedback'],
+            'libel_risk'     => $gate['libel_risk'] ?? 'Low',
+            'legal_concerns' => $gate['legal_concerns'] ?? 'None identified',
         ];
 
         $status_after = null;
-        if ( $post_id ) {
-            update_post_meta( $post_id, '_presshub_ai_scorecard', $scorecard );
-            update_post_meta( $post_id, '_presshub_ai_scorecard_hash', md5( trim( $content ) ) );
+        if ( $post ) {
+            $status_after = (string) ( $post->post_status ?? '' );
 
-            $post = get_post( $post_id );
-            if ( $post ) {
-                $status_after = $post->post_status;
-
-                $min_score = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_qa_min_score() : 80;
-
-                // High-1 guard: run_review() must never demote an
-                // already-published post. Only non-published posts are
-                // transitioned to 'pending' for editorial review.
-                if ( isset( $scorecard['score'] ) && intval( $scorecard['score'] ) >= $min_score
-                    && 'publish' !== $post->post_status ) {
-                    wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
-                    $status_after = 'pending';
-                }
+            // High-1 guard: run_review() must never demote an
+            // already-published post. Only non-published posts that pass
+            // the gate (or only raise alerts) move to 'pending' for
+            // editorial review.
+            if ( ! PressHub_AI_Publish_Gate::holds( $gate ) && 'publish' !== $status_after ) {
+                wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
+                $status_after = 'pending';
             }
         }
 
-        // Separate, advisory SEO score (never affects the QA gate above).
-        $seo_review = null;
-        if ( class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_seo_review_enabled() ) {
-            require_once __DIR__ . '/class-seo.php';
-            $seo_review = PressHub_AI_SEO::review( $this->collect_seo_review_input( (int) $post_id, $content ) );
-            if ( $post_id ) {
-                update_post_meta( $post_id, PressHub_AI_SEO::META_SEO_REVIEW, $seo_review );
-            }
-        }
+        $seo_review = ( 'skip' !== ( $gate['checks']['seo']['result'] ?? 'skip' ) ) ? $gate['checks']['seo']['review'] : null;
 
         $this->record_rate_limit();
         // ME-8 / F-29: report the post status after the review so the UI
         // can tell the journalist what happened ('pending' = moved to
         // editorial review, 'publish' = left alone, null = no post).
-        wp_send_json_success( array_merge( $scorecard, [ 'status_after' => $status_after, 'seo' => $seo_review ] ) );
+        wp_send_json_success( array_merge( $scorecard, [
+            'status_after' => $status_after,
+            'seo'          => $seo_review,
+            'gate'         => [
+                'verdict'      => $gate['verdict'],
+                'legal'        => $gate['checks']['legal'] ?? [],
+                'seo_result'   => $gate['checks']['seo']['result'] ?? 'skip',
+                'seo_threshold' => $gate['checks']['seo']['threshold'] ?? null,
+                'failed'       => array_keys( array_filter(
+                    (array) ( $gate['checks'] ?? [] ),
+                    static function ( $check ) {
+                        return in_array( $check['result'] ?? '', [ 'fail', 'error' ], true );
+                    }
+                ) ),
+            ],
+        ] ) );
     }
 
     /**
@@ -429,8 +448,12 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $article_content = isset( $_POST['article_content'] ) ? (string) wp_unslash( $_POST['article_content'] ) : '';
+        // Bytes, not characters: the cap protects the request size. The cut
+        // is noted right before the chat call that sends the article.
+        $article_bytes_cut = 0;
         if ( strlen( $article_content ) > 200000 ) {
-            $article_content = substr( $article_content, 0, 200000 );
+            $article_bytes_cut = strlen( $article_content );
+            $article_content   = substr( $article_content, 0, 200000 );
         }
         $article_title = isset( $_POST['article_title'] ) ? sanitize_text_field( wp_unslash( $_POST['article_title'] ) ) : '';
 
@@ -438,7 +461,8 @@ class PressHub_AI_Ajax_Handlers {
         if ( '' === trim( $article_content ) && $post_id > 0 ) {
             $existing_post = get_post( $post_id );
             if ( $existing_post ) {
-                $article_content = (string) $existing_post->post_content;
+                $article_bytes_cut = 0; // the stored post is sent, not the cut request text
+                $article_content   = (string) $existing_post->post_content;
                 if ( '' === trim( $article_title ) ) {
                     $article_title = (string) $existing_post->post_title;
                 }
@@ -517,9 +541,16 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
             $sys = apply_filters( 'presshub_ai_composed_chat_system_prompt', $sys );
             $gen_t0 = PressHub_AI_API_Client::begin_generation_record();
+            $cut_for = $api->get_action();
+            if ( $article_bytes_cut && '' !== trim( $article_content ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::note_material( $cut_for, __( 'Article text', 'presshub-ai-editor' ), 'clipped', 200000, $article_bytes_cut, 200000, 'bytes' );
+            }
             $api->suppress_provider_prompt_log = true;
             $result = $api->call_provider( $sys, $prompt, false, [] );
             $api->suppress_provider_prompt_log = false;
+            if ( $article_bytes_cut && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::forget_material( $cut_for, __( 'Article text', 'presshub-ai-editor' ) );
+            }
             // Issue #140 - copilot chat generation record. Linked to the post when there is one;
             // otherwise the user is identified by config.user_id (and inputs.user_id).
             PressHub_AI_API_Client::finish_generation_record(
@@ -1271,6 +1302,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         try {
             require_once __DIR__ . '/class-podcast-producer.php';
+            // Run from the Hub: a queued script step for this edition is no longer needed.
+            if ( function_exists( 'presshub_ai_clear_pending_briefing_step' ) ) {
+                presshub_ai_clear_pending_briefing_step( $date, $edition, 'script', 0 );
+            }
             $producer = new PressHub_AI_Podcast_Producer();
             $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration, $context_mode, $selected_articles, $edition );
 
@@ -1398,8 +1433,16 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         try {
             require_once __DIR__ . '/class-audio-synthesizer.php';
+            // Run from the Hub: a queued audio step for this edition is no longer needed.
+            if ( function_exists( 'presshub_ai_clear_pending_briefing_step' ) ) {
+                presshub_ai_clear_pending_briefing_step( $date, $edition, 'audio', 0 );
+            }
             $synthesizer = new PressHub_AI_Audio_Synthesizer();
-            $result      = $synthesizer->synthesize_podcast( $date, $script, $edition );
+            // Re-running an edition that already has its podcast post updates
+            // that post: a new post would be published and sent to every
+            // platform again.
+            $existing_id = function_exists( 'presshub_ai_find_podcast_post_id' ) ? (int) presshub_ai_find_podcast_post_id( $date, $edition ) : 0;
+            $result      = $synthesizer->synthesize_podcast( $date, $script, $edition, null, $existing_id );
 
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );
@@ -1842,10 +1885,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $processed   = $result['saved_keys'];
             $saved_count = $result['count'];
 
-            $saved_key          = (string) get_option( 'presshub_ai_api_key', '' );
             $saved_gcloud       = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             $saved_github       = (string) get_option( 'presshub_ai_github_token', '' );
-            $saved_briefing_tts = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
 
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::info( sprintf( 'Settings successfully saved (%d options updated)', $saved_count ), [
@@ -1876,10 +1917,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
             'sources' => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'   => [
-                'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                 'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
                 'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
-                'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
             ],
         ] );
     }
@@ -1922,56 +1961,20 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 }
             }
 
-            require_once __DIR__ . '/class-settings.php';
-            require_once __DIR__ . '/class-settings-storage.php';
-            require_once __DIR__ . '/class-logger.php';
-
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::debug( sprintf( 'AJAX save_settings_section request received for tab: %s', $tab ), [ 'raw_keys' => array_keys( $post_data ) ] );
-            }
-
-            $GLOBALS['presshub_ai_save_post_data'] = $post_data;
-            if ( class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab ) ) {
-                // #246: one Settings section, across both option groups. Social
-                // sanitizers read their "_present" / "_remove" markers from $_POST.
-                $with_social = current_user_can( PressHub_Capabilities::social() );
-                $defs        = PressHub_Settings_Sections::definitions();
-                if ( ! empty( $defs[ $tab ]['social'] ) && ! $with_social ) {
-                    wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub Social settings.', 'presshub-ai-editor' ) ], 403 );
+            $saved = $this->perform_section_save( $tab, $post_data, 'ajax' );
+            if ( ! $saved['ok'] ) {
+                $error = [ 'message' => $saved['message'] ];
+                if ( $saved['field_errors'] ) {
+                    $error['field_errors'] = $saved['field_errors'];
                 }
-                foreach ( $post_data as $k => $v ) {
-                    if ( is_string( $k ) && ! isset( $_POST[ $k ] ) ) {
-                        $_POST[ $k ] = $v;
-                    }
-                }
-                $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
-            } else {
-                // #233: the registry decides which options belong to this tab, so a
-                // tab's Save never writes (or zeroes) another tab's options.
-                if ( '' !== $tab && ! PressHub_Settings_Registry::options_map( 'ai', $tab ) ) {
-                    wp_send_json_error( [ 'message' => __( 'Unknown settings section.', 'presshub-ai-editor' ) ], 400 );
-                }
-                $result = PressHub_Settings_Registry::save_posted( 'ai', $tab, $post_data );
+                wp_send_json_error( $error, 200 === $saved['status'] ? null : $saved['status'] );
             }
-            $saved_keys  = $result['saved_keys'];
-            $saved_count = $result['count'];
-
-            $saved_key          = (string) get_option( 'presshub_ai_api_key', '' );
-            $saved_gcloud       = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-            $saved_github       = (string) get_option( 'presshub_ai_github_token', '' );
-            $saved_briefing_tts = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::info( sprintf( 'Settings section "%s" successfully saved (%d options updated)', $tab, $saved_count ), [
-                    'user_id'    => get_current_user_id(),
-                    'saved_keys' => $saved_keys,
-                    'tab'        => $tab,
-                ] );
-            }
-
-            if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
-                PressHub_AI_Settings_Storage::log_settings_saved( $saved_keys, $saved_count, $tab ?: 'settings' );
-            }
+            $saved_keys           = $saved['saved_keys'];
+            $saved_count          = $saved['count'];
+            $model_warnings       = $saved['model_warnings'];
+            $model_warning_fields = $saved['model_warning_fields'];
+            $saved_gcloud         = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
+            $saved_github         = (string) get_option( 'presshub_ai_github_token', '' );
         } catch ( Throwable $t ) {
             if ( $t instanceof RuntimeException && 0 === strpos( $t->getMessage(), 'wp_send_json' ) ) {
                 throw $t;
@@ -1990,16 +1993,144 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         wp_send_json_success( [
             'message'    => __( 'Settings saved successfully.', 'presshub-ai-editor' ),
             'tab'        => $tab,
-            'saved_keys' => $saved_keys,
-            'count'      => $saved_count,
-            'sources'    => PressHub_AI_Settings_Storage::get_briefing_sources(),
+            'saved_keys'     => $saved_keys,
+            'count'          => $saved_count,
+            'model_warnings' => $model_warnings,
+            'model_warning_fields' => (object) $model_warning_fields,
+            'sources'        => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'      => [
-                'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                 'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
                 'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
-                'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
             ],
         ] );
+    }
+
+    /**
+     * The one section save behind the AJAX Save and the no-JS form (#246, #309 E2):
+     * model check first (nothing is written when it refuses), then the section's
+     * options only, across both option groups, then the audit event.
+     *
+     * @param array<string,mixed> $post_data Posted fields (unslashed for the no-JS form, JSON for AJAX).
+     * @return array{ok:bool,status:int,message:string,field_errors:array,saved_keys:array,count:int,model_warnings:array,model_warning_fields:array}
+     */
+    public function perform_section_save( string $tab, array $post_data, string $via = 'ajax' ): array {
+        $out = [
+            'ok'                   => false,
+            'status'               => 200,
+            'message'              => '',
+            'field_errors'         => [],
+            'saved_keys'           => [],
+            'count'                => 0,
+            'model_warnings'       => [],
+            'model_warning_fields' => [],
+        ];
+        require_once __DIR__ . '/class-settings.php';
+        require_once __DIR__ . '/class-settings-storage.php';
+        require_once __DIR__ . '/class-logger.php';
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::debug( sprintf( 'Settings section save (%s) received for tab: %s', $via, $tab ), [ 'raw_keys' => array_keys( $post_data ) ] );
+        }
+
+        $GLOBALS['presshub_ai_save_post_data'] = $post_data;
+        if ( class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab ) ) {
+            // #246: one Settings section, across both option groups. Social
+            // sanitizers read their "_present" / "_remove" markers from $_POST.
+            $with_social = current_user_can( PressHub_Capabilities::social() );
+            $defs        = PressHub_Settings_Sections::definitions();
+            if ( ! empty( $defs[ $tab ]['social'] ) && ! $with_social ) {
+                $out['status']  = 403;
+                $out['message'] = __( 'Insufficient permissions to manage PressHub Social settings.', 'presshub-ai-editor' );
+                return $out;
+            }
+            foreach ( $post_data as $k => $v ) {
+                if ( is_string( $k ) && ! isset( $_POST[ $k ] ) ) {
+                    $_POST[ $k ] = $v;
+                }
+            }
+            // #236: a model known to be the wrong type for its task is refused
+            // before anything is written; an unknown one saves with a warning.
+            require_once __DIR__ . '/class-model-tasks.php';
+            $model_check = PressHub_Model_Tasks::validate( $post_data );
+            if ( $model_check['errors'] ) {
+                $out['message']      = __( 'Not saved. A model does not fit its task; see the fields listed above.', 'presshub-ai-editor' );
+                $out['field_errors'] = $model_check['errors'];
+                return $out;
+            }
+            foreach ( $model_check['warnings'] as $opt => $msg ) {
+                $out['model_warnings'][] = PressHub_Model_Tasks::label_of( (string) $opt ) . ': ' . $msg;
+            }
+            $out['model_warning_fields'] = $model_check['warnings'];
+            $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
+        } else {
+            // #233: the registry decides which options belong to this tab, so a
+            // tab's Save never writes (or zeroes) another tab's options. The no-JS
+            // form only ever posts a Settings section.
+            if ( 'ajax' !== $via || ( '' !== $tab && ! PressHub_Settings_Registry::options_map( 'ai', $tab ) ) ) {
+                $out['status']  = 400;
+                $out['message'] = __( 'Unknown settings section.', 'presshub-ai-editor' );
+                return $out;
+            }
+            $result = PressHub_Settings_Registry::save_posted( 'ai', $tab, $post_data );
+        }
+        $out['ok']         = true;
+        $out['saved_keys'] = $result['saved_keys'];
+        $out['count']      = $result['count'];
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'Settings section "%s" successfully saved (%d options updated)', $tab, $out['count'] ), [
+                'user_id'    => get_current_user_id(),
+                'saved_keys' => $out['saved_keys'],
+                'tab'        => $tab,
+                'via'        => $via,
+            ] );
+        }
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            PressHub_AI_Settings_Storage::log_settings_saved( $out['saved_keys'], $out['count'], $tab ?: 'settings' );
+        }
+        return $out;
+    }
+
+    /**
+     * admin-post: the Settings form submitted without JavaScript (#309, E2).
+     * Saves the one section on screen, like the AJAX Save, then returns to it.
+     */
+    public function handle_section_post(): void {
+        $tab = isset( $_POST['presshub_settings_section'] ) ? sanitize_key( wp_unslash( $_POST['presshub_settings_section'] ) ) : '';
+        check_admin_referer( PressHub_Settings_Sections::post_nonce( $tab ) );
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
+            wp_die( esc_html__( 'Insufficient permissions to manage PressHub AI settings.', 'presshub-ai-editor' ), '', [ 'response' => 403 ] );
+        }
+        $post_data = wp_unslash( $_POST );
+        $post_data = is_array( $post_data ) ? $post_data : [];
+        unset( $post_data['action'], $post_data['_wpnonce'], $post_data['_wp_http_referer'], $post_data['presshub_settings_section'] );
+
+        try {
+            $saved = $this->perform_section_save( $tab, $post_data, 'form' );
+        } catch ( Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Exception in handle_section_post: ' . $t->getMessage(), [ 'file' => basename( $t->getFile() ), 'line' => $t->getLine() ] );
+            }
+            $saved = [ 'ok' => false, 'message' => __( 'Not saved: an error occurred. See the PressHub log.', 'presshub-ai-editor' ), 'field_errors' => [], 'model_warnings' => [] ];
+        }
+        // A refusal for rights or an unknown section cannot be shown on that
+        // section (the user cannot open it): say so here, as the capability check does.
+        if ( empty( $saved['ok'] ) && in_array( (int) ( $saved['status'] ?? 200 ), [ 400, 403 ], true ) ) {
+            wp_die( esc_html( (string) $saved['message'] ), '', [ 'response' => (int) $saved['status'] ] );
+        }
+        set_transient( PressHub_Settings_Sections::post_result_key( (int) get_current_user_id() ), [
+            'section'        => $tab,
+            'ok'             => (bool) $saved['ok'],
+            'message'        => (string) $saved['message'],
+            'field_errors'   => (array) $saved['field_errors'],
+            'model_warnings' => (array) $saved['model_warnings'],
+        ], 120 );
+
+        $url = class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab )
+            ? PressHub_Settings_Sections::url( $tab )
+            : admin_url( 'admin.php?page=presshub-ai' );
+        wp_safe_redirect( add_query_arg( 'presshub_saved', '1', $url ) );
+        exit;
     }
 
     /** Remembers, per user, that the "What's new in settings" panel was dismissed (#246). */
@@ -3094,6 +3225,45 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
     }
 
     /**
+     * AJAX: Change the name and text of a saved drafting template, from the
+     * Settings template editor. Same rights as deleting it.
+     */
+    public function update_image_prompt_template() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( __( 'Unauthorized capability to change image prompt templates.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $id       = isset( $_POST['template_id'] ) ? sanitize_key( wp_unslash( $_POST['template_id'] ) ) : '';
+        $name     = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+        $template = isset( $_POST['template'] ) ? sanitize_textarea_field( wp_unslash( $_POST['template'] ) ) : '';
+
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $tpl = PressHub_AI_Image_Prompt_Templates::get( $id );
+        if ( $tpl && empty( $tpl['builtin'] ) && ! PressHub_AI_Image_Prompt_Templates::current_user_can_manage( $tpl ) ) {
+            wp_send_json_error( __( 'Only the editor who saved this template, or an editor, can change it.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $saved = PressHub_AI_Image_Prompt_Templates::update( $id, $name, $template );
+        if ( is_wp_error( $saved ) ) {
+            wp_send_json_error( $saved->get_error_message() );
+        }
+
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'image_prompt_template_updated', 'image_prompt_template', $id, [
+                'name'         => $saved['name'],
+                'renamed_from' => $tpl && $tpl['name'] !== $saved['name'] ? $tpl['name'] : '',
+            ] );
+        }
+
+        wp_send_json_success( [
+            'template' => $saved,
+            'message'  => __( 'Template saved.', 'presshub-ai-editor' ),
+        ] );
+    }
+
+    /**
      * AJAX: Delete a saved drafting template. Built-ins cannot be deleted;
      * a template can be deleted by whoever saved it or by an editor who can
      * edit others' posts.
@@ -3109,7 +3279,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-image-prompt-templates.php';
         $tpl = PressHub_AI_Image_Prompt_Templates::get( $id );
-        if ( $tpl && empty( $tpl['builtin'] ) && (int) $tpl['author'] !== (int) get_current_user_id() && ! current_user_can( 'edit_others_posts' ) ) {
+        if ( $tpl && empty( $tpl['builtin'] ) && ! PressHub_AI_Image_Prompt_Templates::current_user_can_manage( $tpl ) ) {
             wp_send_json_error( __( 'Only the editor who saved this template, or an editor, can delete it.', 'presshub-ai-editor' ), 403 );
         }
 

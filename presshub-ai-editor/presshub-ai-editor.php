@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.43.0
+ * Version: 2.87.1
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -33,7 +33,8 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
         }
         foreach ( array( 'openai', 'anthropic', 'gemini' ) as $provider ) {
             $option = 'presshub_ai_max_tokens_' . $provider;
-            if ( 2000 === (int) get_option( $option, 0 ) ) {
+            $value  = class_exists( 'PressHub_Settings_Cleanup' ) ? PressHub_Settings_Cleanup::read_removed( $option, 0 ) : get_option( $option, 0 );
+            if ( 2000 === (int) $value ) {
                 delete_option( $option );
             }
         }
@@ -41,6 +42,41 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
     }
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
+
+/**
+ * 2.52.0: policy fiches in social copy and shorts got 800 characters, which
+ * after the block's instructions left too little room for a fiche, so most
+ * fiches were never sent there. The default is now 1,200 and the framing-only
+ * block has a short header. A saved budget that still equals the old default
+ * (the Editorial knowledge section saves every row) is raised to the new
+ * default; any other value was chosen by an editor and is kept. Runs once;
+ * guarded by the presshub_ai_migrated_social_fiche_budgets flag.
+ */
+if ( ! function_exists( 'presshub_ai_migrate_social_fiche_budgets' ) ) {
+    function presshub_ai_migrate_social_fiche_budgets() {
+        if ( '1' === get_option( 'presshub_ai_migrated_social_fiche_budgets', '0' ) || ! class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+            return;
+        }
+        $stored = get_option( 'presshub_ai_policy_fiches_budgets', [] );
+        if ( is_array( $stored ) && $stored ) {
+            $raised = [];
+            foreach ( [ 'social_copy_', 'social_tiktok_shorts' ] as $action ) {
+                if ( isset( $stored[ $action ] ) && PressHub_AI_Policy_Fiches::OLD_SOCIAL_BUDGET === (int) $stored[ $action ] ) {
+                    $stored[ $action ] = PressHub_AI_Policy_Fiches::BUDGETS[ $action ];
+                    $raised[]          = $action;
+                }
+            }
+            if ( $raised ) {
+                update_option( 'presshub_ai_policy_fiches_budgets', $stored );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::info( 'Policy fiche budgets for social copy raised to the new default', [ 'actions' => $raised, 'from' => PressHub_AI_Policy_Fiches::OLD_SOCIAL_BUDGET ] );
+                }
+            }
+        }
+        update_option( 'presshub_ai_migrated_social_fiche_budgets', '1', false );
+    }
+}
+add_action( 'admin_init', 'presshub_ai_migrate_social_fiche_budgets' );
 
 /**
  * #263 repair: earlier saves unslashed JSON-encoded briefing sources, which
@@ -122,7 +158,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.43.0' );
+define( 'PRESSHUB_AI_VERSION', '2.87.1' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -159,6 +195,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-settings-render.php';
 // #247: a changed login or secret forgets its last connection test.
 require_once PRESSHUB_AI_DIR . 'includes/class-connection-status.php';
 PressHub_Connection_Status::register_hooks();
+// #236: the AI models table; a model of the wrong type is never stored.
+require_once PRESSHUB_AI_DIR . 'includes/class-model-tasks.php';
+PressHub_Model_Tasks::register_hooks();
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-migration.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-image-prompt-templates.php';
@@ -167,6 +206,10 @@ require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-seo.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviewer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-review-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-publish-gate.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviews-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-held-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';
 if ( file_exists( PRESSHUB_AI_DIR . 'includes/class-log-exposure-check.php' ) ) {
@@ -189,7 +232,12 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-trending.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-embeds.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-podcast-translations.php';
+if ( function_exists( 'add_action' ) ) {
+    add_action( 'before_delete_post', [ 'PressHub_AI_Podcast_Translations', 'on_before_delete_post' ] );
+}
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-podcast-mp3.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
@@ -204,9 +252,14 @@ require_once PRESSHUB_AI_DIR . 'includes/class-memory-context-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-editor.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-editorial-agenda.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-stakeholders.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-knowledge-cuts.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-policy-fiches.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-fact-checks.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-fiches-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-help-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-update-backup.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-transfer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-settings-cleanup.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 // Social Auto-Post Subsystem Classes
@@ -217,10 +270,16 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-activator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-queue.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-narrator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-image-library.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-ai-json.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-post-images.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-shorts.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-story-check.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-trending-short.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-post-gate.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-music.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-youtube.php';
 PressHub_Social_TikTok_Shorts::register_hooks();
+PressHub_Social_YouTube::register_hooks();
 PressHub_Social_Post_Images::register_hooks();
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-worker-client.php';
@@ -292,6 +351,7 @@ function presshub_ai_activate() {
     PressHub_AI_Audit_Logger::create_table();
     PressHub_AI_Memory_Store::create_tables();
     PressHub_AI_Generation_Recorder::create_table();
+    PressHub_AI_QA_Review_Store::create_table();
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
     }
@@ -336,6 +396,10 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     wp_clear_scheduled_hook( 'presshub_ai_prune_log_files' );
     wp_clear_scheduled_hook( PressHub_AI_Social_Trending::CRON_HOOK );
+    if ( function_exists( 'wp_unschedule_hook' ) ) {
+        wp_unschedule_hook( PressHub_AI_Social_Trending::AI_IMAGE_HOOK ); // Its events carry arguments.
+        wp_unschedule_hook( PressHub_AI_Podcast_Mp3::DELETE_WAV_HOOK );
+    }
     PressHub_AI_Memory_Rollup_Builder::clear_cron();
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::deactivate();
@@ -411,14 +475,21 @@ function presshub_ai_init() {
     new PressHub_AI_Workflow();
     new PressHub_AI_Briefing_Admin();
     new PressHub_AI_Generation_Inspector();
+    new PressHub_AI_QA_Reviews_Admin();
+    new PressHub_AI_QA_Held_Admin();
     new PressHub_AI_Memory_Editor();
     PressHub_AI_Editorial_Agenda::register_hooks();
     PressHub_AI_Stakeholders::register_hooks();
     PressHub_AI_Policy_Fiches::register_hooks();
+    PressHub_AI_Fact_Checks::register_hooks();
     new PressHub_AI_Fiches_Admin();
+    new PressHub_AI_Help_Admin();
+    new PressHub_AI_Update_Backup();
     PressHub_Settings_Transfer::register_hooks();
+    PressHub_Settings_Cleanup::register_hooks();
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
+    PressHub_AI_Podcast_Mp3::register_hooks();
     PressHub_AI_Social_Trending::register_hooks();
     PressHub_AI_Research_Cleanup::register();
     if ( class_exists( 'PressHub_AI_Log_Exposure_Check' ) ) {
@@ -460,6 +531,10 @@ function presshub_ai_init() {
         if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
         }
+    }
+
+    if ( class_exists( 'PressHub_AI_QA_Review_Store' ) ) {
+        PressHub_AI_QA_Review_Store::maybe_upgrade();
     }
 
     if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
@@ -737,6 +812,8 @@ add_action( 'presshub_noon_news_harvest', 'presshub_ai_execute_noon_harvest_cron
 add_action( 'presshub_noon_news_generate', 'presshub_ai_execute_noon_generation_cron' );
 add_action( 'presshub_ai_retry_podcast_synthesis', 'presshub_ai_execute_synthesis_retry', 10, 2 );
 add_action( 'presshub_ai_run_briefing_step', 'presshub_ai_execute_briefing_step', 10, 4 );
+add_action( 'init', 'presshub_ai_maybe_sweep_lost_briefing_steps', 20 );
+add_action( 'admin_init', 'presshub_ai_maybe_sweep_lost_briefing_steps' );
 add_action( 'update_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
@@ -1010,7 +1087,7 @@ function presshub_ai_briefing_step_max_continuations() {
  *
  * @param string $date    Briefing date (Y-m-d).
  * @param string $edition morning | noon.
- * @param string $step    script | audio.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Audio continuation number (0 for the first run).
  * @param int    $delay   Seconds from now.
  * @return bool True when the event was queued; false means run it inline.
@@ -1020,10 +1097,20 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
         return false;
     }
     $args = [ (string) $date, (string) $edition, (string) $step, (int) $part ];
-    $ok   = wp_schedule_single_event( time() + max( 0, (int) $delay ), 'presshub_ai_run_briefing_step', $args );
+    $due  = time() + max( 0, (int) $delay );
+    // Record the step before saving its event: the event can start as soon
+    // as it is saved, and starting clears the record.
+    $previous = presshub_ai_record_pending_briefing_step( $date, $edition, $step, (int) $part, $due );
+    // A long request (the generation cron runs for minutes) holds a copy of
+    // the cron list taken when it started; writing it back would undo what
+    // other requests scheduled since. Read the current list first.
+    presshub_ai_refresh_cron_cache();
+    $ok   = wp_schedule_single_event( $due, 'presshub_ai_run_briefing_step', $args );
     if ( false === $ok || ( function_exists( 'is_wp_error' ) && is_wp_error( $ok ) ) ) {
+        // Put back what was there: the identical event may still be waiting.
+        presshub_ai_restore_pending_briefing_step( $date, $edition, $step, (int) $part, $previous );
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; running it in this request.', [
+            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; the caller runs it now or, when the same step is already waiting, leaves it to that event.', [
                 'date'    => $date,
                 'edition' => $edition,
                 'step'    => $step,
@@ -1047,7 +1134,7 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
  *
  * @param string $date    Briefing date (Y-m-d).
  * @param string $edition morning | noon.
- * @param string $step    script | audio.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Audio continuation number.
  * @return mixed Step result.
  */
@@ -1061,10 +1148,392 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
     $date    = (string) $date;
     $edition = 'noon' === $edition ? 'noon' : 'morning';
 
+    // The event ran, so the lost-step sweep has nothing to watch for it.
+    presshub_ai_clear_pending_briefing_step( $date, $edition, (string) $step, (int) $part );
+
     if ( 'audio' === $step ) {
+        // A step run twice (a lost-step re-queue racing the original) must
+        // not make a second podcast post. Continuations check this themselves.
+        if ( 0 === (int) $part && presshub_ai_find_podcast_post_id( $date, $edition ) > 0 ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Scheduled podcast audio step skipped: a podcast post already exists for this edition.', [ 'date' => $date, 'edition' => $edition ] );
+            }
+            return null;
+        }
         return presshub_ai_run_podcast_audio_step( $date, $edition, (int) $part, true );
     }
+    // English and Turkish versions: translate:<lang> and voice:<lang>.
+    if ( 0 === strpos( (string) $step, 'translate:' ) || 0 === strpos( (string) $step, 'voice:' ) ) {
+        try {
+            return PressHub_AI_Podcast_Translations::run_step( $date, $edition, (string) $step, (int) $part, true );
+        } catch ( \Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast language step failed with an exception: ' . $t->getMessage(), [ 'date' => $date, 'edition' => $edition, 'step' => $step ] );
+            }
+            return new WP_Error( 'translation_exception', $t->getMessage() );
+        }
+    }
     return presshub_ai_run_podcast_script_step( $date, $edition, true );
+}
+
+/**
+ * Option that lists the briefing steps queued on presshub_ai_run_briefing_step
+ * and not yet started (lost-step sweep, 2.65.0).
+ */
+const PRESSHUB_AI_PENDING_STEPS_OPTION = 'presshub_ai_briefing_pending_steps';
+
+/**
+ * Lock row for changes to the pending-steps option and for the sweep.
+ */
+const PRESSHUB_AI_PENDING_STEPS_LOCK = 'presshub_ai_briefing_pending_steps_lock';
+
+/**
+ * Drop this request's cached copy of the cron list so the next read comes
+ * from the database.
+ *
+ * WordPress keeps the autoloaded `cron` option in memory for the whole
+ * request. A request that runs for minutes and then schedules an event
+ * writes that old copy back with its event added, and a request that started
+ * earlier and finishes later can do the same to ours: an event queued in
+ * between is silently lost (19/11/2026 noon edition: the script step was
+ * queued at 13:18:56 and never ran). This only stops the first case; the
+ * sweep below recovers from the second.
+ */
+function presshub_ai_refresh_cron_cache() {
+    if ( function_exists( 'wp_cache_delete' ) ) {
+        wp_cache_delete( 'alloptions', 'options' );
+        wp_cache_delete( 'cron', 'options' );
+    }
+}
+
+/**
+ * @return string Key of one step in the pending-steps option.
+ */
+function presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part ) {
+    return implode( '|', [ (string) $date, (string) $edition, (string) $step, (int) $part ] );
+}
+
+/**
+ * Take the pending-steps lock (re-entrant within a request).
+ *
+ * add_option() upserts, so the lock row is inserted with INSERT IGNORE: only
+ * the request whose insert affected a row holds it. A lock older than 30 s
+ * is taken over. Waits up to about 3 s; when it still cannot get the lock it
+ * returns false and the caller goes ahead unlocked, because a missed record
+ * or clear is worse than a rare race.
+ *
+ * @return bool True when this request now holds the lock.
+ */
+function presshub_ai_pending_steps_lock() {
+    if ( ! empty( $GLOBALS['presshub_ai_pending_steps_lock_depth'] ) ) {
+        $GLOBALS['presshub_ai_pending_steps_lock_depth']++;
+        return true;
+    }
+    global $wpdb;
+    $ttl = 30;
+    for ( $try = 0; $try < 30; $try++ ) {
+        $now   = time();
+        // "<time>:<token>": the time ages the lock, the token says whose it is.
+        $value = $now . ':' . ( function_exists( 'wp_generate_password' ) ? wp_generate_password( 12, false ) : bin2hex( random_bytes( 6 ) ) );
+        if ( isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+            $got = 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')", PRESSHUB_AI_PENDING_STEPS_LOCK, $value ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            if ( ! $got ) {
+                $held = (string) $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", PRESSHUB_AI_PENDING_STEPS_LOCK ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+                if ( '' !== $held && $now - (int) $held >= $ttl ) {
+                    $got = 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", $value, PRESSHUB_AI_PENDING_STEPS_LOCK, $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+                }
+            }
+        } else {
+            $held = (string) get_option( PRESSHUB_AI_PENDING_STEPS_LOCK, '' );
+            $got  = ! ( '' !== $held && $now - (int) $held < $ttl );
+            if ( $got ) {
+                update_option( PRESSHUB_AI_PENDING_STEPS_LOCK, $value, false );
+            }
+        }
+        if ( $got ) {
+            $GLOBALS['presshub_ai_pending_steps_lock_depth'] = 1;
+            $GLOBALS['presshub_ai_pending_steps_lock_value'] = $value;
+            return true;
+        }
+        usleep( 100000 );
+    }
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::warning( 'Could not take the briefing pending-steps lock within 3 s; going ahead without it.' );
+    }
+    return false;
+}
+
+/**
+ * Release the pending-steps lock taken by presshub_ai_pending_steps_lock().
+ * Only removes the row while it still holds this request's token, so a lock
+ * another request took over after 30 s is left alone.
+ *
+ * @param bool $held What presshub_ai_pending_steps_lock() returned.
+ */
+function presshub_ai_pending_steps_unlock( $held ) {
+    if ( ! $held ) {
+        return;
+    }
+    $GLOBALS['presshub_ai_pending_steps_lock_depth'] = max( 0, (int) ( $GLOBALS['presshub_ai_pending_steps_lock_depth'] ?? 1 ) - 1 );
+    if ( 0 !== $GLOBALS['presshub_ai_pending_steps_lock_depth'] ) {
+        return;
+    }
+    $value = (string) ( $GLOBALS['presshub_ai_pending_steps_lock_value'] ?? '' );
+    $GLOBALS['presshub_ai_pending_steps_lock_value'] = '';
+    global $wpdb;
+    if ( isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+        $wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s AND `option_value` = %s", PRESSHUB_AI_PENDING_STEPS_LOCK, $value ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        if ( function_exists( 'wp_cache_delete' ) ) {
+            wp_cache_delete( PRESSHUB_AI_PENDING_STEPS_LOCK, 'options' );
+        }
+    } elseif ( (string) get_option( PRESSHUB_AI_PENDING_STEPS_LOCK, '' ) === $value ) {
+        delete_option( PRESSHUB_AI_PENDING_STEPS_LOCK );
+    }
+}
+
+/**
+ * Read the pending steps from the database (not this request's cache, which
+ * another request may have changed since).
+ *
+ * @return array<string,array> Steps by key.
+ */
+function presshub_ai_read_pending_briefing_steps() {
+    if ( function_exists( 'wp_cache_delete' ) ) {
+        wp_cache_delete( PRESSHUB_AI_PENDING_STEPS_OPTION, 'options' );
+        wp_cache_delete( 'notoptions', 'options' );
+    }
+    $steps = get_option( PRESSHUB_AI_PENDING_STEPS_OPTION, [] );
+    return is_array( $steps ) ? $steps : [];
+}
+
+/**
+ * Write the pending steps. Callers hold the lock.
+ *
+ * @param array<string,array> $steps Steps by key; empty deletes the option.
+ */
+function presshub_ai_write_pending_briefing_steps( array $steps ) {
+    if ( empty( $steps ) ) {
+        delete_option( PRESSHUB_AI_PENDING_STEPS_OPTION );
+        return;
+    }
+    update_option( PRESSHUB_AI_PENDING_STEPS_OPTION, $steps, false );
+}
+
+/**
+ * Remember a queued step until its event starts. Keeps the attempt count of
+ * an earlier entry for the same step, and drops entries over two days old.
+ *
+ * @param string $date    Briefing date (Y-m-d).
+ * @param string $edition morning | noon.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
+ * @param int    $part    Continuation number.
+ * @param int    $due     Timestamp the event is queued for.
+ * @return array|null The entry it replaced, for presshub_ai_restore_pending_briefing_step().
+ */
+function presshub_ai_record_pending_briefing_step( $date, $edition, $step, $part, $due ) {
+    $lock = presshub_ai_pending_steps_lock();
+    try {
+        $steps = presshub_ai_read_pending_briefing_steps();
+        $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
+        $old   = isset( $steps[ $key ] ) && is_array( $steps[ $key ] ) ? $steps[ $key ] : null;
+        $now   = time();
+        foreach ( $steps as $k => $entry ) {
+            if ( ! is_array( $entry ) || (int) ( $entry['due'] ?? 0 ) < $now - 2 * DAY_IN_SECONDS ) {
+                unset( $steps[ $k ] );
+            }
+        }
+        $steps[ $key ] = [
+            'date'     => (string) $date,
+            'edition'  => (string) $edition,
+            'step'     => (string) $step,
+            'part'     => (int) $part,
+            'due'      => (int) $due,
+            'attempts' => (int) ( $old['attempts'] ?? 0 ),
+        ];
+        presshub_ai_write_pending_briefing_steps( $steps );
+        return $old;
+    } finally {
+        presshub_ai_pending_steps_unlock( $lock );
+    }
+}
+
+/**
+ * Put back the entry a failed schedule replaced (or remove the new one).
+ *
+ * @param array|null $previous What presshub_ai_record_pending_briefing_step() returned.
+ */
+function presshub_ai_restore_pending_briefing_step( $date, $edition, $step, $part, $previous ) {
+    $lock = presshub_ai_pending_steps_lock();
+    try {
+        $steps = presshub_ai_read_pending_briefing_steps();
+        $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
+        if ( is_array( $previous ) ) {
+            $steps[ $key ] = $previous;
+        } else {
+            unset( $steps[ $key ] );
+        }
+        presshub_ai_write_pending_briefing_steps( $steps );
+    } finally {
+        presshub_ai_pending_steps_unlock( $lock );
+    }
+}
+
+/**
+ * Forget a step once its event has started, or once the same step was run
+ * from the Daily Briefing Hub.
+ */
+function presshub_ai_clear_pending_briefing_step( $date, $edition, $step, $part ) {
+    $lock = presshub_ai_pending_steps_lock();
+    try {
+        $steps = presshub_ai_read_pending_briefing_steps();
+        $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
+        if ( isset( $steps[ $key ] ) ) {
+            unset( $steps[ $key ] );
+            presshub_ai_write_pending_briefing_steps( $steps );
+        }
+    } finally {
+        presshub_ai_pending_steps_unlock( $lock );
+    }
+}
+
+/**
+ * Seconds past its due time before a step whose event is gone counts as
+ * lost. Filter: `presshub_ai_briefing_step_lost_after_sec`.
+ */
+function presshub_ai_briefing_step_lost_after_sec() {
+    $sec = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_ai_briefing_step_lost_after_sec', 300 ) : 300;
+    return max( 60, $sec );
+}
+
+/**
+ * How many times one lost step is queued again. Filter:
+ * `presshub_ai_briefing_step_max_requeues`.
+ */
+function presshub_ai_briefing_step_max_requeues() {
+    $n = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_ai_briefing_step_max_requeues', 2 ) : 2;
+    return max( 0, $n );
+}
+
+/**
+ * Run the lost-step sweep at most every two minutes, in cron and admin
+ * requests only. Reads one non-autoloaded option when nothing is pending.
+ */
+function presshub_ai_maybe_sweep_lost_briefing_steps() {
+    $doing_cron = function_exists( 'wp_doing_cron' ) && wp_doing_cron();
+    $is_admin   = function_exists( 'is_admin' ) && is_admin() && ! ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() );
+    if ( ! $doing_cron && ! $is_admin ) {
+        return 0;
+    }
+    if ( 'init' === ( function_exists( 'current_action' ) ? current_action() : '' ) && ! $doing_cron ) {
+        return 0; // Admin requests run it on admin_init.
+    }
+    if ( false !== get_transient( 'presshub_ai_step_sweep_lock' ) ) {
+        return 0;
+    }
+    set_transient( 'presshub_ai_step_sweep_lock', 1, 2 * MINUTE_IN_SECONDS );
+    try {
+        return presshub_ai_sweep_lost_briefing_steps();
+    } catch ( \Throwable $t ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::warning( 'Lost briefing step sweep failed: ' . $t->getMessage() );
+        }
+        return 0;
+    }
+}
+
+/**
+ * Queue again any briefing step whose cron event disappeared before it ran.
+ *
+ * A step is lost when it is past its due time by
+ * presshub_ai_briefing_step_lost_after_sec(), has not started (starting
+ * clears it) and its event is no longer in the cron list. An event that is
+ * still listed, even late, is left to WordPress. Each step is queued again at
+ * most presshub_ai_briefing_step_max_requeues() times; after that the sweep
+ * logs an error and forgets it.
+ *
+ * The whole sweep holds the pending-steps lock, so a step that starts (and
+ * clears itself) in the meantime is never written back, and two sweeps never
+ * run at once. A scheduled audio step skips when the podcast post exists, so
+ * the one remaining window (WordPress removes an event a moment before it
+ * runs it) cannot make a second post.
+ *
+ * @param int|null $now Reference time (tests).
+ * @return int Steps queued again.
+ */
+function presshub_ai_sweep_lost_briefing_steps( $now = null ) {
+    // Cheap check without the lock: usually nothing is pending.
+    if ( empty( presshub_ai_read_pending_briefing_steps() ) ) {
+        return 0;
+    }
+    $now      = null === $now ? time() : (int) $now;
+    $lost_sec = presshub_ai_briefing_step_lost_after_sec();
+    $max      = presshub_ai_briefing_step_max_requeues();
+    $requeued = 0;
+
+    $lock = presshub_ai_pending_steps_lock();
+    if ( ! $lock ) {
+        return 0; // Another sweep or a busy writer: try on the next round.
+    }
+    try {
+        $steps   = presshub_ai_read_pending_briefing_steps();
+        $overdue = [];
+        foreach ( $steps as $key => $entry ) {
+            if ( ! is_array( $entry ) || '' === (string) ( $entry['date'] ?? '' ) || '' === (string) ( $entry['step'] ?? '' ) ) {
+                $overdue[ $key ] = null; // Broken: drop it.
+            } elseif ( (int) ( $entry['due'] ?? 0 ) + $lost_sec <= $now ) {
+                $overdue[ $key ] = $entry;
+            }
+        }
+        if ( empty( $overdue ) ) {
+            return 0;
+        }
+        presshub_ai_refresh_cron_cache();
+
+        foreach ( $overdue as $key => $entry ) {
+            if ( null === $entry ) {
+                unset( $steps[ $key ] );
+                presshub_ai_write_pending_briefing_steps( $steps );
+                continue;
+            }
+            $args = [ (string) $entry['date'], 'noon' === ( $entry['edition'] ?? '' ) ? 'noon' : 'morning', (string) $entry['step'], (int) ( $entry['part'] ?? 0 ) ];
+            if ( function_exists( 'wp_next_scheduled' ) && false !== wp_next_scheduled( 'presshub_ai_run_briefing_step', $args ) ) {
+                continue;
+            }
+            $context = [ 'date' => $args[0], 'edition' => $args[1], 'step' => $args[2], 'part' => $args[3], 'queued_for' => gmdate( 'c', (int) ( $entry['due'] ?? 0 ) ) ];
+            $attempt = (int) ( $entry['attempts'] ?? 0 ) + 1;
+            if ( $attempt > $max ) {
+                unset( $steps[ $key ] );
+                presshub_ai_write_pending_briefing_steps( $steps );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( sprintf( 'Briefing step "%s" was lost from the cron list again and has been queued the maximum %d time(s); run it from the Daily Briefing Hub.', $args[2], $max ), $context );
+                }
+                continue;
+            }
+
+            // Save the attempt first: record_pending_briefing_step() keeps it.
+            $steps[ $key ]['attempts'] = $attempt;
+            presshub_ai_write_pending_briefing_steps( $steps );
+
+            if ( presshub_ai_schedule_briefing_step( $args[0], $args[1], $args[2], $args[3] ) ) {
+                $requeued++;
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( 'Briefing step "%s" was queued but its cron event disappeared before it ran; queued again (attempt %d of %d).', $args[2], $attempt, $max ), $context );
+                }
+            } else {
+                $steps = presshub_ai_read_pending_briefing_steps();
+                unset( $steps[ $key ] );
+                presshub_ai_write_pending_briefing_steps( $steps );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( sprintf( 'Briefing step "%s" was lost from the cron list and could not be queued again; run it from the Daily Briefing Hub.', $args[2] ), $context );
+                }
+            }
+            // presshub_ai_schedule_briefing_step() rewrote the option.
+            $steps = presshub_ai_read_pending_briefing_steps();
+        }
+        return $requeued;
+    } finally {
+        presshub_ai_pending_steps_unlock( $lock );
+    }
 }
 
 /**
@@ -1124,6 +1593,15 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
         return null;
     }
 
+    // 2.74.0 - one audio job per edition: a job that finds another one voicing
+    // this edition stops before touching its watchdog or scheduling a retry.
+    if ( ! PressHub_AI_Audio_Synthesizer::acquire_run_lock( (string) $date, (string) $edition ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Podcast audio step skipped: another audio job is already voicing this edition.', [ 'date' => $date, 'edition' => $edition, 'part' => $part ] );
+        }
+        return null;
+    }
+
     presshub_ai_arm_synthesis_watchdog( $date, $edition );
     $budget = $budgeted ? presshub_ai_briefing_step_time_budget_sec() : 0;
     try {
@@ -1137,8 +1615,11 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
             if ( 'synthesis_time_budget' !== $result->get_error_code() && class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error( $label . ' generation cron error in audio synthesis: ' . $result->get_error_message() );
             }
-        } elseif ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+        } else {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+            }
+            // synthesize_podcast() has started the English and Turkish versions.
         }
     } catch ( \Throwable $t ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -1152,6 +1633,7 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
     // The watchdog only covers a process that never returns: a returned
     // result replaces it (success: nothing to retry; error: the regular retry).
     presshub_ai_disarm_synthesis_watchdog( $date, $edition );
+    PressHub_AI_Audio_Synthesizer::release_run_lock( (string) $date, (string) $edition );
 
     if ( is_wp_error( $result ) && 'synthesis_time_budget' === $result->get_error_code() ) {
         if ( $part < presshub_ai_briefing_step_max_continuations()
@@ -1367,6 +1849,14 @@ function presshub_ai_execute_synthesis_retry( $date = '', $edition = 'morning' )
         $result      = $synthesizer->synthesize_podcast( $date, '', $edition );
     } catch ( \Throwable $t ) {
         $result = new WP_Error( 'synthesis_exception', $t->getMessage() );
+    }
+
+    // 2.74.0 - another job is voicing this edition right now; it finishes the episode.
+    if ( is_wp_error( $result ) && 'synthesis_in_progress' === $result->get_error_code() ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Scheduled podcast synthesis retry skipped: another audio job is voicing this edition.', [ 'date' => $date, 'edition' => $edition ] );
+        }
+        return null;
     }
 
     if ( is_wp_error( $result ) ) {

@@ -863,6 +863,21 @@ class PressHub_AI_News_Curator {
         $count   = count( $articles );
         $context = $this->format_articles_context( $articles );
 
+        // Design principle (agents.md rule 13): a cut made by a limit is
+        // recorded. The article breakdown goes into the generation record;
+        // this writes one log line per prompt (hydrate_prompt() above renders
+        // the same context, so the line is written here and not there).
+        if ( $this->was_context_truncated() && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            $breakdown = $this->last_articles_breakdown();
+            PressHub_AI_Knowledge_Cuts::log_articles(
+                'briefing_curation',
+                PressHub_AI_Knowledge_Cuts::article_cuts( $breakdown['sent'], $breakdown['dropped'], [
+                    'cap_articles'          => PressHub_AI_Settings_Storage::get_curation_max_articles(),
+                    'cap_chars_per_article' => PressHub_AI_Settings_Storage::get_curation_max_chars_per_article(),
+                ] )
+            );
+        }
+
         // Issue #135: Compute effective memory budget and build tiered memory context
         $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
         // Issue #188: the model's input window, not the module's max output tokens.
@@ -1233,33 +1248,6 @@ class PressHub_AI_News_Curator {
             $post_status = 'pending';
         }
 
-        // Automated AI QA Review pre-publication evaluation
-        $qa_result = null;
-        $qa_enabled = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_qa_enabled();
-        $qa_include_briefings = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_qa_include_briefings();
-
-        if ( $qa_enabled && $qa_include_briefings && class_exists( 'PressHub_AI_QA_Reviewer' ) ) {
-            $qa_result = PressHub_AI_QA_Reviewer::evaluate_content( $story_content, 'briefing' );
-            if ( ! empty( $qa_result ) && ! ( $qa_result['passed'] ?? false ) ) {
-                if ( 'publish' === $post_status ) {
-                    $post_status = 'pending';
-                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                        PressHub_AI_Logger::warning(
-                            sprintf(
-                                'Daily Briefing text story failed AI QA review (score: %d/100, threshold: %d). Post status overridden to pending.',
-                                (int) ( $qa_result['score'] ?? 0 ),
-                                PressHub_AI_Settings_Storage::get_qa_min_score()
-                            ),
-                            [
-                                'qa_result' => $qa_result,
-                                'date'      => $date,
-                            ]
-                        );
-                    }
-                }
-            }
-        }
-
         // Ensure content is valid HTML
         $html_content = PressHub_AI_Markdown::to_html( $story_content );
 
@@ -1286,17 +1274,14 @@ class PressHub_AI_News_Curator {
             ],
         ];
 
-        if ( ! empty( $qa_result ) ) {
-            $postarr['meta_input']['_presshub_ai_scorecard']      = [
-                'score'    => $qa_result['score'] ?? 0,
-                'feedback' => $qa_result['feedback'] ?? '',
-            ];
-            $postarr['meta_input']['_presshub_ai_scorecard_hash'] = md5( trim( $story_content ) );
-        }
-
         if ( ! empty( $post_category ) ) {
             $postarr['post_category'] = $post_category;
         }
+
+        // QA gate: a briefing set to publish is saved as pending and released
+        // by the gate once its tags, excerpt, links and image are in place.
+        require_once __DIR__ . '/class-publish-gate.php';
+        $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'briefing' );
 
         $post_id = wp_insert_post( $postarr, true );
 
@@ -1315,18 +1300,6 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_briefing_type', 'text' );
         update_post_meta( $post_id, '_presshub_briefing_edition', $edition );
 
-        if ( ! empty( $qa_result ) ) {
-            update_post_meta( $post_id, '_presshub_ai_scorecard', [
-                'score'    => $qa_result['score'] ?? 0,
-                'feedback' => $qa_result['feedback'] ?? '',
-            ] );
-            update_post_meta( $post_id, '_presshub_ai_scorecard_hash', md5( trim( $story_content ) ) );
-
-            if ( ! ( $qa_result['passed'] ?? false ) && PressHub_AI_Settings_Storage::get_qa_notify_editor() ) {
-                PressHub_AI_QA_Reviewer::notify_editor_failure( $post_id, $qa_result, 'briefing' );
-            }
-        }
-
         // Issue #65 — stash the prefix/date-format state used to compose
         // this title so downstream observers (token log, integration
         // tests) can confirm whether the prefix was applied as configured.
@@ -1344,7 +1317,9 @@ class PressHub_AI_News_Curator {
         if ( 'auto_generate' === $img_source && class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
             try {
                 $client     = new PressHub_AI_API_Client();
-                $gen_prompt = $client->analyze_article_for_image_prompt( $story_content, $post_title );
+                require_once __DIR__ . '/class-image-prompt-templates.php';
+                $img_tpl    = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_briefing_edition_image_template( 'briefing', $edition ), 'briefing_text_' . $edition );
+                $gen_prompt = $client->analyze_article_for_image_prompt( $story_content, $post_title, $img_tpl['template'], $img_tpl['id'] );
                 if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
                     $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );
                     if ( ! is_wp_error( $img_res ) && ! empty( $img_res['id'] ) ) {
@@ -1429,6 +1404,10 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_source_context_type', (string) $source_context['type'] );
         update_post_meta( $post_id, '_presshub_source_context_count', (int) $source_context['count'] );
         update_post_meta( $post_id, '_presshub_source_context_preset', (string) $source_context['preset'] );
+
+        // QA gate on the finished post (editorial, legal and SEO), then the
+        // configured status unless it is held. Saved in PressHub → QA reviews.
+        PressHub_AI_Publish_Gate::release( $post_id, 'briefing', 'noon' === $edition ? 'briefing_noon' : 'briefing_morning' );
 
         // Issue #134: schedule daily memory digest construction
         if ( class_exists( 'PressHub_AI_Memory_Digest_Builder' ) ) {
@@ -1637,6 +1616,12 @@ class PressHub_AI_News_Curator {
             $gen_usage = ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'get_last_llm_request' ) )
                 ? ( PressHub_AI_Token_Logger::get_last_llm_request() ?? [] )
                 : [];
+            // What call_provider() added to the system prompt (editorial agenda,
+            // people and policy fiches): the record keeps the prompt as sent
+            // and lists the fiches, like every other generation record.
+            $gen_injected = method_exists( 'PressHub_AI_Generation_Recorder', 'apply_injected_context' )
+                ? PressHub_AI_Generation_Recorder::apply_injected_context( $prompts['system_prompt'], [] )
+                : [ $prompts['system_prompt'], [] ];
             $record_id = (int) PressHub_AI_Generation_Recorder::record( [
                 'kind'          => 'briefing_text',
                 'briefing_date' => $date,
@@ -1644,21 +1629,21 @@ class PressHub_AI_News_Curator {
                 'status'        => is_wp_error( $response ) ? 'error' : 'success',
                 'error_message' => is_wp_error( $response ) ? $response->get_error_message() : '',
                 'memory'        => $this->last_memory_manifest(),
-                'config'        => PressHub_AI_Generation_Recorder::build_client_config(
+                'config'        => array_merge( PressHub_AI_Generation_Recorder::build_client_config(
                     $api_client,
                     [
                         'preset_id'          => $preset_id,
                         'edition'            => $edition,
                         'articles_placement' => $this->last_articles_placement(),
                     ]
-                ),
+                ), $gen_injected[1] ),
                 'inputs'        => [
                     'articles'             => $this->last_articles_breakdown(),
                     'totals'               => $curation_metadata,
                     'token_estimate'       => $this->last_capped_tokens_estimate(),
                     'selected_article_ids' => $selected_article_ids,
                 ],
-                'system_prompt' => $prompts['system_prompt'],
+                'system_prompt' => (string) $gen_injected[0],
                 'user_prompt'   => $prompts['user_prompt'],
                 'response_text' => is_wp_error( $response ) ? '' : (string) $response,
                 'usage'         => $gen_usage,

@@ -70,6 +70,9 @@ class PressHub_AI_Settings {
                 wp_enqueue_script( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/js/settings-search.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
                 wp_localize_script( 'presshub-settings-search', 'presshubSettingsIndex', PressHub_Settings_Registry::search_payload( PressHub_Settings_Sections::current() ) );
                 wp_enqueue_script( 'presshub-settings-page', PRESSHUB_AI_URL . 'assets/js/settings-page.js', [ 'jquery', 'presshub-ai-admin-js', 'presshub-settings-search' ], PRESSHUB_AI_VERSION, true );
+                if ( 'writing-qa' === PressHub_Settings_Sections::current() ) {
+                    self::enqueue_image_templates_editor();
+                }
             }
             wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
                 'ajax_url'             => admin_url( 'admin-ajax.php' ),
@@ -84,6 +87,53 @@ class PressHub_AI_Settings {
                 }, PressHub_AI_Provider_Store::get_all( false ) ),
             ] );
         }
+    }
+
+    /**
+     * Writing & QA → Featured images: the prompt templates editor and its
+     * translated strings.
+     */
+    private static function enqueue_image_templates_editor(): void {
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $user = function_exists( 'wp_get_current_user' ) ? wp_get_current_user() : null;
+        wp_enqueue_script( 'presshub-image-templates-settings', PRESSHUB_AI_URL . 'assets/js/image-templates-settings.js', [ 'jquery', 'presshub-ai-admin-js' ], PRESSHUB_AI_VERSION, true );
+        wp_localize_script( 'presshub-image-templates-settings', 'presshubImageTemplates', [
+            'ajax_url'     => admin_url( 'admin-ajax.php' ),
+            'nonce'        => wp_create_nonce( 'presshub_ai_nonce' ),
+            'default_id'   => PressHub_AI_Image_Prompt_Templates::DEFAULT_ID,
+            'current_user' => ( $user && isset( $user->display_name ) ) ? (string) $user->display_name : '',
+            'strings'      => [
+                'builtin'        => __( 'Built-in', 'presshub-ai-editor' ),
+                'saved'          => __( 'Saved', 'presshub-ai-editor' ),
+                /* translators: %s: display name of the editor who saved the template. */
+                'saved_by'       => __( 'Saved by %s', 'presshub-ai-editor' ),
+                'saved_group'    => __( 'Saved templates', 'presshub-ai-editor' ),
+                'edit_above'     => __( 'Edit in the field above', 'presshub-ai-editor' ),
+                'view'           => __( 'View', 'presshub-ai-editor' ),
+                'edit'           => __( 'Edit', 'presshub-ai-editor' ),
+                'copy'           => __( 'Copy', 'presshub-ai-editor' ),
+                'delete'         => __( 'Delete', 'presshub-ai-editor' ),
+                'heading_add'    => __( 'New template', 'presshub-ai-editor' ),
+                /* translators: %s: template name. */
+                'heading_edit'   => __( 'Edit template: %s', 'presshub-ai-editor' ),
+                /* translators: %s: template name. */
+                'heading_view'   => __( 'Template: %s', 'presshub-ai-editor' ),
+                /* translators: %s: name of the template being copied. */
+                'copy_name'      => __( '%s (copy)', 'presshub-ai-editor' ),
+                'need_name'      => __( 'Give the template a name.', 'presshub-ai-editor' ),
+                'need_text'      => __( 'The template text is empty.', 'presshub-ai-editor' ),
+                'saving'         => __( 'Saving…', 'presshub-ai-editor' ),
+                'deleting'       => __( 'Deleting…', 'presshub-ai-editor' ),
+                /* translators: %s: template name. */
+                'saved_msg'      => __( 'Template "%s" saved.', 'presshub-ai-editor' ),
+                /* translators: %s: template name. */
+                'deleted_msg'    => __( 'Template "%s" deleted.', 'presshub-ai-editor' ),
+                /* translators: %s: template name. */
+                'confirm_delete' => __( 'Delete the template "%s"? Editors can no longer pick it.', 'presshub-ai-editor' ),
+                'error'          => __( 'Could not save the template. Try again.', 'presshub-ai-editor' ),
+                'delete_error'   => __( 'Could not delete the template. Try again.', 'presshub-ai-editor' ),
+            ],
+        ] );
     }
 
     /**
@@ -136,16 +186,6 @@ class PressHub_AI_Settings {
     public function render_settings_page() {
         $renderer = new PressHub_AI_Settings_Render();
         $renderer->render_settings_page();
-    }
-
-    /**
-     * Stand-alone render of the API key field. Used by SettingsPageTest
-     * and any caller that wants just the masked-key widget, not the
-     * whole settings page. Delegates to the render module.
-     */
-    public function render_api_key_field(): void {
-        $renderer = new PressHub_AI_Settings_Render();
-        $renderer->render_api_key_field();
     }
 
     public function render_github_token_field(): void {

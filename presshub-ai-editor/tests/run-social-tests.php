@@ -502,7 +502,13 @@ require_once $base_dir . '/includes/class-social-tiktok-narrator.php';
 require_once $base_dir . '/includes/class-social-image-library.php';
 require_once $base_dir . '/includes/class-social-post-images.php';
 require_once $base_dir . '/includes/class-social-tiktok-shorts.php';
+require_once $base_dir . '/includes/class-social-story-check.php';
+require_once $base_dir . '/includes/class-social-trending-short.php';
+require_once $base_dir . '/includes/class-social-post-gate.php';
 require_once $base_dir . '/includes/class-social-tiktok-music.php';
+require_once $base_dir . '/includes/class-podcast-timeline.php';
+require_once $base_dir . '/includes/class-podcast-translations.php';
+require_once $base_dir . '/includes/class-social-youtube.php';
 require_once $base_dir . '/includes/class-social-meta-api-client.php';
 require_once $base_dir . '/includes/class-social-worker-client.php';
 require_once $base_dir . '/includes/class-social-dispatcher.php';
@@ -510,6 +516,9 @@ require_once $base_dir . '/includes/class-social-metabox.php';
 require_once $base_dir . '/includes/class-social-queue-admin.php';
 require_once $base_dir . '/includes/class-social-ajax-handlers.php';
 require_once $base_dir . '/includes/class-social-rest-controller.php';
+
+// TikTok Photo Slides are on by default (#333); the suites before theirs count only the shorts.
+update_option( 'presshub_social_tiktok_slides_enabled', false );
 
 // Force queue into in-memory mode for clean unit testing
 PressHub_Social_Queue::$force_memory = true;
@@ -1237,13 +1246,9 @@ echo "\n--- Suite 15: GitHub Auto-Update Checker & Token Resolution ---\n";
 $puc_entry = $base_dir . '/includes/plugin-update-checker/plugin-update-checker.php';
 assert_true( file_exists( $puc_entry ), 'Embedded plugin-update-checker library exists in presshub-social-autopost/includes/plugin-update-checker/' );
 
-delete_option( 'presshub_social_github_token' );
-update_option( 'presshub_ai_github_token', 'ghp_shared_core_token_12345' );
-assert_equals( 'ghp_shared_core_token_12345', PressHub_Social_Settings_Storage::get_github_token(), 'get_github_token inherits presshub_ai_github_token when social token is unset' );
-
-update_option( 'presshub_social_github_token', 'ghp_dedicated_social_token_999' );
-assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storage::get_github_token(), 'get_github_token prioritizes dedicated presshub_social_github_token when set' );
-assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storage::sanitize_github_token( 'ghp_••••••••_999' ), 'sanitize_github_token preserves existing secret when masked' );
+// #237: the second GitHub token (presshub_social_github_token) is gone;
+// plugin updates read presshub_ai_github_token only.
+assert_true( ! method_exists( 'PressHub_Social_Settings_Storage', 'get_github_token' ), 'Social storage no longer reads a second GitHub token' );
 
 // ----------------------------------------------------------------------
 // Test Suite 16: Settings Render (GitHub Token Field & AI Provider Dropdown Filtering)
@@ -1251,10 +1256,6 @@ assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storag
 echo "\n--- Suite 16: Settings Render & Configured AI Provider Filtering ---\n";
 $renderer = new PressHub_Social_Settings_Render();
 
-ob_start();
-$renderer->render_github_token_field();
-$gh_field_html = ob_get_clean();
-assert_true( str_contains( $gh_field_html, 'name="presshub_social_github_token"' ), 'render_github_token_field renders password input without TypeError' );
 
 update_option( 'presshub_ai_configured_providers', [
     [
@@ -1283,12 +1284,6 @@ update_option( 'presshub_ai_configured_providers', [
     ],
 ] );
 
-ob_start();
-$renderer->render_ai_provider_field();
-$prov_html = ob_get_clean();
-assert_true( str_contains( $prov_html, 'OpenAI Configured (gpt-4o)' ), 'AI provider dropdown lists enabled and configured provider' );
-assert_true( ! str_contains( $prov_html, 'Anthropic Disabled' ), 'AI provider dropdown excludes disabled providers' );
-assert_true( ! str_contains( $prov_html, 'Gemini Missing Key' ), 'AI provider dropdown excludes unconfigured providers without API keys' );
 
 // ----------------------------------------------------------------------
 // Test Suite 16b: Number fields never render a value the browser rejects
@@ -1354,10 +1349,6 @@ foreach ( $number_fields as $opt => $field ) {
     }
 }
 
-ob_start();
-$renderer->render_ai_temperature_field();
-$temp_html = ob_get_clean();
-assert_true( str_contains( $temp_html, 'step="0.01"' ), 'temperature field step matches the 2-decimal sanitizer' );
 
 // ----------------------------------------------------------------------
 // Test Suite 17: Multi-Tab Settings Persistence, v2.6.3 Auto-Repair & Batch Copy Generation
@@ -1594,9 +1585,33 @@ $job_pull_gate = PressHub_Social_Queue::enqueue( [
     'scheduled_at' => $past_time,
 ] );
 $batch_summary = PressHub_Social_Dispatcher::process_due_queue();
-assert_equals( 1, $batch_summary['skipped'], 'process_due_queue skips automation jobs during cron in pull mode' );
+assert_true( ! in_array( $job_pull_gate, $batch_summary['job_ids'], true ), 'process_due_queue leaves automation jobs to the worker during cron in pull mode' );
 $gate_job_after_cron = PressHub_Social_Queue::get_job( $job_pull_gate );
 assert_equals( 'pending', $gate_job_after_cron['status'], 'Job remains pending after server-side cron' );
+
+// 2.76.1: a due automation job waiting for the worker must not take the whole batch from an
+// API job behind it (batch size 1 on presshub.cy left Facebook API posts unsent while the worker was down).
+update_option( 'presshub_social_batch_size', 1 );
+$job_api_behind = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 502,
+    'platform'     => 'facebook',
+    'engine'       => 'api',
+    'post_copy'    => 'API job behind a worker job',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', strtotime( $past_time ) + 10 ),
+] );
+$hol_due = PressHub_Social_Queue::get_due_pending_jobs( 0, null, [], [], 'automation' );
+assert_equals( [ $job_api_behind ], array_map( fn( $j ) => (int) $j['id'], $hol_due ), 'get_due_pending_jobs can leave one engine out' );
+$hol_summary = PressHub_Social_Dispatcher::process_due_queue();
+assert_equals( [ $job_api_behind ], $hol_summary['job_ids'], 'With batch size 1 the cron still reaches the API job behind a due automation job' );
+delete_option( 'presshub_social_batch_size' );
+PressHub_Social_Queue::reset_memory_store();
+$job_pull_gate = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 501,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => 'Queued for Pull Worker',
+    'scheduled_at' => $past_time,
+] );
 
 $disp_res = PressHub_Social_Dispatcher::dispatch_job( $job_pull_gate );
 assert_true( is_wp_error( $disp_res ) && 'pull_mode_queued' === $disp_res->get_error_code(), 'dispatch_job returns pull_mode_queued in pull mode' );
@@ -1769,10 +1784,6 @@ update_option( 'presshub_social_engine_twitter', 'automation' );
 
 // 5. Per-platform enable/disable settings
 update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook', 'instagram', 'tiktok' ] );
-delete_option( 'presshub_social_enabled_facebook' );
-delete_option( 'presshub_social_enabled_twitter' );
-delete_option( 'presshub_social_enabled_instagram' );
-delete_option( 'presshub_social_enabled_tiktok' );
 update_option( 'presshub_social_engine_twitter', 'automation' );
 update_option( 'presshub_social_engine_tiktok', 'automation' );
 update_option( 'presshub_social_engine_facebook', 'api' );
@@ -1788,9 +1799,14 @@ PressHub_Social_Settings_Storage::set_platform_enabled( 'twitter', true );
 assert_true( PressHub_Social_Settings_Storage::is_platform_enabled( 'twitter' ), 'set_platform_enabled(twitter, true) re-enables twitter' );
 assert_true( in_array( 'twitter', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms includes re-enabled twitter' );
 
+// #309 (E1): the platforms list is the only switch; a left-over per-platform row is not read.
 update_option( 'presshub_social_enabled_facebook', false );
-assert_false( PressHub_Social_Settings_Storage::is_platform_enabled( 'facebook' ), 'Option presshub_social_enabled_facebook=false disables facebook' );
-assert_false( in_array( 'facebook', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms reflects individual facebook option' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_enabled( 'facebook' ), 'A left-over presshub_social_enabled_facebook row does not disable facebook' );
+delete_option( 'presshub_social_enabled_facebook' );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'facebook', false );
+assert_false( PressHub_Social_Settings_Storage::is_platform_enabled( 'facebook' ), 'set_platform_enabled(facebook, false) disables facebook' );
+assert_false( in_array( 'facebook', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms excludes disabled facebook' );
+assert_false( array_key_exists( 'presshub_social_enabled_facebook', $GLOBALS['OPTIONS_STORE'] ?? [] ), 'set_platform_enabled() writes no per-platform option' );
 
 // 6. Platform readiness checks
 // Twitter: enabled=true, configured=true
@@ -1799,7 +1815,7 @@ assert_false( in_array( 'facebook', PressHub_Social_Settings_Storage::get_enable
 // Instagram: enabled=true, configured=false
 delete_option( 'presshub_social_instagram_account_id' );
 delete_option( 'presshub_social_meta_access_token' );
-update_option( 'presshub_social_enabled_instagram', true );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'instagram', true );
 
 assert_true( PressHub_Social_Settings_Storage::is_platform_ready( 'twitter' ), 'Twitter is ready (enabled and configured)' );
 assert_true( PressHub_Social_Settings_Storage::is_platform_ready( 'tiktok' ), 'TikTok is ready (enabled and configured)' );
@@ -2006,6 +2022,22 @@ assert_equals( 60, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_max_
 assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_shorts_images(), 'Story images per short default to 3' );
 assert_equals( 4, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( 9 ), 'Story images per short clamp to 4' );
 assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( -1 ), 'Story images per short clamp to 0' );
+assert_equals( 'brief', PressHub_Social_Settings_Storage::get_tiktok_shorts_format(), 'Podcast Shorts Format defaults to the daily brief' );
+assert_equals( 'brief', PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_format( 'other' ), 'An unknown Podcast Shorts Format becomes the daily brief' );
+assert_equals( 'stories', PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_format( ' Stories ' ), 'Podcast Shorts Format keeps one short per story' );
+assert_equals( 300, PressHub_Social_Settings_Storage::get_tiktok_brief_max_words(), 'Daily brief script length defaults to 300 words' );
+assert_equals( 380, PressHub_Social_Settings_Storage::sanitize_tiktok_brief_max_words( 900 ), 'Daily brief script length clamps to 380 words' );
+assert_equals( 150, PressHub_Social_Settings_Storage::sanitize_tiktok_brief_max_words( 5 ), 'Daily brief script length clamps to 150 words' );
+assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), '"stories"' ), 'The daily brief prompt seeds from its asset file' );
+assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), '3 έως 4 κύριες ειδήσεις' ), 'The daily brief prompt asks for the 3-4 main stories' );
+$legacy_brief = str_replace( [ 'με τις 3 έως 4 κύριες ειδήσεις της ημέρας', '50 έως 70 λέξεις' ], [ 'με τις 6 έως 8 πιο σημαντικές ειδήσεις', '30 έως 45 λέξεις' ], PressHub_Social_Prompt_Loader::load( 'social_tiktok_brief.txt' ) );
+update_option( 'presshub_social_prompt_tiktok_brief', $legacy_brief );
+assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), '3 έως 4 κύριες ειδήσεις' ), 'An unedited 6-8 story brief prompt is upgraded to the 3-4 story default' );
+update_option( 'presshub_social_prompt_tiktok_brief', 'Δικό μου prompt "stories"' );
+assert_equals( 'Δικό μου prompt "stories"', PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), 'An edited brief prompt is kept' );
+delete_option( 'presshub_social_prompt_tiktok_brief' );
+// The shorts tests below cover one short per story; the daily brief has its own block.
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
 
 // #189: a new podcast cancels the earlier edition's unposted shorts.
 PressHub_Social_Queue::reset_memory_store();
@@ -2136,6 +2168,25 @@ assert_equals( [], $no_visuals[0]['visuals'] ?? null, 'A plan without image desc
 $bad_speakers = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"Χωρίς ετικέτες","caption":"c"}]}', 3 );
 assert_true( is_wp_error( $bad_speakers ), 'parse_plan rejects a script without [SPEAKER_N]: lines' );
 assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( 'Δεν είναι JSON', 3 ) ), 'parse_plan rejects a non-JSON response' );
+// Job #224: the model closed the caption with a stray `]` (`"caption":"…"]}]}`).
+$misplaced = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"[SPEAKER_1]: Α [σημείωση]","visuals":["x"],"mood":"neutral","caption":"Λεζάντα #κύπρος"]}]}', 1 );
+assert_true( is_array( $misplaced ) && 'b' === ( $misplaced[0]['hook'] ?? '' ), 'parse_plan repairs a misplaced closing bracket' );
+assert_true( str_contains( $misplaced[0]['script'] ?? '', '[σημείωση]' ), 'The repair leaves brackets inside strings alone' );
+assert_equals( '{"a":[1,2]}', PressHub_Social_AI_Json::repair( '{"a":[1,2,]}' ), 'repair_json drops a trailing comma' );
+$fixes = [];
+assert_equals( '{"a":{"b":"}]"}', PressHub_Social_AI_Json::repair( '{"a":{"b":"}]"}', $fixes ), 'repair_json leaves a cut-off response (brackets still open) unchanged' );
+assert_equals( [], $fixes, 'Nothing is reported as repaired in a cut-off response' );
+assert_equals( '{"a":"x\\"}"}', PressHub_Social_AI_Json::repair( '{"a":"x\\"}"}' ), 'repair_json handles escaped quotes' );
+assert_equals( '{"a":"x\\\\"}', PressHub_Social_AI_Json::repair( '{"a":"x\\\\"]}' ), 'An escaped backslash before the closing quote ends the string' );
+assert_equals( '{"a":"cut', PressHub_Social_AI_Json::repair( '{"a":"cut' ), 'repair_json leaves a response cut off inside a string unchanged' );
+PressHub_Social_AI_Json::repair( '{"a":[1,2,]]}', $fixes );
+assert_equals( [ 'dropped 1 misplaced ]', 'dropped 1 trailing comma' ], $fixes, 'repair_json reports what it dropped' );
+// A 3-short answer cut off inside the third short is not turned into a 2-short plan.
+$three = json_decode( $short_json( 3 ), true );
+$cut   = substr( $short_json( 3 ), 0, (int) strpos( $short_json( 3 ), $three['shorts'][2]['caption'] ) );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( $cut, 3 ) ), 'A cut-off plan is rejected, not repaired into fewer shorts' );
+$broken = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"hook":"b" "script":"x"}]}', 1 );
+assert_true( is_wp_error( $broken ) && str_contains( $broken->get_error_message(), 'not valid JSON' ), 'Broken JSON is reported as invalid JSON, not as a missing "shorts" list' );
 
 // A podcast post and the settings shorts need.
 $GLOBALS['POSTS_STORE'][880] = [
@@ -2328,9 +2379,97 @@ PressHub_Social_Queue::update_job( $surplus_ids[1], [ 'scheduled_at' => gmdate( 
 $surplus_claim = PressHub_Social_REST_Controller::handle_claim( $req_short );
 assert_equals( 2, (int) ( $surplus_claim['jobs'][0]['tiktok_short']['count'] ?? 0 ), 'The badge total is the number of stories the plan has, not the jobs queued' );
 
+// An unusable response is asked for once more in the same run before it fails.
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$retry_calls = 0;
+$retry_prompts = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$retry_calls, &$retry_prompts, $short_json ) {
+    $retry_calls++;
+    $retry_prompts[] = $user;
+    return 1 === $retry_calls ? '{"shorts":"oops"}' : $short_json( 3 );
+} );
+PressHub_Social_Queue::reset_memory_store();
+$retry_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, $retry_calls, 'An invalid plan response is retried once in the same run' );
+assert_true( str_contains( $retry_prompts[1] ?? '', 'Your previous answer was unusable: the AI response has no "shorts" list.' ) && ! str_contains( $retry_prompts[0], 'previous answer' ), 'The retry tells the AI why its first answer was unusable' );
+
+// An empty answer is retried like an unusable one.
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$empty_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$empty_calls, $short_json ) {
+    $empty_calls++;
+    return 1 === $empty_calls ? '  ' : $short_json( 3 );
+} );
+PressHub_Social_Queue::reset_memory_store();
+$empty_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, $empty_calls, 'An empty plan response is retried once in the same run' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $empty_ids[0] ) ), 'The shorts are prepared after an empty first answer' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $retry_ids[0] ) ), 'The shorts are prepared from the second response' );
+
+
+// End to end: the records and Usage & logs rows of an unusable answer are marked as errors,
+// a repaired one is noted, and the job error names every record of the run.
+require_once $base_dir . '/includes/class-token-logger.php';
+if ( ! function_exists( 'presshub_test_plan_call' ) ) {
+    function presshub_test_plan_call( string $kind, string $action, $response ): array {
+        $record = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => $kind, 'status' => 'success', 'response_text' => is_string( $response ) ? $response : '' ] );
+        $log    = (int) PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', 'gemini-test', 100, 50, 10, 'success', null, [], 1 );
+        return [ 'response' => $response, 'record_id' => $record, 'log_id' => $log ];
+    }
+    function presshub_test_token_row( int $id ): array {
+        foreach ( $GLOBALS['wpdb']->tables[ PressHub_AI_Token_Logger::get_table_name() ] ?? [] as $row ) {
+            if ( (int) ( $row['id'] ?? 0 ) === $id ) {
+                return $row;
+            }
+        }
+        return [];
+    }
+}
+$GLOBALS['wpdb']->tables[ PressHub_AI_Generation_Recorder::get_table_name() ] = $GLOBALS['wpdb']->tables[ PressHub_AI_Generation_Recorder::get_table_name() ] ?? [];
+PressHub_AI_Generation_Recorder::create_table();
+PressHub_AI_Token_Logger::create_table();
+
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$e2e_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$e2e_calls, $short_json ) {
+    $answer      = 0 === count( $e2e_calls ) ? '{"shorts":"oops"}' : substr( $short_json( 3 ), 0, -1 ) . ']}';
+    $call        = presshub_test_plan_call( 'tiktok_short_script', 'social_tiktok_shorts', $answer );
+    $e2e_calls[] = $call;
+    return $call;
+} );
+PressHub_Social_Queue::reset_memory_store();
+$e2e_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+$e2e_first  = PressHub_AI_Generation_Recorder::get( $e2e_calls[0]['record_id'] ?? 0 );
+$e2e_second = PressHub_AI_Generation_Recorder::get( $e2e_calls[1]['record_id'] ?? 0 );
+assert_true( 'error' === ( $e2e_first['status'] ?? '' ) && str_starts_with( (string) ( $e2e_first['error_message'] ?? '' ), 'Response not usable: ' ), 'Shorts: the unusable answer\'s record is marked error with the reason' );
+assert_true( 'error' === ( presshub_test_token_row( $e2e_calls[0]['log_id'] )['status'] ?? '' ), 'Shorts: the unusable answer\'s Usage & logs row is marked error' );
+assert_true( 'success' === ( $e2e_second['status'] ?? '' ) && 'JSON repaired: dropped 1 misplaced ].' === ( $e2e_second['error_message'] ?? '' ), 'Shorts: the repaired answer\'s record stays success with a note' );
+assert_equals( 'success', presshub_test_token_row( $e2e_calls[1]['log_id'] )['status'] ?? '', 'Shorts: the repaired answer\'s Usage & logs row stays success' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $e2e_ids[0] ) ), 'Shorts: the jobs are prepared from the repaired answer' );
+// Two unusable answers: the job error names both records.
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$e2e_bad = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$e2e_bad ) {
+    $call      = presshub_test_plan_call( 'tiktok_short_script', 'social_tiktok_shorts', '{"shorts":"oops"}' );
+    $e2e_bad[] = $call['record_id'];
+    return $call;
+} );
+PressHub_Social_Queue::reset_memory_store();
+$e2e_bad_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_true( str_ends_with( (string) PressHub_Social_Queue::get_job( $e2e_bad_ids[0] )['last_error'], sprintf( 'See generation records #%d, #%d.', $e2e_bad[0], $e2e_bad[1] ) ), 'Shorts: the job error names every record of the run' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+
 // A failed preparation is retried in the background without moving any posting time.
 update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
-PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => 'Συγγνώμη, δεν μπορώ.' );
+$fail_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$fail_calls ) {
+    $fail_calls++;
+    return 'Συγγνώμη, δεν μπορώ.';
+} );
 PressHub_Social_Queue::reset_memory_store();
 $fail_ids       = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
 $fail_slot      = PressHub_Social_Queue::get_job( $fail_ids[2] )['scheduled_at'];
@@ -2338,6 +2477,7 @@ $GLOBALS['SCHEDULED_EVENTS'] = [];
 PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 $fail_job = PressHub_Social_Queue::get_job( $fail_ids[2] );
 assert_true( str_contains( (string) $fail_job['last_error'], 'TikTok short failed' ), 'The invalid plan is recorded as the job error' );
+assert_equals( PressHub_Social_TikTok_Shorts::PLAN_ATTEMPTS, $fail_calls, 'A run asks the AI at most PLAN_ATTEMPTS times' );
 assert_equals( 'pending', $fail_job['status'], 'A job whose preparation failed stays pending' );
 assert_equals( $fail_slot, $fail_job['scheduled_at'], 'A failed preparation does not move the posting time of a later short' );
 assert_equals( 0, (int) $fail_job['attempts'], 'A failed preparation does not use the posting retry budget' );
@@ -2347,6 +2487,227 @@ for ( $run = 2; $run <= PressHub_Social_Settings_Storage::get_max_attempts(); $r
     PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 }
 assert_equals( 'failed', PressHub_Social_Queue::get_job( $fail_ids[0] )['status'], 'After the max attempts the unprepared shorts fail permanently' );
+
+// Daily brief: one ~2 minute video per podcast, one image per story in the order they are read.
+echo "\n--- Daily brief ---\n";
+$brief_story = fn( int $i, int $words ) => [
+    'topic'  => "Θέμα {$i}",
+    'script' => '[SPEAKER_1]: ' . trim( str_repeat( "λέξη{$i} ", $words ) ),
+    'visual' => "Nicosia street scene {$i}",
+];
+$brief_json = function ( int $stories, int $words = 30, array $extra = [] ) use ( $brief_story ): string {
+    $list = [];
+    for ( $i = 1; $i <= $stories; $i++ ) {
+        $list[] = $brief_story( $i, $words );
+    }
+    return wp_json_encode( [ 'shorts' => [ array_merge( [
+        'topic'   => 'Οι ειδήσεις της ημέρας',
+        'hook'    => 'Οι ειδήσεις της Κυριακής',
+        'intro'   => '[SPEAKER_1]: Αυτές είναι οι ειδήσεις της ημέρας.',
+        'stories' => $list,
+        'outro'   => '[SPEAKER_1]: Ακολούθησε το PressHub.',
+        'mood'    => 'neutral',
+        'caption' => 'Οι ειδήσεις της ημέρας #κύπρος',
+    ], $extra ) ] ] );
+};
+
+$bp = PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 7 ), 300, 10 );
+assert_true( is_array( $bp ) && 1 === count( $bp ) && ! empty( $bp[0]['brief'] ), 'parse_brief returns one brief short' );
+assert_equals( 7, count( $bp[0]['stories'] ?? [] ), 'parse_brief keeps every story' );
+assert_equals( 7, count( $bp[0]['visuals'] ?? [] ), 'parse_brief keeps one image description per story' );
+assert_equals( 6, $bp[0]['stories'][0]['from'] ?? null, 'The first story starts after the intro words' );
+assert_equals( 6 + 30, $bp[0]['stories'][1]['from'] ?? null, 'Each story starts where the one before ends' );
+assert_equals( 6 + 7 * 30 + 3, $bp[0]['words'] ?? null, 'parse_brief counts the spoken words of intro, stories and outro' );
+assert_true( str_starts_with( $bp[0]['script'], '[SPEAKER_1]: Αυτές είναι' ) && str_contains( $bp[0]['script'], "λέξη7\n[SPEAKER_1]: Ακολούθησε" ), 'The brief script is the intro, the stories and the outro in order' );
+assert_equals( 3, count( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 7 ), 300, 3 )[0]['visuals'] ), 'parse_brief keeps at most the allowed image descriptions' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 7, 60 ), 300, 10 ) ), 'A brief far over its word cap is rejected (YouTube three-minute limit)' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 1 ), 300, 10 ) ), 'A brief with a single story is rejected' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 3, 30, [ 'hook' => '' ] ), 300, 10 ) ), 'A brief without its hook is rejected' );
+assert_equals( 10, count( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 12, 10 ), 300, 20 )[0]['stories'] ), 'A brief keeps at most BRIEF_MAX_STORIES stories' );
+
+// Image order: each worker slot shows the story being read.
+$seq_short = [
+    'images'   => [
+        [ 'url' => 'https://img/1.png', 'prompt' => 'v1' ],
+        [ 'url' => 'https://img/3.png', 'prompt' => 'v3' ],
+    ],
+    'stories'  => [
+        [ 'topic' => 'a', 'visual' => 'v1', 'from' => 2, 'to' => 12 ],
+        [ 'topic' => 'b', 'visual' => 'v2', 'from' => 12, 'to' => 22 ],
+        [ 'topic' => 'c', 'visual' => 'v3', 'from' => 22, 'to' => 32 ],
+    ],
+    'words'    => 32,
+    'audio'    => [ 'segments' => [
+        [ 'speaker' => 1, 'text' => trim( str_repeat( 'α ', 22 ) ), 'start' => 0.0, 'end' => 11.0 ],
+        [ 'speaker' => 2, 'text' => trim( str_repeat( 'β ', 10 ) ), 'start' => 11.0, 'end' => 23.0 ],
+    ] ],
+];
+$seq = PressHub_Social_TikTok_Shorts::brief_image_sequence( $seq_short );
+assert_equals( 6, count( $seq ), 'The brief image list has one image per 4-second worker slot (23 s voice + 1 s tail)' );
+assert_equals( [ 'https://img/1.png', 'https://img/1.png', 'https://img/1.png', 'https://img/3.png', 'https://img/3.png', 'https://img/3.png' ], $seq, 'Each slot shows the image of the story being read; a story without an image keeps the one before' );
+assert_equals( [], PressHub_Social_TikTok_Shorts::brief_image_sequence( array_merge( $seq_short, [ 'images' => [] ] ) ), 'A brief without images leaves the image order to the worker' );
+
+// Enqueue: one job per platform, no photo slides. (TikTok's full podcast and story
+// posts are off here; they have their own block below.)
+update_option( 'presshub_social_tiktok_shorts_format', 'brief' );
+update_option( 'presshub_social_tiktok_slides_enabled', true );
+update_option( 'presshub_social_tiktok_full_podcast_enabled', false );
+update_option( 'presshub_social_tiktok_story_posts', 0 );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+PressHub_Social_Queue::reset_memory_store();
+$brief_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+assert_equals( 1, count( $brief_ids ), 'A podcast gets one daily brief job on TikTok and no photo slides' );
+$brief_meta = json_decode( (string) PressHub_Social_Queue::get_job( $brief_ids[0] )['metadata'], true )['tiktok_short'] ?? [];
+assert_true( ! empty( $brief_meta['brief'] ) && 1 === ( $brief_meta['count'] ?? 0 ), 'The daily brief job is marked as a brief' );
+assert_false( PressHub_Social_TikTok_Shorts::slides_wanted( 880, 'automation', false ), 'A podcast daily brief gets no photo slides' );
+assert_equals( [], PressHub_Social_TikTok_Shorts::build_slides_jobs( 880, time() ), 'No photo slide jobs are built for a podcast daily brief' );
+
+// Prepare with the brief prompt and claim with the images in reading order.
+$brief_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$brief_calls, $brief_json ) {
+    $brief_calls[] = $user;
+    return $brief_json( 6 );
+} );
+PressHub_Social_TikTok_Shorts::set_synthesizer( fn( array $short, array $job ) => [
+    'url'      => 'https://example.com/uploads/brief.wav',
+    'id'       => 990,
+    'segments' => [ [ 'speaker' => 1, 'text' => trim( (string) preg_replace( '/\[SPEAKER_1\]:/', ' ', $short['script'] ) ), 'start' => 0.0, 'end' => 119.0 ] ],
+] );
+PressHub_Social_TikTok_Shorts::set_image_generator( fn( string $prompt ) => [ 'url' => 'https://example.com/uploads/' . md5( $prompt ) . '.png', 'id' => 7 ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 1, count( $brief_calls ), 'The daily brief is written with one AI call' );
+assert_true( str_contains( $brief_calls[0] ?? '', '"stories"' ) && str_contains( $brief_calls[0] ?? '', 'το πολύ 300 λέξεις' ), 'The daily brief uses its own prompt and word cap' );
+$brief_job = PressHub_Social_Queue::get_job( $brief_ids[0] );
+$brief_prep = json_decode( (string) $brief_job['metadata'], true )['tiktok_short'] ?? [];
+assert_equals( 6, count( $brief_prep['images'] ?? [] ), 'The daily brief gets one story image per story' );
+assert_equals( 6, count( $brief_prep['stories'] ?? [] ), 'The prepared brief keeps where each story starts' );
+PressHub_Social_Queue::update_job( $brief_ids[0], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+$brief_claimed = PressHub_Social_TikTok_Shorts::attach_short( PressHub_Social_Queue::get_job( $brief_ids[0] ) );
+assert_equals( PressHub_Social_TikTok_Shorts::BRIEF_BADGE, $brief_claimed['tiktok_short']['badge'] ?? '', 'The daily brief shows the ΕΝΗΜΕΡΩΣΗ badge' );
+assert_equals( 30, count( $brief_claimed['tiktok_short']['images'] ?? [] ), 'The claimed brief has one image per worker slot (119 s voice + 1 s tail)' );
+assert_equals( 6, count( array_unique( $brief_claimed['tiktok_short']['images'] ?? [] ) ), 'Every story image is shown' );
+assert_equals( $brief_prep['images'][5]['url'] ?? 'x', end( $brief_claimed['tiktok_short']['images'] ), 'The last slots show the last story' );
+
+// YouTube episode scenes take one image group per story of the brief.
+$groups = PressHub_Social_YouTube::short_image_groups( 880 );
+assert_equals( 6, count( $groups ), 'A brief gives the YouTube episode one image group per story' );
+assert_equals( 'Θέμα 2', $groups[1]['topic'] ?? '', 'Each brief image group carries its story topic' );
+
+// Facebook Reels through the Graph API take up to 90 seconds: no brief Reel there.
+update_option( 'presshub_social_facebook_shorts_enabled', true );
+$fb_brief = PressHub_Social_Dispatcher::enqueue_facebook_shorts( 880, 'api', null, null, time() );
+assert_equals( [], $fb_brief, 'The daily brief is not queued as a Graph API Facebook Reel' );
+delete_option( 'presshub_social_facebook_shorts_enabled' );
+
+
+// TikTok story posts and full podcast (2.85.0): next to the daily brief, TikTok gets the
+// full podcast and three instant news posts, each a video short or photo slides.
+echo "\n--- TikTok story posts and full podcast ---\n";
+assert_true( PressHub_Social_Settings_Storage::sanitize_tiktok_full_podcast_enabled( '1' ), 'TikTok Full Podcast saves on' );
+assert_equals( 3, PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_STORY_POSTS, 'TikTok Story Posts defaults to 3' );
+assert_equals( 5, PressHub_Social_Settings_Storage::sanitize_tiktok_story_posts( 9 ), 'TikTok Story Posts clamps to 5' );
+assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_tiktok_story_posts( -2 ), 'TikTok Story Posts clamps to 0' );
+assert_equals( 'random', PressHub_Social_Settings_Storage::sanitize_tiktok_story_posts_format( 'other' ), 'An unknown TikTok Story Post Format becomes random' );
+assert_equals( 'slides', PressHub_Social_Settings_Storage::sanitize_tiktok_story_posts_format( 'slides' ), 'TikTok Story Post Format keeps slides' );
+delete_option( 'presshub_social_tiktok_full_podcast_enabled' );
+delete_option( 'presshub_social_tiktok_story_posts' );
+delete_option( 'presshub_social_tiktok_story_posts_format' );
+assert_true( PressHub_Social_Settings_Storage::get_tiktok_full_podcast_enabled(), 'TikTok Full Podcast is on by default' );
+assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_story_posts(), 'TikTok gets 3 story posts by default' );
+assert_equals( 'random', PressHub_Social_Settings_Storage::get_tiktok_story_posts_format(), 'TikTok Story Post Format defaults to random' );
+assert_true( PressHub_Social_TikTok_Shorts::full_podcast_wanted( 880 ), 'A podcast with the daily brief also gets its full podcast on TikTok' );
+assert_false( PressHub_Social_TikTok_Shorts::full_podcast_wanted( 890 ), 'An article gets no full podcast' );
+assert_false( PressHub_Social_TikTok_Shorts::story_posts_wanted( 890, 'automation' ), 'An article gets no story posts' );
+assert_false( PressHub_Social_TikTok_Shorts::story_posts_wanted( 880, 'api' ), 'Story posts need the automation engine' );
+
+$formats_seen = [];
+for ( $k = 0; $k < 40; $k++ ) {
+    $formats_seen[ PressHub_Social_TikTok_Shorts::story_post_format( 0 ) ] = true;
+}
+assert_equals( 2, count( $formats_seen ), 'Random story post format picks both video shorts and photo slides' );
+update_option( 'presshub_social_tiktok_story_posts_format', 'video' );
+
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Ολόκληρο το podcast της ημέρας #κύπρος' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::STORY_POSTS_PLAN_META, '' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+PressHub_Social_Queue::reset_memory_store();
+$sp_before = time();
+$sp_ids    = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+assert_equals( 5, count( $sp_ids ), 'TikTok gets the brief, the full podcast and 3 story posts' );
+$sp_jobs   = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), $sp_ids );
+$sp_brief  = array_values( array_filter( $sp_jobs, fn( $j ) => ! empty( json_decode( (string) ( $j['metadata'] ?? '' ), true )['tiktok_short']['brief'] ) ) );
+$sp_full   = array_values( array_filter( $sp_jobs, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_short_job( $j ) ) );
+$sp_story  = array_values( array_filter( $sp_jobs, [ 'PressHub_Social_TikTok_Shorts', 'is_story_post_job' ] ) );
+assert_equals( [ 1, 1, 3 ], [ count( $sp_brief ), count( $sp_full ), count( $sp_story ) ], 'One brief, one full podcast and three story posts' );
+assert_equals( 'Ολόκληρο το podcast της ημέρας #κύπρος', $sp_full[0]['post_copy'] ?? '', 'The full podcast is the classic TikTok post with its AI caption' );
+$sp_spacing = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+$sp_brief_t = strtotime( $sp_brief[0]['scheduled_at'] . ' UTC' );
+assert_true( abs( strtotime( $sp_full[0]['scheduled_at'] . ' UTC' ) - ( $sp_brief_t + (int) floor( $sp_spacing / 2 ) ) ) <= 2, 'The full podcast goes out half a spacing after the brief' );
+assert_true( abs( strtotime( $sp_story[0]['scheduled_at'] . ' UTC' ) - ( $sp_brief_t + $sp_spacing ) ) <= 2, 'The first story post goes out one spacing after the brief' );
+assert_true( abs( strtotime( $sp_story[2]['scheduled_at'] . ' UTC' ) - ( $sp_brief_t + 3 * $sp_spacing ) ) <= 2, 'The story posts are one spacing apart' );
+assert_false( PressHub_Social_TikTok_Shorts::is_slides_job( $sp_story[0] ), 'Story Post Format video makes video shorts' );
+
+// Two plans: the brief's prompt and the shorts prompt for the story posts.
+$sp_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$sp_calls, $brief_json, $short_json ) {
+    $sp_calls[] = $user;
+    return str_contains( $user, '"stories"' ) ? $brief_json( 6 ) : $short_json( 3 );
+} );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, count( $sp_calls ), 'The brief and the story posts are planned with one AI call each' );
+assert_true( is_array( get_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, true ) ) && is_array( get_post_meta( 880, PressHub_Social_TikTok_Shorts::STORY_POSTS_PLAN_META, true ) ), 'The brief and the story posts keep separate plans' );
+foreach ( $sp_story as $k => $j ) {
+    $prep = json_decode( (string) PressHub_Social_Queue::get_job( (int) $j['id'] )['metadata'], true )['tiktok_short'] ?? [];
+    assert_true( ! empty( $prep['audio']['audio_url'] ) && 'Hook ' . ( $k + 1 ) . ' σε λίγες λέξεις' === ( $prep['hook'] ?? '' ), 'Story post ' . ( $k + 1 ) . ' is prepared from its own story' );
+    assert_true( array_key_exists( 'story_key', $prep ) && empty( $prep['brief'] ), 'Story post ' . ( $k + 1 ) . ' records its story for the story ledger' );
+}
+$sp_brief_prep = json_decode( (string) PressHub_Social_Queue::get_job( (int) $sp_brief[0]['id'] )['metadata'], true )['tiktok_short'] ?? [];
+assert_equals( 6, count( $sp_brief_prep['stories'] ?? [] ), 'The brief is still prepared from its own plan' );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, count( $sp_calls ), 'Preparing again makes no AI call: both plans are kept' );
+
+// Photo slides format, and the switches off.
+update_option( 'presshub_social_tiktok_story_posts_format', 'slides' );
+$sp_slides = PressHub_Social_TikTok_Shorts::build_story_post_jobs( 880, time() );
+assert_true( PressHub_Social_TikTok_Shorts::is_slides_job( array_merge( $sp_slides[0], [ 'metadata' => wp_json_encode( $sp_slides[0]['metadata'] ) ] ) ), 'Story Post Format slides makes photo slide posts' );
+update_option( 'presshub_social_tiktok_story_posts', 0 );
+update_option( 'presshub_social_tiktok_full_podcast_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+assert_equals( 1, count( PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] ) ), 'With both off TikTok gets only the brief' );
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
+assert_false( PressHub_Social_TikTok_Shorts::full_podcast_wanted( 880 ), 'One short per story gets no extra full podcast' );
+update_option( 'presshub_social_tiktok_story_posts', 3 );
+assert_false( PressHub_Social_TikTok_Shorts::story_posts_wanted( 880, 'automation' ), 'One short per story gets no extra story posts' );
+update_option( 'presshub_social_tiktok_story_posts', 0 );
+delete_option( 'presshub_social_tiktok_story_posts_format' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::STORY_POSTS_PLAN_META, '' );
+PressHub_Social_Queue::reset_memory_store();
+
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
+update_option( 'presshub_social_tiktok_slides_enabled', false );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$shorts_ai_calls, $short_json ) {
+    $shorts_ai_calls[] = $user;
+    return $short_json( 3 );
+} );
+PressHub_Social_TikTok_Shorts::set_synthesizer( function ( array $short, array $job ) use ( &$shorts_tts ) {
+    $shorts_tts[] = $short['script'];
+    return [
+        'url'      => 'https://example.com/uploads/short-' . count( $shorts_tts ) . '.wav',
+        'id'       => 950 + count( $shorts_tts ),
+        'segments' => [ [ 'speaker' => 1, 'text' => 'Γεγονός.', 'start' => 0.0, 'end' => 1.2 ], [ 'speaker' => 2, 'text' => 'Γιατί.', 'start' => 1.6, 'end' => 2.4 ] ],
+    ];
+} );
+PressHub_Social_TikTok_Shorts::set_image_generator( function ( string $prompt, int $post_id, array $short ) use ( &$shorts_images ) {
+    $shorts_images[] = $prompt;
+    if ( str_contains( $prompt, 'payslip 3' ) ) {
+        return new WP_Error( 'image_http_429', 'Image API rate limit' );
+    }
+    return [ 'url' => 'https://example.com/uploads/short-img-' . count( $shorts_images ) . '.png', 'id' => 1200 + count( $shorts_images ) ];
+} );
 
 // Article shorts: every other post goes to TikTok (and Instagram Reels) as one short.
 echo "\n--- Article Shorts ---\n";
@@ -2371,6 +2732,34 @@ $art_text = PressHub_Social_TikTok_Shorts::article_text( 890 );
 assert_true( str_contains( $art_text, 'κρίση εμπιστοσύνης.' ) && str_contains( $art_text, 'ομοσπονδίες & οι' ) && ! str_contains( $art_text, '<p>' ), 'The article text has no markup and decoded entities' );
 assert_equals( 'ΑΠΟΨΗ', PressHub_Social_TikTok_Shorts::article_badge( 890 ), 'The badge is the category in capitals without accents' );
 assert_equals( 'ΑΡΘΡΟ', PressHub_Social_TikTok_Shorts::article_badge( 99999 ), 'A post without a category gets the ΑΡΘΡΟ badge' );
+$GLOBALS['test_categories'][891] = [ (object) [ 'name' => 'Uncategorized', 'slug' => 'uncategorized' ], (object) [ 'name' => 'Άποψη', 'slug' => 'apopsi' ] ];
+assert_equals( 'Άποψη', PressHub_Social_TikTok_Shorts::primary_category( 891 ), 'The primary category skips Uncategorized' );
+$GLOBALS['POSTS_STORE'][891] = [ 'ID' => 891, 'post_title' => 'Τίτλος', 'post_content' => 'Κείμενο', 'post_excerpt' => '', 'post_status' => 'publish' ];
+$GLOBALS['test_posts'][891]  = new WP_Post( $GLOBALS['POSTS_STORE'][891] );
+assert_true( str_contains( PressHub_Social_TikTok_Shorts::build_prompt( 891, 'Κατηγορία: {category}', '', 1, 100, 3, 'Κείμενο' ), 'Κατηγορία: Άποψη' ), 'The article prompt gets the same primary category as the badge' );
+assert_equals( 'ΑΠΟΨΗ', PressHub_Social_TikTok_Shorts::article_badge( 891 ), 'The badge uses the same primary category as the prompt' );
+$GLOBALS['test_categories'][892] = [ (object) [ 'name' => 'Uncategorized', 'slug' => 'uncategorized' ] ];
+assert_equals( '', PressHub_Social_TikTok_Shorts::primary_category( 892 ), 'A post filed only under Uncategorized has no primary category' );
+assert_equals( 'ΑΡΘΡΟ', PressHub_Social_TikTok_Shorts::article_badge( 892 ), 'A post filed only under Uncategorized gets the ΑΡΘΡΟ badge' );
+$GLOBALS['test_categories'][892] = [ (object) [ 'name' => 'Χωρίς κατηγορία', 'slug' => 'xoris-katigoria', 'term_id' => 1 ], (object) [ 'name' => 'Πολιτική', 'slug' => 'politiki', 'term_id' => 7 ] ];
+assert_equals( 'Πολιτική', PressHub_Social_TikTok_Shorts::primary_category( 892 ), 'The Greek Uncategorized (Χωρίς κατηγορία) is skipped' );
+update_option( 'default_category', 55 );
+$GLOBALS['test_categories'][892] = [ (object) [ 'name' => 'Γενικά', 'slug' => 'genika', 'term_id' => 55 ], (object) [ 'name' => 'Πολιτική', 'slug' => 'politiki', 'term_id' => 7 ] ];
+assert_equals( 'Πολιτική', PressHub_Social_TikTok_Shorts::primary_category( 892 ), 'The site\'s default category, even renamed, is skipped' );
+update_option( 'default_category', 0 );
+$GLOBALS['test_categories'][892] = [ 'not a term', (object) [ 'name' => '' ], [ 'name' => 'Κοινωνία', 'slug' => 'koinonia' ] ];
+assert_equals( 'Κοινωνία', PressHub_Social_TikTok_Shorts::primary_category( 892 ), 'Invalid or nameless terms are skipped' );
+$GLOBALS['POSTS_STORE'][893] = [ 'ID' => 893, 'post_title' => 'Κενό', 'post_content' => "<p>&nbsp;</p>\n<p>\u{00A0}&nbsp;</p>", 'post_excerpt' => '', 'post_status' => 'draft' ];
+$GLOBALS['test_posts'][893]  = new WP_Post( $GLOBALS['POSTS_STORE'][893] );
+assert_equals( '', PressHub_Social_TikTok_Shorts::source_type( 893 ), 'A post of empty &nbsp; paragraphs has no text for a short' );
+
+// A test render of a draft does not stop the post going out when it is published.
+PressHub_Social_Queue::reset_memory_store();
+PressHub_Social_Queue::enqueue( [ 'post_id' => 891, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Test', 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'source' => 'article', 'test' => true ] ] ) ] );
+assert_false( PressHub_Social_Dispatcher::has_publish_jobs( 891 ), 'A test render is not a social job of the post' );
+PressHub_Social_Queue::enqueue( [ 'post_id' => 891, 'platform' => 'twitter', 'engine' => 'automation', 'post_copy' => 'Tweet' ] );
+assert_true( PressHub_Social_Dispatcher::has_publish_jobs( 891 ), 'A real job is a social job of the post' );
+PressHub_Social_Queue::reset_memory_store();
 
 $art_ai_calls = [];
 PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$art_ai_calls, $short_json ) {
@@ -2432,6 +2821,646 @@ assert_equals( 'article', $art_claimed['tiktok_short']['source'] ?? '', 'A claim
 assert_equals( 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός', $art_claimed['post_copy'] ?? '', 'A claimed article short posts the TikTok caption, not the plan caption' );
 assert_true( '' !== (string) ( $art_claimed['audio_url'] ?? '' ) && ! empty( $art_claimed['tiktok_short']['segments'] ), 'A claimed article short carries its narration and timings' );
 assert_equals( 2, count( $art_claim['jobs'] ), 'The TikTok short and the Instagram Reel of the article are both claimed' );
+
+// The worker cannot render the article short: it retries, then posts the article the classic way.
+$art_tt_id  = (int) $art_claimed['id'];
+$art_ig_id  = (int) ( array_values( array_filter( $art_claim['jobs'], fn( $j ) => 'instagram' === $j['platform'] ) )[0]['id'] ?? 0 );
+$max_att    = (int) PressHub_Social_Queue::get_job( $art_tt_id )['max_attempts'];
+$req_rf     = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_rf->set_param( 'job_id', $art_tt_id );
+$req_rf->set_param( 'status', 'failed' );
+$req_rf->set_param( 'error', 'FFmpeg exited with code 1' );
+$req_rf->set_param( 'metadata', [ 'short_render_failed' => true ] );
+$rf1 = PressHub_Social_REST_Controller::handle_complete( $req_rf );
+assert_equals( 'failed', $rf1['status'], 'A render failure before the last attempt is a normal failure' );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( PressHub_Social_Queue::get_job( $art_tt_id ) ), 'Before the last attempt the job is still the article short' );
+PressHub_Social_Queue::update_job( $art_tt_id, [ 'status' => 'processing', 'attempts' => $max_att ] );
+$rf2    = PressHub_Social_REST_Controller::handle_complete( $req_rf );
+$rf_job = PressHub_Social_Queue::get_job( $art_tt_id );
+$rf_meta = json_decode( (string) $rf_job['metadata'], true );
+assert_equals( 'pending', $rf2['status'], 'A render failure on the last attempt falls back' );
+assert_equals( 'pending', $rf_job['status'], 'The fallen-back job is pending again' );
+assert_equals( 0, (int) $rf_job['attempts'], 'The classic post gets fresh attempts' );
+assert_false( PressHub_Social_TikTok_Shorts::is_short_job( $rf_job ), 'The fallen-back job is no longer a short' );
+assert_equals( 'tiktok_short_render_failed', $rf_meta['tiktok_short_fallback']['error_code'] ?? '', 'The fallback records the render failure' );
+assert_equals( 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός', $rf_job['post_copy'], 'The classic post keeps the TikTok caption' );
+// A failure after the render (posting) never falls back: the short was made.
+PressHub_Social_Queue::update_job( $art_ig_id, [ 'status' => 'processing', 'attempts' => $max_att ] );
+$req_pf = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_pf->set_param( 'job_id', $art_ig_id );
+$req_pf->set_param( 'status', 'failed' );
+$req_pf->set_param( 'error', 'Instagram upload timed out' );
+PressHub_Social_REST_Controller::handle_complete( $req_pf );
+$pf_job = PressHub_Social_Queue::get_job( $art_ig_id );
+assert_equals( 'failed', $pf_job['status'], 'A posting failure on the last attempt fails for good' );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( $pf_job ), 'A posting failure keeps the article short' );
+$art_meta = wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'source' => 'article' ] ] );
+assert_false( PressHub_Social_TikTok_Shorts::fallback_after_render_failure( [ 'id' => 9001, 'post_id' => 890, 'platform' => 'youtube', 'attempts' => 3, 'max_attempts' => 3, 'metadata' => $art_meta ], 'x' ), 'A YouTube article short never falls back' );
+assert_false( PressHub_Social_TikTok_Shorts::fallback_after_render_failure( [ 'id' => 9002, 'post_id' => 890, 'platform' => 'tiktok', 'attempts' => 3, 'max_attempts' => 3, 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'source' => 'article', 'test' => true ] ] ) ], 'x' ), 'A test render never falls back' );
+assert_false( PressHub_Social_TikTok_Shorts::fallback_after_render_failure( [ 'id' => 9003, 'post_id' => 880, 'platform' => 'tiktok', 'attempts' => 3, 'max_attempts' => 3, 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 3 ] ] ) ], 'x' ), 'A podcast short never falls back' );
+
+// Editing the article's title or category without its text makes a new plan.
+$calls_before = count( $art_ai_calls );
+PressHub_Social_TikTok_Shorts::get_plan( 890, 1 );
+assert_equals( $calls_before, count( $art_ai_calls ), 'An unchanged article reuses its plan' );
+$GLOBALS['test_categories'][890] = [ (object) [ 'name' => 'Πολιτική', 'slug' => 'politiki' ] ];
+PressHub_Social_TikTok_Shorts::get_plan( 890, 1 );
+assert_equals( $calls_before + 1, count( $art_ai_calls ), 'A new category makes a new article plan' );
+$GLOBALS['test_categories'][890] = [ (object) [ 'name' => 'Άποψη', 'slug' => 'apopsi' ] ];
+
+// ----------------------------------------------------------------------
+// YouTube: Shorts and podcast episodes through the YouTube Data API
+// ----------------------------------------------------------------------
+echo "\n--- YouTube ---\n";
+$yt_http       = [];
+$yt_no_channel = false;
+PressHub_Social_YouTube::set_http( function ( string $method, string $url, array $args ) use ( &$yt_http, &$yt_no_channel ) {
+    $yt_http[] = [ $method, $url, $args ];
+    if ( str_contains( $url, 'oauth2.googleapis.com/token' ) ) {
+        if ( 'refresh_token' === ( $args['body']['grant_type'] ?? '' ) && 'REVOKED' === ( $args['body']['refresh_token'] ?? '' ) ) {
+            return [ 'code' => 400, 'body' => '{"error":"invalid_grant","error_description":"Token has been expired or revoked."}' ];
+        }
+        if ( 'authorization_code' === ( $args['body']['grant_type'] ?? '' ) ) {
+            return [ 'code' => 200, 'body' => '{"access_token":"ya29.FIRST","expires_in":3599,"refresh_token":"1//REFRESH"}' ];
+        }
+        return [ 'code' => 200, 'body' => '{"access_token":"ya29.FRESH","expires_in":3599}' ];
+    }
+    if ( str_contains( $url, '/youtube/v3/channels?part=status' ) ) {
+        $GLOBALS['yt_long_calls'] = ( $GLOBALS['yt_long_calls'] ?? 0 ) + 1;
+        return [ 'code' => 200, 'body' => wp_json_encode( [ 'items' => [ [ 'status' => [ 'longUploadsStatus' => $GLOBALS['yt_long_status'] ?? 'allowed' ] ] ] ] ) ];
+    }
+    if ( str_contains( $url, '/youtube/v3/channels' ) ) {
+        return $yt_no_channel
+            ? [ 'code' => 200, 'body' => '{"items":[]}' ]
+            : [ 'code' => 200, 'body' => '{"items":[{"id":"UC123","snippet":{"title":"PressHub Cyprus"}}]}' ];
+    }
+    if ( str_contains( $url, '/youtube/v3/playlists' ) ) {
+        return str_contains( $url, 'PLpodcastplaylist01' )
+            ? [ 'code' => 200, 'body' => '{"items":[{"id":"PLpodcastplaylist01","snippet":{"title":"Daily Briefing","channelId":"UC123"}}]}' ]
+            : [ 'code' => 200, 'body' => '{"items":[]}' ];
+    }
+    if ( str_contains( $url, '/revoke' ) ) {
+        return [ 'code' => 200, 'body' => '' ];
+    }
+    return [ 'code' => 404, 'body' => '' ];
+} );
+
+// Settings sanitizers.
+assert_equals( 'PLabcdefghijklmnop', PressHub_Social_Settings_Storage::sanitize_youtube_podcast_playlist_id( 'https://www.youtube.com/playlist?list=PLabcdefghijklmnop' ), 'A pasted playlist link becomes its ID' );
+assert_equals( 'PLabcdefghijklmnop', PressHub_Social_Settings_Storage::sanitize_youtube_podcast_playlist_id( ' PLabcdefghijklmnop ' ), 'A playlist ID is kept' );
+assert_equals( '', PressHub_Social_Settings_Storage::sanitize_youtube_podcast_playlist_id( 'not a playlist <script>' ), 'Anything else is dropped' );
+assert_equals( 'public', PressHub_Social_Settings_Storage::sanitize_youtube_privacy_status( 'everyone' ), 'An unknown privacy status becomes public' );
+assert_equals( 'unlisted', PressHub_Social_Settings_Storage::sanitize_youtube_privacy_status( 'unlisted' ), 'Unlisted is kept' );
+assert_equals( 25, PressHub_Social_Settings_Storage::sanitize_youtube_category_id( 999 ), 'An out-of-range category becomes News & Politics' );
+assert_equals( 'automation', PressHub_Social_Settings_Storage::get_platform_engine( 'youtube' ), 'YouTube is always claimed by the worker' );
+assert_false( in_array( 'youtube', PressHub_Social_Settings_Storage::DEFAULT_ENABLED_PLATFORMS, true ), 'YouTube is opt-in in the platform list' );
+
+// Not connected: not configured, and the claim never hands out YouTube jobs.
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true, 'instagram' => true, 'youtube' => true ] );
+delete_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION );
+update_option( 'presshub_social_youtube_client_id', '123-abc.apps.googleusercontent.com' );
+update_option( 'presshub_social_youtube_client_secret', 'GOCSPX-secret' );
+assert_false( PressHub_Social_YouTube::is_connected(), 'Without a sign-in YouTube is not connected' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' ), 'Without a sign-in YouTube is not configured' );
+assert_true( is_wp_error( PressHub_Social_YouTube::access_token() ), 'No access token without a sign-in' );
+
+// Sign-in: a state started by another user (or none) is refused.
+$GLOBALS['CURRENT_USER_ID'] = 7;
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE1', 7, 900 );
+$bad = PressHub_Social_YouTube::complete_sign_in( 'STATE1', 'CODE', '', 8 );
+assert_equals( 'youtube_bad_state', is_wp_error( $bad ) ? $bad->get_error_code() : '', 'A sign-in returned to another user is refused' );
+assert_false( get_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE1' ), 'A state is used once' );
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE2', 7, 900 );
+$denied = PressHub_Social_YouTube::complete_sign_in( 'STATE2', '', 'access_denied', 7 );
+assert_true( is_wp_error( $denied ) && '' === PressHub_Social_YouTube::get_refresh_token(), 'A declined consent stores nothing' );
+$auth_url = PressHub_Social_YouTube::authorization_url( 'S' );
+assert_true( str_contains( $auth_url, 'access_type=offline' ) && str_contains( $auth_url, 'prompt=consent' ) && str_contains( $auth_url, rawurlencode( PressHub_Social_YouTube::redirect_uri() ) ), 'The consent URL asks for offline access with the plugin\'s redirect URI' );
+
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE3', 7, 900 );
+$yt_http = [];
+$chan = PressHub_Social_YouTube::complete_sign_in( 'STATE3', 'CODE', '', 7 );
+assert_equals( 'PressHub Cyprus', is_array( $chan ) ? $chan['title'] : '', 'A sign-in reads the channel' );
+assert_equals( '1//REFRESH', PressHub_Social_YouTube::get_refresh_token(), 'A sign-in stores the refresh token' );
+assert_equals( 'UC123', PressHub_Social_YouTube::channel()['id'] ?? '', 'A sign-in stores the channel' );
+assert_equals( 'authorization_code', $yt_http[0][2]['body']['grant_type'] ?? '', 'The code is swapped at the token endpoint' );
+assert_equals( 'GOCSPX-secret', $yt_http[0][2]['body']['client_secret'] ?? '', 'The token request carries the client secret (server side only)' );
+assert_true( ! empty( PressHub_Connection_Status::get( 'social:youtube' )['ok'] ), 'A sign-in records YouTube as connected' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' ), 'Connected, in Pull mode, with a worker that reported YouTube: configured' );
+
+// Access tokens: cached, then refreshed near expiry.
+$yt_http = [];
+$tok = PressHub_Social_YouTube::access_token();
+assert_equals( 'ya29.FIRST', $tok['access_token'] ?? '', 'The token from the sign-in is reused' );
+assert_equals( 0, count( $yt_http ), 'A cached token makes no request' );
+set_transient( PressHub_Social_YouTube::ACCESS_TOKEN_TRANSIENT, [ 'access_token' => 'ya29.OLD', 'expires_at' => time() + 30 ], 30 );
+$tok = PressHub_Social_YouTube::access_token();
+assert_equals( 'ya29.FRESH', $tok['access_token'] ?? '', 'A token about to expire is refreshed' );
+$rest_tok = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
+assert_equals( 'ya29.FRESH', is_array( $rest_tok ) ? ( $rest_tok['access_token'] ?? '' ) : '', 'The worker gets an access token from the token route' );
+assert_false( str_contains( wp_json_encode( $rest_tok ), '1//REFRESH' ) || str_contains( wp_json_encode( $rest_tok ), 'GOCSPX' ), 'The token route never returns the refresh token or client secret' );
+set_transient( PressHub_Social_YouTube::ACCESS_TOKEN_TRANSIENT, [ 'access_token' => 'ya29.CACHED', 'expires_at' => time() + 3000 ], 3000 );
+$rest_cached = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
+assert_equals( 'ya29.CACHED', is_array( $rest_cached ) ? ( $rest_cached['access_token'] ?? '' ) : '', 'The token route hands out the cached token while it has time left' );
+$fresh_req = new WP_REST_Request( 'POST', '/worker/youtube/token' );
+$fresh_req->set_param( 'refresh', true );
+$rest_fresh = PressHub_Social_REST_Controller::handle_youtube_token( $fresh_req );
+assert_equals( 'ya29.FRESH', is_array( $rest_fresh ) ? ( $rest_fresh['access_token'] ?? '' ) : '', 'refresh=true (YouTube refused the cached token) gets a new one from Google' );
+
+// Shorts: the same shorts as TikTok, as YouTube jobs.
+PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', true );
+update_option( 'presshub_social_youtube_shorts_enabled', true );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Περιγραφή YouTube για το άρθρο. #κύπρος #αθλητισμός #Shorts' );
+PressHub_Social_Queue::reset_memory_store();
+$yt_art_ids = PressHub_Social_Dispatcher::enqueue_for_post( 890, [ 'youtube' ] );
+assert_equals( 1, count( $yt_art_ids ), 'An article gets one YouTube short' );
+$yt_art = PressHub_Social_Queue::get_job( $yt_art_ids[0] );
+assert_equals( 'youtube', $yt_art['platform'], 'The short is a YouTube job' );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( $yt_art ), 'The YouTube short is an article short' );
+assert_equals( 'Περιγραφή YouTube για το άρθρο. #κύπρος #αθλητισμός #Shorts', $yt_art['post_copy'], 'The article short keeps the YouTube description prompt\'s copy' );
+
+update_option( 'presshub_social_youtube_shorts_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_for_post( 890, [ 'youtube' ] ), 'With YouTube Shorts off an article is not posted to YouTube' );
+
+// Podcast: its shorts plus the full episode.
+update_option( 'presshub_social_youtube_shorts_enabled', true );
+update_option( 'presshub_social_youtube_podcast_enabled', true );
+update_option( 'presshub_social_youtube_podcast_playlist_id', 'PLpodcastplaylist01' );
+PressHub_Social_Queue::reset_memory_store();
+$yt_pod_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'youtube' ] );
+$yt_pod_jobs = array_map( [ 'PressHub_Social_Queue', 'get_job' ], $yt_pod_ids );
+$yt_eps = array_values( array_filter( $yt_pod_jobs, [ 'PressHub_Social_YouTube', 'is_episode_job' ] ) );
+assert_equals( 1, count( $yt_eps ), 'A podcast gets one YouTube episode job' );
+assert_equals( PressHub_Social_Settings_Storage::get_tiktok_shorts_count(), count( $yt_pod_jobs ) - 1, 'A podcast also gets its YouTube shorts' );
+assert_false( PressHub_Social_TikTok_Shorts::is_short_job( $yt_eps[0] ), 'The episode is not a short' );
+
+// Claim: the episode gets its upload details.
+foreach ( PressHub_Social_Queue::get_jobs_for_post( 880 ) as $pj ) {
+    if ( 'youtube' !== $pj['platform'] || ! PressHub_Social_YouTube::is_episode_job( $pj ) ) {
+        PressHub_Social_Queue::cancel_job( (int) $pj['id'] );
+    }
+}
+PressHub_Social_Queue::update_job( (int) $yt_eps[0]['id'], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+
+delete_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION );
+$req_yt = new WP_REST_Request( 'POST', '/worker/claim' );
+$req_yt->set_param( 'sessions', [ 'youtube' => true ] );
+$req_yt->set_param( 'limit', 5 );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'Without a connected channel YouTube jobs wait in the queue' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( (int) $yt_eps[0]['id'] )['status'], 'The waiting episode stays pending' );
+
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+$req_old = new WP_REST_Request( 'POST', '/worker/claim' );
+$req_old->set_param( 'limit', 5 );
+assert_equals( 0, count( array_filter( PressHub_Social_REST_Controller::handle_claim( $req_old )['jobs'], fn( $j ) => 'youtube' === $j['platform'] ) ), 'A worker that does not report YouTube never gets YouTube jobs' );
+$yt_claim = PressHub_Social_REST_Controller::handle_claim( $req_yt );
+$yt_ep    = $yt_claim['jobs'][0] ?? [];
+assert_equals( 'episode', $yt_ep['youtube']['kind'] ?? '', 'The claimed episode is marked as an episode' );
+assert_equals( 'PLpodcastplaylist01', $yt_ep['youtube']['playlist_id'] ?? '', 'The episode goes to the podcast playlist' );
+assert_equals( 1920, $yt_ep['youtube']['width'] ?? 0, 'The episode is rendered 16:9' );
+assert_equals( 'https://example.com/uploads/podcast-880.mp3', $yt_ep['audio_url'] ?? '', 'The episode carries the podcast audio' );
+assert_true( true === ( $yt_ep['youtube']['contains_synthetic_media'] ?? null ) && false === ( $yt_ep['youtube']['made_for_kids'] ?? null ), 'The upload declares AI content and not made for kids' );
+assert_false( isset( $yt_ep['access_token'] ) || str_contains( wp_json_encode( $yt_ep ), '1//REFRESH' ), 'The claim carries no token' );
+
+// Upload metadata rules.
+$long = str_repeat( 'Λέξη <b>με</b> ', 30 );
+$t    = PressHub_Social_YouTube::clean_title( $long );
+assert_true( mb_strlen( $t, 'UTF-8' ) <= 100 && ! str_contains( $t, '<' ) && ! str_contains( $t, '>' ), 'A title is at most 100 characters, without < or >' );
+assert_true( strlen( PressHub_Social_YouTube::clean_description( str_repeat( 'αβγ ', 3000 ) ) ) <= 5000, 'A description is at most 5000 bytes' );
+assert_equals( [ 'κύπρος', 'αθλητισμός' ], PressHub_Social_YouTube::tags_from( 'Κείμενο #κύπρος #αθλητισμός #Shorts #Κύπρος' ), 'Tags come from the hashtags, once each, without #Shorts' );
+$yt_short = PressHub_Social_YouTube::attach_upload( [
+    'id'           => 1,
+    'post_id'      => 890,
+    'platform'     => 'youtube',
+    'post_copy'    => 'Λεζάντα #κύπρος',
+    'video_title'  => 'Τι αλλάζει στον αθλητισμό',
+    'post_url'     => 'https://example.com/?p=890',
+    'tiktok_short' => [ 'index' => 0, 'count' => 1 ],
+] );
+assert_equals( 'short', $yt_short['youtube']['kind'] ?? '', 'A short is uploaded as a short' );
+assert_equals( 'Τι αλλάζει στον αθλητισμό', $yt_short['youtube']['title'] ?? '', 'A short\'s title is its hook' );
+assert_true( str_ends_with( $yt_short['youtube']['description'] ?? '', 'https://example.com/?p=890' ), 'The article link is added to the description' );
+assert_false( isset( $yt_short['youtube']['playlist_id'] ), 'A short goes to no playlist' );
+$no_audio = PressHub_Social_YouTube::attach_upload( [ 'id' => 2, 'post_id' => 880, 'platform' => 'youtube', 'metadata' => [ 'youtube_episode' => [ 'queued_at' => 'x' ] ] ] );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $no_audio ) ? $no_audio->get_error_code() : '', 'An episode without audio fails' );
+$plain = PressHub_Social_YouTube::attach_upload( [ 'id' => 3, 'post_id' => 890, 'platform' => 'youtube' ] );
+assert_true( is_wp_error( $plain ), 'YouTube only gets videos' );
+
+// Enhanced episodes: caption timeline, scenes from the shorts' images, chapters.
+$wav = static function ( float $sec ): string {
+    $pcm = str_repeat( "\x00", (int) round( $sec * 48000 ) );
+    return 'RIFF' . pack( 'V', 36 + strlen( $pcm ) ) . 'WAVEfmt ' . pack( 'VvvVVvv', 16, 1, 1, 24000, 48000, 2, 16 ) . 'data' . pack( 'V', strlen( $pcm ) ) . $pcm;
+};
+assert_equals( 2.5, PressHub_AI_Podcast_Timeline::turn_seconds( $wav( 2.5 ), 'x', false ), 'A WAV turn is measured from its samples' );
+assert_equals( 2.0, PressHub_AI_Podcast_Timeline::turn_seconds( '', str_repeat( 'α', 28 ), true ), 'An MP3 turn is estimated from its text' );
+$tl = PressHub_AI_Podcast_Timeline::build( [
+    [ 'title' => 'Η Βουλή ψηφίζει τον προϋπολογισμό', 'turns' => [ [ 'speaker' => 'female', 'text' => 'Καλημέρα.', 'seconds' => 10.0 ], [ 'speaker' => 'male', 'text' => 'Καλημέρα σας.', 'seconds' => 5.0 ] ] ],
+    [ 'title' => 'Καιρός', 'turns' => [ [ 'speaker' => 'male', 'text' => 'Βροχές.', 'seconds' => 12.0 ] ] ],
+    [ 'title' => 'Ποδόσφαιρο: νίκη της Ομόνοιας', 'turns' => [ [ 'speaker' => 'female', 'text' => 'Τέλος.', 'seconds' => 20.0 ] ] ],
+    [ 'title' => 'Κενό', 'turns' => [] ],
+], [ 'turn_pause_ms' => 250, 'topic_pause_ms' => 600, 'transition_seconds' => 1.0, 'intro_seconds' => 3.0, 'outro_seconds' => 2.0, 'host_count' => 2 ] );
+assert_equals( 3, count( $tl['topics'] ), 'A topic without turns is left out of the timeline' );
+assert_equals( 3.6, $tl['segments'][0]['start'], 'The first turn starts after the intro sound and the topic pause' );
+assert_equals( 13.85, $tl['segments'][1]['start'], 'Turns are separated by the turn pause' );
+assert_equals( 2, $tl['segments'][1]['speaker'], 'The male host is speaker 2' );
+assert_equals( 20.15, $tl['topics'][1]['start'], 'Topics are separated by 150 ms + transition sound + 150 ms' );
+assert_equals( 1, $tl['segments'][2]['topic'], 'Each turn knows its topic' );
+assert_equals( 56.05, $tl['duration'], 'The timeline ends after the topic pause and the outro sound' );
+$tl_mp3 = PressHub_AI_Podcast_Timeline::build( [ [ 'title' => '', 'turns' => [ [ 'speaker' => 'male', 'text' => 'α', 'seconds' => 1 ] ] ] ], [ 'host_count' => 1, 'estimated' => true ] );
+assert_true( $tl_mp3['estimated'] && 1 === $tl_mp3['segments'][0]['speaker'], 'With one host every turn is speaker 1; an MP3 timeline is marked estimated' );
+assert_equals( "0:00 Η Βουλή ψηφίζει τον προϋπολογισμό\n0:20 Καιρός\n0:33 Ποδόσφαιρο: νίκη της Ομόνοιας", PressHub_AI_Podcast_Timeline::chapters( $tl ), 'Chapters start at 0:00 and follow the topics' );
+assert_equals( '', PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 60, 'topics' => array_slice( $tl['topics'], 0, 2 ) ] ), 'Fewer than three topics give no chapters' );
+assert_equals( '', PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 40, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 15 ], [ 'title' => 'C', 'start' => 20 ] ] ] ), 'When merging short chapters leaves fewer than three there are no chapters' );
+assert_equals( "0:00 A\n0:15 B\n0:40 D", PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 60, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 15 ], [ 'title' => 'C', 'start' => 35 ], [ 'title' => 'D', 'start' => 40 ] ] ] ), 'A topic under 10 seconds is merged into the chapter before it' );
+assert_equals( "0:00 B\n0:30 C\n0:50 D", PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 70, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 5 ], [ 'title' => 'C', 'start' => 30 ], [ 'title' => 'D', 'start' => 50 ] ] ] ), 'A short first topic gives 0:00 to the next' );
+assert_equals( '1:02:05', PressHub_AI_Podcast_Timeline::stamp( 3725 ), 'Chapter times past an hour have hours' );
+
+assert_true( PressHub_Social_YouTube::topic_overlap( 'Ποδόσφαιρο: νίκη της Ομόνοιας', 'Η Ομόνοια νίκησε στο ποδόσφαιρο' ) >= 0.5, 'Greek titles match across accents and inflections' );
+assert_equals( 0.0, PressHub_Social_YouTube::topic_overlap( 'Καιρός', 'Ποδόσφαιρο' ), 'Unrelated titles do not match' );
+$groups = [
+    [ 'index' => 0, 'topic' => 'Νίκη της Ομόνοιας στο ποδόσφαιρο', 'urls' => [ 'https://img/a1.jpg', 'https://img/a2.jpg' ] ],
+    [ 'index' => 1, 'topic' => 'Ο προϋπολογισμός στη Βουλή', 'urls' => [ 'https://img/b1.jpg' ] ],
+    [ 'index' => 2, 'topic' => 'Τουρισμός', 'urls' => [ 'https://img/c1.jpg' ] ],
+];
+$scenes = PressHub_Social_YouTube::episode_scenes( $tl['topics'], $groups, 56.05 );
+assert_equals( [ 0.0, 20.15, 33.45 ], array_column( $scenes, 'start' ), 'Scenes cover the audio from 0, one per topic' );
+assert_equals( 56.05, $scenes[2]['end'], 'The last scene lasts to the end' );
+assert_equals( [ 'https://img/b1.jpg' ], $scenes[0]['images'], 'A topic gets the images of the short about it' );
+assert_equals( [ 'https://img/a1.jpg', 'https://img/a2.jpg' ], $scenes[2]['images'], 'The football topic gets the football short' );
+assert_equals( [ 'https://img/c1.jpg' ], $scenes[1]['images'], 'A topic no short matches gets a short left over' );
+$one = PressHub_Social_YouTube::episode_scenes( [], $groups, 30.0 );
+assert_true( 1 === count( $one ) && 4 === count( $one[0]['images'] ), 'Without topics one scene has every image' );
+
+$desc = PressHub_Social_YouTube::with_chapters( str_repeat( 'α', 3000 ), "0:00 Α\n1:00 Β\n2:00 Γ" );
+assert_true( strlen( $desc ) <= PressHub_Social_YouTube::DESCRIPTION_MAX_BYTES && str_ends_with( $desc, "2:00 Γ" ), 'Chapters are kept at the end of a long description' );
+$desc2 = PressHub_Social_YouTube::with_chapters( str_repeat( 'α', 3000 ) . "\n\n#κύπρος #ειδήσεις\n\nhttps://example.com/?p=1", "0:00 Α\n1:00 Β\n2:00 Γ" );
+assert_true( strlen( $desc2 ) <= PressHub_Social_YouTube::DESCRIPTION_MAX_BYTES && str_ends_with( $desc2, "2:00 Γ\n\n#κύπρος #ειδήσεις\n\nhttps://example.com/?p=1" ), 'The link and hashtags stay whole after the chapters' );
+
+// The episode waits for the shorts' images, then is uploaded with them.
+$ep_id  = (int) $yt_eps[0]['id'];
+$sh_id  = PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'x', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ), 'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 2 ] ] ] );
+$ep_job = PressHub_Social_Queue::get_job( $ep_id );
+$ep_job['metadata'] = [ 'youtube_episode' => [ 'queued_at' => gmdate( 'c' ) ] ];
+assert_false( PressHub_Social_YouTube::episode_ready( $ep_job ), 'An episode waits while a short has no images yet' );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job, time() + 90 * 60 + 1 ), 'After the wait the episode goes without them' );
+assert_true( null !== PressHub_Social_YouTube::episode_hold( $ep_job ) && 300 === PressHub_Social_YouTube::episode_hold( $ep_job )['delay'], 'A held episode is checked again in 5 minutes' );
+update_option( 'presshub_social_youtube_episode_image_wait_minutes', 0 );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'Wait for Story Images 0 does not wait' );
+assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_youtube_episode_image_wait_minutes( null ), 'A save from another section keeps Wait for Story Images' );
+assert_equals( 240, PressHub_Social_Settings_Storage::sanitize_youtube_episode_image_wait_minutes( 999 ), 'Wait for Story Images is at most 240 minutes' );
+delete_option( 'presshub_social_youtube_episode_image_wait_minutes' );
+update_option( 'presshub_social_youtube_episode_enhanced', false );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'With enhanced episodes off nothing waits for images' );
+delete_option( 'presshub_social_youtube_episode_enhanced' );
+assert_true( PressHub_Social_YouTube::episode_ready( [ 'platform' => 'youtube', 'tiktok_short' => [] ] ), 'A short is never held for images' );
+PressHub_Social_Queue::update_job( (int) $sh_id, [ 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 2, 'topic' => 'Νίκη της Ομόνοιας στο ποδόσφαιρο', 'images' => [ [ 'url' => 'https://img/a1.jpg' ], [ 'url' => 'https://img/a2.jpg' ] ] ] ] ) ] );
+PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'youtube', 'engine' => 'automation', 'post_copy' => 'x', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ), 'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 2, 'topic' => 'Νίκη', 'images' => [ [ 'url' => 'https://img/a1.jpg' ] ] ] ] ] );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'Once the shorts have their images the episode is ready' );
+assert_equals( [ [ 'index' => 0, 'topic' => 'Νίκη της Ομόνοιας στο ποδόσφαιρο', 'urls' => [ 'https://img/a1.jpg', 'https://img/a2.jpg' ] ] ], PressHub_Social_YouTube::short_image_groups( 880 ), 'Each short is taken once across platforms, from the job with the most images' );
+
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, $tl );
+$ep_up = PressHub_Social_YouTube::attach_upload( array_merge( $ep_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.wav', 'post_copy' => 'Η ενημέρωση της ημέρας.' ] ) );
+$ev    = $ep_up['youtube']['episode_video'] ?? [];
+assert_equals( 56.05, $ev['duration'] ?? 0, 'The episode carries the timeline length' );
+assert_equals( count( $tl['segments'] ), count( $ev['segments'] ?? [] ), 'The episode carries every spoken turn for the captions' );
+assert_equals( [ 'https://img/a1.jpg', 'https://img/a2.jpg' ], $ev['scenes'][2]['images'] ?? [], 'The football scene shows the football short\'s images' );
+assert_true( str_contains( $ep_up['youtube']['description'] ?? '', "0:00 Η Βουλή ψηφίζει τον προϋπολογισμό\n0:20 Καιρός" ), 'The description lists the chapters' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, array_merge( $tl, [ 'estimated' => true ] ) );
+$ep_est = PressHub_Social_YouTube::attach_upload( array_merge( $ep_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3', 'post_copy' => 'Η ενημέρωση.' ] ) );
+assert_false( str_contains( $ep_est['youtube']['description'] ?? '', '0:00' ), 'An estimated timeline gives no chapters' );
+assert_true( ! empty( $ep_est['youtube']['episode_video']['estimated'] ), 'The worker is told the timeline is estimated' );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
+PressHub_Social_Queue::cancel_job( (int) $sh_id );
+$ep_plain = PressHub_Social_YouTube::attach_upload( array_merge( $ep_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( isset( $ep_plain['youtube']['episode_video']['images'] ) && ! isset( $ep_plain['youtube']['episode_video']['segments'] ), 'Without a timeline the episode still gets the story images, without captions' );
+assert_equals( '', PressHub_AI_Podcast_Timeline::error( 880 ), 'A podcast without a timeline error is taken for one made before 2.54.0' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, 'disk full' );
+assert_equals( 'disk full', PressHub_AI_Podcast_Timeline::error( 880 ), 'A timeline that could not be saved is marked on the podcast' );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::ERROR_META_KEY );
+
+// An episode over 15 minutes waits while the channel may not upload long videos.
+$GLOBALS['yt_long_status'] = 'eligible';
+$GLOBALS['yt_long_calls']  = 0;
+PressHub_Social_YouTube::forget_access_token();
+update_post_meta( 880, '_presshub_audio_duration_sec', 600 );
+assert_true( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'A 10-minute episode may always be uploaded' );
+update_post_meta( 880, '_presshub_audio_duration_sec', 899 );
+assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'An episode just under 15 minutes counts the silence added at the end' );
+PressHub_Social_YouTube::forget_access_token();
+$GLOBALS['yt_long_calls'] = 0;
+assert_equals( 0, $GLOBALS['yt_long_calls'], 'A short episode needs no channel check' );
+update_post_meta( 880, '_presshub_audio_duration_sec', 1100 );
+assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'An 18-minute episode waits while the channel is not verified' );
+assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'It keeps waiting' );
+assert_equals( 1, $GLOBALS['yt_long_calls'], 'The channel status is read once and cached' );
+$held_before = PressHub_Social_Queue::get_job( $ep_id );
+PressHub_Social_Queue::update_job( $ep_id, [ 'status' => 'pending', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'metadata' => wp_json_encode( $ep_job['metadata'] ) ] );
+delete_transient( 'presshub_social_youtube_long_note_' . $ep_id );
+$held_claim = PressHub_Social_REST_Controller::handle_claim( $req_yt );
+$held_after = PressHub_Social_Queue::get_job( $ep_id );
+assert_false( in_array( $ep_id, array_map( fn( $j ) => (int) $j['id'], $held_claim['jobs'] ?? [] ), true ), 'The claim does not hand out the long episode' );
+assert_equals( 'pending', $held_after['status'], 'The held episode stays pending' );
+assert_equals( (int) ( $held_before['attempts'] ?? 0 ), (int) ( $held_after['attempts'] ?? 0 ), 'Holding the episode uses no attempt' );
+assert_true( str_contains( (string) $held_after['last_error'], 'over 15 minutes' ), 'The Queue screen says why the episode waits' );
+assert_true( strtotime( $held_after['scheduled_at'] . ' UTC' ) > time() + 3000, 'The held episode is moved an hour later in the queue' );
+// An MP3 estimate shorter than the real audio does not let a long episode through.
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, array_merge( $tl, [ 'estimated' => true, 'duration' => 800.0 ] ) );
+assert_equals( 1100.0, PressHub_Social_YouTube::episode_seconds( 880 ), 'An estimated timeline counts the stored audio length when that is longer' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, array_merge( $tl, [ 'duration' => 800.0 ] ) );
+assert_equals( 800.0, PressHub_Social_YouTube::episode_seconds( 880 ), 'A measured timeline is taken as it is' );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
+$GLOBALS['yt_long_status'] = 'allowed';
+PressHub_Social_YouTube::forget_access_token();
+assert_true( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'Once long uploads are allowed the episode goes' );
+PressHub_Social_Queue::update_job( $ep_id, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+$freed_claim = PressHub_Social_REST_Controller::handle_claim( $req_yt );
+assert_true( in_array( $ep_id, array_map( fn( $j ) => (int) $j['id'], $freed_claim['jobs'] ?? [] ), true ), 'The episode is handed out once it may go up' );
+assert_equals( '', (string) PressHub_Social_Queue::get_job( $ep_id )['last_error'], 'The "Waiting" note is cleared when the episode is handed out' );
+assert_true( PressHub_Social_YouTube::episode_length_ok( [ 'platform' => 'youtube', 'post_id' => 880, 'tiktok_short' => [] ] ), 'A short is never held for length' );
+delete_post_meta( 880, '_presshub_audio_duration_sec' );
+PressHub_Social_YouTube::forget_access_token();
+
+// English and Turkish episodes: queued once voiced and published, uploaded with their own
+// audio, title, captions and playlist, the images following the Greek topics.
+update_option( 'presshub_ai_briefing_podcast_languages', [ 'en', 'tr' ] );
+update_option( 'presshub_social_youtube_podcast_language_playlists', [ 'en' => 'https://www.youtube.com/playlist?list=PLenglishplaylist1', 'tr' => 'not a playlist!' ] );
+assert_equals( 'PLenglishplaylist1', PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( 'en' ), 'A pasted playlist link gives the language its playlist ID' );
+assert_equals( '', PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( 'tr' ), 'A bad playlist ID is dropped' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, $tl );
+$tl_en = PressHub_AI_Podcast_Timeline::build( [
+    [ 'title' => 'Parliament passes the budget', 'turns' => [ [ 'speaker' => 'female', 'text' => 'Good morning.', 'seconds' => 8.0 ], [ 'speaker' => 'male', 'text' => 'Good morning.', 'seconds' => 4.0 ] ] ],
+    [ 'title' => 'Weather', 'turns' => [ [ 'speaker' => 'male', 'text' => 'Rain.', 'seconds' => 11.0 ] ] ],
+    [ 'title' => 'Football: Omonia wins', 'turns' => [ [ 'speaker' => 'female', 'text' => 'The end.', 'seconds' => 18.0 ] ] ],
+], [ 'turn_pause_ms' => 250, 'topic_pause_ms' => 600, 'host_count' => 2 ] );
+$tr_entry = [ 'status' => 'translated', 'title' => 'PressHub Morning Briefing: the budget', 'description' => 'The House passes the budget. #Cyprus', 'script' => 'x' ];
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => $tr_entry ] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is not queued before it is voiced' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => array_merge( $tr_entry, [ 'status' => 'voiced', 'audio_url' => 'https://example.com/uploads/podcast-880-en.wav', 'timeline' => $tl_en, 'duration_sec' => $tl_en['duration'] ] ) ] );
+$GLOBALS['POSTS_STORE'][880]['post_status'] = 'pending';
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language waits while the Greek post is held' );
+$GLOBALS['POSTS_STORE'][880]['post_status'] = 'publish';
+$yt_was = get_option( 'presshub_social_enabled_platforms', null );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', false );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while YouTube is off under Where to post' );
+null === $yt_was ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $yt_was );
+update_post_meta( 880, '_presshub_social_platforms', [ 'facebook' ] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued when YouTube is not ticked on the post' );
+update_post_meta( 880, '_presshub_social_platforms', [ 'facebook', 'youtube' ] );
+assert_true( PressHub_AI_Podcast_Translations::youtube_allowed( 880 ), 'YouTube ticked on the post lets the languages go' );
+delete_post_meta( 880, '_presshub_social_platforms' );
+$greek_eps = array_values( array_filter( PressHub_Social_Queue::get_jobs_for_post( 880 ), static fn( $j ) => PressHub_Social_YouTube::is_episode_job( $j ) && 'cancelled' !== ( $j['status'] ?? '' ) ) );
+$greek_st  = array_map( static fn( $j ) => [ (int) $j['id'], (string) $j['status'] ], $greek_eps );
+foreach ( $greek_st as [ $gid ] ) {
+    PressHub_Social_Queue::update_job( $gid, [ 'status' => 'cancelled' ] );
+}
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while its Greek episode is not (auto-publish off, for example)' );
+foreach ( $greek_st as [ $gid, $gst ] ) {
+    PressHub_Social_Queue::update_job( $gid, [ 'status' => $gst ] );
+}
+assert_true( count( $greek_st ) > 0 && PressHub_AI_Podcast_Translations::greek_episode_queued( 880 ), 'The Greek episode is queued again' );
+$en_id = PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' );
+assert_true( $en_id > 0, 'A voiced language of a published podcast gets its YouTube episode' );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'Each language is queued once' );
+assert_equals( [], PressHub_AI_Podcast_Translations::enqueue_ready( 880 ), 'Queueing the ready languages again adds nothing (Turkish is not voiced)' );
+$en_job = PressHub_Social_Queue::get_job( $en_id );
+assert_true( PressHub_Social_YouTube::is_episode_job( $en_job ) && 'en' === PressHub_Social_YouTube::episode_language( $en_job ), 'The job is the English episode' );
+assert_equals( '', PressHub_Social_YouTube::episode_language( $ep_job ), 'The Greek episode has no language of its own' );
+assert_equals( 'Youtube (EN)', PressHub_Social_YouTube::platform_label( $en_job ), 'The Queue shows the English episode as YouTube (EN)' );
+assert_equals( 'Youtube', PressHub_Social_YouTube::platform_label( $ep_job ), 'The Greek episode is plain YouTube' );
+// A translation made again after queueing: the job waits for the new audio, then takes the new description.
+$en_entry = PressHub_AI_Podcast_Translations::get_entry( 880, 'en' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => array_merge( $en_entry, [ 'status' => 'translated' ] ) ] ) );
+$held = PressHub_Social_YouTube::episode_hold( $en_job );
+assert_true( is_array( $held ) && str_contains( (string) ( $held['note'] ?? '' ), 'voiced again' ), 'An English episode waits while its new translation is voiced' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => array_merge( $en_entry, [ 'description' => 'New English description. #Cyprus' ] ) ] ) );
+$fresh = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( str_starts_with( (string) ( $fresh['youtube']['description'] ?? '' ), 'New English description.' ), 'An unedited English job takes the new translation\'s description' );
+$edited = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'post_copy' => 'Hand-written English copy', 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( str_starts_with( (string) ( $edited['youtube']['description'] ?? '' ), 'Hand-written English copy' ), 'Copy edited by hand on the Queue is kept' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => $en_entry ] ) );
+
+PressHub_Social_Queue::update_job_copy( $en_id, 'Edited by hand' );
+$_REQUEST['nonce'] = 'valid_nonce';
+$nonce_was         = $GLOBALS['NONCE_VALID'] ?? null;
+$GLOBALS['NONCE_VALID'] = true;
+$_POST['job_id']   = $en_id;
+$caps_was          = $GLOBALS['test_user_caps'] ?? [];
+$GLOBALS['test_user_caps'][ PressHub_Capabilities::social() ] = true;
+$GLOBALS['JSON_RESPONSES'] = [];
+try {
+    PressHub_Social_Ajax_Handlers::handle_regenerate_job_copy();
+} catch ( RuntimeException $e ) {
+    // wp_send_json_* stops here.
+}
+$regen = end( $GLOBALS['JSON_RESPONSES'] ) ?: [];
+assert_true( ! empty( $regen['success'] ) && 'The House passes the budget. #Cyprus' === ( $regen['data']['new_copy'] ?? '' ), 'Regen AI on the English episode restores its translated description' );
+assert_equals( 'The House passes the budget. #Cyprus', PressHub_Social_Queue::get_job( $en_id )['post_copy'] ?? '', 'The English job has its description back' );
+$GLOBALS['test_user_caps'] = $caps_was;
+$GLOBALS['NONCE_VALID']    = $nonce_was;
+unset( $_REQUEST['nonce'], $_POST['job_id'] );
+assert_equals( 'The House passes the budget. #Cyprus', $en_job['post_copy'], 'The English description is the translation\'s' );
+assert_true( abs( PressHub_AI_Podcast_Translations::duration( 880, 'en' ) - $tl_en['duration'] ) < 0.001, 'The English episode\'s length is its own audio\'s' );
+
+$budget_short = PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'youtube', 'engine' => 'automation', 'post_copy' => 'x', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ), 'metadata' => [ 'tiktok_short' => [ 'index' => 1, 'count' => 2, 'topic' => 'Ο προϋπολογισμός στη Βουλή', 'images' => [ [ 'url' => 'https://img/b1.jpg' ] ] ] ] ] );
+$en_up = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3', 'post_url' => 'https://example.com/?p=880' ] ) );
+$en_yt = $en_up['youtube'] ?? [];
+$en_ev = $en_yt['episode_video'] ?? [];
+$el_ev = PressHub_Social_YouTube::episode_video( 880 );
+assert_equals( 'https://example.com/uploads/podcast-880-en.wav', $en_up['audio_url'] ?? '', 'The English episode uploads the English audio' );
+assert_equals( 'PressHub Morning Briefing: the budget', $en_yt['title'] ?? '', 'The English episode has the English title' );
+assert_equals( 'en', ( $en_yt['default_language'] ?? '' ) . '', 'The English episode is marked English' );
+assert_equals( 'en', $en_yt['default_audio_language'] ?? '', 'Its audio is marked English' );
+assert_equals( 'PLenglishplaylist1', $en_yt['playlist_id'] ?? '', 'The English episode goes to the English playlist' );
+assert_equals( 'PressHub Morning Briefing: the budget', $en_ev['title'] ?? '', 'The video shows the English title' );
+assert_true( str_starts_with( (string) ( $en_ev['end_card_line'] ?? '' ), 'Full stories and sources at ' ), 'The video ends on an English line' );
+assert_equals( count( $tl_en['segments'] ), count( $en_ev['segments'] ?? [] ), 'The English captions are the English turns' );
+assert_equals( 'Good morning.', $en_ev['segments'][0]['text'] ?? '', 'The captions are in English' );
+assert_equals( array_column( $el_ev['scenes'], 'images' ), array_column( $en_ev['scenes'] ?? [], 'images' ), 'Each English topic shows the images of the same Greek topic' );
+assert_equals( $tl_en['topics'][1]['start'], $en_ev['scenes'][1]['start'] ?? null, 'The English scenes follow the English timing' );
+assert_equals( [ 'https://img/b1.jpg' ], $en_ev['scenes'][0]['images'] ?? [], 'The English budget topic shows the budget short, matched through the Greek topic' );
+assert_true( in_array( 'https://img/a1.jpg', $en_ev['scenes'][2]['images'] ?? [], true ) && ! in_array( 'https://img/b1.jpg', $en_ev['scenes'][2]['images'] ?? [], true ), 'The English football topic shows the football short' );
+assert_true( str_contains( $en_yt['description'] ?? '', "0:00 Parliament passes the budget\n0:" ) && ! str_contains( $en_yt['description'] ?? '', 'Καιρός' ), 'The English description lists English chapters' );
+
+$tr_job = PressHub_Social_YouTube::episode_job( 880, 'Açıklama', null, null, gmdate( 'Y-m-d H:i:s' ), null, 'tr' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'translated', 'audio_url' => 'https://example.com/uploads/podcast-880-tr-old.wav', 'title' => 'Yeni başlık' ] ] ) );
+$tr_stale = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_stale ) ? $tr_stale->get_error_code() : '', 'A language translated again but not voiced yet never uploads its old audio' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_diff_key( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => 1 ] ) );
+$tr_up  = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_up ) ? $tr_up->get_error_code() : '', 'A language without its own audio never uploads the Greek audio' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'voiced', 'audio_url' => 'https://example.com/uploads/podcast-880-tr.wav', 'title' => '' ] ] ) );
+$tr_up2 = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_title', is_wp_error( $tr_up2 ) ? $tr_up2->get_error_code() : '', 'A language without its own title never takes the Greek title' );
+
+PressHub_Social_Queue::cancel_job( (int) $budget_short );
+PressHub_Social_Queue::cancel_job( $en_id );
+assert_equals( 1, count( PressHub_AI_Podcast_Translations::enqueue_ready( 880 ) ), 'A cancelled language episode can be queued again' );
+update_option( 'presshub_ai_briefing_podcast_languages', [] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'tr' ), 'A language that is off is never queued' );
+foreach ( PressHub_Social_Queue::get_jobs_for_post( 880 ) as $pj ) {
+    if ( '' !== PressHub_Social_YouTube::episode_language( $pj ) ) {
+        PressHub_Social_Queue::cancel_job( (int) $pj['id'] );
+    }
+}
+delete_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
+delete_option( 'presshub_social_youtube_podcast_language_playlists' );
+
+// A revoked sign-in fails loudly and shows on Connections.
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, 'REVOKED' );
+PressHub_Social_YouTube::forget_access_token();
+$revoked = PressHub_Social_YouTube::access_token();
+assert_equals( 'youtube_invalid_grant', is_wp_error( $revoked ) ? $revoked->get_error_code() : '', 'A revoked sign-in is an invalid_grant error' );
+assert_true( empty( PressHub_Connection_Status::get( 'social:youtube' )['ok'] ), 'A revoked sign-in shows YouTube as not working' );
+
+assert_false( PressHub_Social_YouTube::is_connected(), 'After Google refuses the sign-in YouTube no longer counts as connected' );
+assert_true( '' !== PressHub_Social_YouTube::reconnect_reason(), 'The refusal is kept so Connections can say why' );
+assert_equals( 'youtube_not_connected', ( fn( $t ) => is_wp_error( $t ) ? $t->get_error_code() : '' )( PressHub_Social_YouTube::access_token() ), 'No new refresh is tried until Connect YouTube again' );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'After a refused sign-in no YouTube job is handed out' );
+assert_true( PressHub_Social_YouTube::is_set_up(), 'A refused sign-in is still set up (client and refresh token stored)' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' ), 'While Google refuses the sign-in, new posts are still queued for YouTube and wait' );
+$tok_route = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
+assert_true( is_wp_error( $tok_route ) && 409 === ( $tok_route->get_error_data()['status'] ?? 0 ) && 'youtube_not_connected' === $tok_route->get_error_code(), 'The token route answers 409 with the reason' );
+assert_false( str_contains( wp_json_encode( $tok_route->get_error_message() ), 'REVOKED' ), 'The token route error carries no token' );
+
+// A sign-in that cannot read a channel stores nothing and keeps the earlier state.
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//OLD' );
+delete_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION );
+update_option( PressHub_Social_YouTube::CHANNEL_OPTION, [ 'id' => 'UCOLD', 'title' => 'Old channel' ] );
+$yt_no_channel = true;
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE4', 7, 900 );
+$nochan = PressHub_Social_YouTube::complete_sign_in( 'STATE4', 'CODE', '', 7 );
+$yt_no_channel = false;
+assert_equals( 'youtube_no_channel', is_wp_error( $nochan ) ? $nochan->get_error_code() : '', 'A Google account without a channel fails the sign-in' );
+assert_equals( '1//OLD', PressHub_Social_YouTube::get_refresh_token(), 'A failed sign-in does not replace the stored sign-in' );
+assert_equals( 'UCOLD', PressHub_Social_YouTube::channel()['id'] ?? '', 'A failed sign-in keeps the stored channel' );
+
+// A sign-in clears an earlier refusal.
+update_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION, 'refused' );
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE5', 7, 900 );
+PressHub_Social_YouTube::complete_sign_in( 'STATE5', 'CODE', '', 7 );
+assert_true( PressHub_Social_YouTube::is_connected() && '' === PressHub_Social_YouTube::reconnect_reason(), 'Connect YouTube again clears the refusal' );
+
+// The test button checks the podcast playlist.
+update_option( 'presshub_social_youtube_podcast_enabled', true );
+$yt_test = PressHub_Social_YouTube::test_connection();
+assert_true( ! is_wp_error( $yt_test ) && str_contains( $yt_test['message'], 'Daily Briefing' ), 'Test names the podcast playlist' );
+update_option( 'presshub_social_youtube_podcast_playlist_id', 'PLmissingplaylist1' );
+$yt_test = PressHub_Social_YouTube::test_connection();
+assert_equals( 'youtube_playlist_missing', is_wp_error( $yt_test ) ? $yt_test->get_error_code() : '', 'Test fails on a playlist that does not exist' );
+update_option( 'presshub_social_youtube_podcast_playlist_id', 'PLpodcastplaylist01' );
+
+// Quota and sign-in refusals reported by the worker hold the job and pause YouTube.
+$q_id = (int) $yt_eps[0]['id'];
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_c = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_c->set_param( 'job_id', $q_id );
+$req_c->set_param( 'status', 'failed' );
+$req_c->set_param( 'error', 'YouTube upload limit reached for today (quotaExceeded)' );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'quota' ] );
+$done = PressHub_Social_REST_Controller::handle_complete( $req_c );
+$q_job = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'deferred', $done['status'] ?? '', 'A quota refusal is not a failure' );
+assert_equals( 'pending', $q_job['status'], 'The job waits for the quota reset' );
+assert_true( strtotime( $q_job['scheduled_at'] . ' UTC' ) >= PressHub_Social_YouTube::paused_until() - 5, 'The job is due after the quota reset' );
+assert_true( PressHub_Social_YouTube::paused_until() > time(), 'YouTube is paused until the reset' );
+PressHub_Social_Queue::update_job( $q_id, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'While paused no YouTube job is handed out' );
+$reset = PressHub_Social_YouTube::next_quota_reset( strtotime( '2026-11-18 20:00:00 UTC' ) );
+assert_equals( '2026-11-19 08:05', gmdate( 'Y-m-d H:i', $reset ), 'The quota resets at midnight Pacific Time' );
+delete_option( PressHub_Social_YouTube::PAUSED_UNTIL_OPTION );
+
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'auth' ] );
+$req_c->set_param( 'error', 'Invalid Credentials' );
+PressHub_Social_REST_Controller::handle_complete( $req_c );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $q_id )['status'], 'A refused sign-in also holds the job' );
+assert_false( PressHub_Social_YouTube::is_connected(), 'A refused sign-in reported by the worker stops YouTube uploads' );
+delete_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION );
+
+// A finished upload YouTube refused fails at once: the same video would be refused again.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing', 'attempts' => 1 ] );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'refused' ] );
+$req_c->set_param( 'error', 'YouTube refused the uploaded video V9 (rejected: length).' );
+$refused_done = PressHub_Social_REST_Controller::handle_complete( $req_c );
+$refused_job  = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'failed', $refused_job['status'], 'A refused upload is failed, not retried' );
+assert_equals( 'failed', $refused_done['status'] ?? '', 'The worker is told it failed' );
+assert_true( PressHub_Social_YouTube::is_connected(), 'A refused video does not stop YouTube uploads' );
+
+// A playlist error is kept and shown; Retry never re-uploads a published video.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_p = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_p->set_param( 'job_id', $q_id );
+$req_p->set_param( 'status', 'published' );
+$req_p->set_param( 'external_post_id', 'VID1' );
+$req_p->set_param( 'external_post_url', 'https://www.youtube.com/watch?v=VID1' );
+$req_p->set_param( 'metadata', [ 'youtube_kind' => 'episode', 'youtube_playlist_error' => 'Playlist not found.', 'youtube_episode_note' => 'story images: none could be downloaded' ] );
+PressHub_Social_REST_Controller::handle_complete( $req_p );
+$pub = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'published', $pub['status'], 'An upload with a playlist error is published' );
+assert_equals( 'Playlist not found.', PressHub_Social_YouTube::playlist_error( $pub ), 'The playlist error stays on the job for the Queue screen' );
+assert_false( PressHub_Social_YouTube::can_retry( $pub ), 'Retry is not offered on a published YouTube video' );
+assert_false( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'processing', 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ] ), 'A YouTube job that is uploading now cannot be retried' );
+assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'processing', 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - 4 * 3600 ) ] ), 'A YouTube job stuck for hours can be retried' );
+assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'failed' ] ), 'A failed YouTube job can be retried' );
+$repost_id = PressHub_Social_Queue::repost_as_new_job( $q_id );
+$repost    = is_int( $repost_id ) ? PressHub_Social_Queue::get_job( $repost_id ) : [];
+assert_equals( '', PressHub_Social_YouTube::playlist_error( (array) $repost ), 'A re-post does not inherit the earlier playlist error' );
+assert_equals( 'story images: none could be downloaded', PressHub_Social_YouTube::episode_note( $pub ), 'What the episode video lacked stays on the job for the Queue screen' );
+assert_equals( '', PressHub_Social_YouTube::episode_note( (array) $repost ), 'A re-post does not inherit the earlier episode note' );
+$repost_meta = json_decode( (string) ( $repost['metadata'] ?? '' ), true );
+$repost_q    = strtotime( (string) ( $repost_meta['youtube_episode']['queued_at'] ?? '' ) );
+assert_true( false !== $repost_q && $repost_q >= time() - 5, 'A re-posted episode waits for story images from now' );
+if ( is_int( $repost_id ) ) {
+    PressHub_Social_Queue::cancel_job( $repost_id );
+}
+update_option( PressHub_Social_YouTube::PAUSED_UNTIL_OPTION, time() + 3600 );
+PressHub_Social_YouTube::client_changed( 'a', 'b' );
+assert_equals( 0, PressHub_Social_YouTube::paused_until(), 'A new OAuth client is not held by the old project\'s quota pause' );
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+update_option( PressHub_Social_YouTube::CHANNEL_OPTION, [ 'id' => 'UC123', 'title' => 'PressHub Cyprus' ] );
+
+// Outside Pull mode a YouTube job fails at once.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'pending' ] );
+update_option( 'presshub_social_worker_mode', 'push' );
+$push = PressHub_Social_Dispatcher::dispatch_job( $q_id );
+assert_equals( 'youtube_needs_pull', is_wp_error( $push ) ? $push->get_error_code() : '', 'A YouTube job is never dispatched in Push mode' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+
+// Text rules for YouTube.
+$yt_host = function_exists( 'home_url' ) && wp_parse_url( home_url(), PHP_URL_HOST ) ? preg_replace( '/^www\./i', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) : 'presshub.cy';
+assert_equals( 'Ολόκληρο το άρθρο στο ' . $yt_host . '.', PressHub_Social_YouTube::youtube_cta( 'Ολόκληρο το άρθρο στο PressHub, λινκ στο bio.' ), 'TikTok\'s "link in bio" names the site on YouTube' );
+assert_equals( 'Ολόκληρη η ενημέρωση στο ' . $yt_host, PressHub_Social_YouTube::youtube_cta( 'Ολόκληρη η ενημέρωση: λινκ στο bio' ), 'The podcast short caption line too' );
+assert_equals( 'Ολόκληρο το άρθρο στο ' . $yt_host . '.', PressHub_Social_YouTube::youtube_cta( 'Ολόκληρο το άρθρο στο PressHub.cy, το λινκ στο bio.' ), '"στο PressHub.cy, το λινκ στο bio" names the site once' );
+assert_equals( 'Δείτε στο ' . $yt_host . ' τώρα', PressHub_Social_YouTube::youtube_cta( 'Δείτε τον σύνδεσμο στο βιογραφικό τώρα' ), '"σύνδεσμο στο βιογραφικό" too' );
+assert_equals( 'Η βιογραφία του', PressHub_Social_YouTube::youtube_cta( 'Η βιογραφία του' ), 'Other text is left alone' );
+assert_equals( 'Τιμές 3 5 ευρώ', PressHub_Social_YouTube::clean_title( 'Τιμές 3 < 5 ευρώ' ), 'A bare < does not cut the rest of the title' );
+assert_equals( [ 'κύπρος' ], PressHub_Social_YouTube::tags_from( 'Δείτε https://example.com/a#section και #κύπρος' ), 'A #anchor in a link is not a tag' );
+$yt_cta = PressHub_Social_YouTube::attach_upload( [ 'id' => 9, 'post_id' => 890, 'platform' => 'youtube', 'post_copy' => 'Λεζάντα. Ολόκληρη η ενημέρωση: λινκ στο bio #κύπρος', 'video_title' => 'H', 'post_url' => 'https://example.com/?p=890', 'tiktok_short' => [ 'index' => 0 ] ] );
+assert_false( str_contains( $yt_cta['youtube']['description'] ?? '', 'bio' ), 'A YouTube description never says "link in bio"' );
+
+// A new OAuth client drops the old sign-in.
+PressHub_Social_YouTube::client_changed( 'old-client.apps.googleusercontent.com', 'new-client.apps.googleusercontent.com' );
+assert_equals( '', PressHub_Social_YouTube::get_refresh_token(), 'A changed client ID forgets the sign-in' );
+assert_equals( [], PressHub_Social_YouTube::channel(), 'A changed client ID forgets the channel' );
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+PressHub_Social_YouTube::client_changed( 'same', 'same' );
+assert_equals( '1//REFRESH', PressHub_Social_YouTube::get_refresh_token(), 'Saving the same client keeps the sign-in' );
+
+// Disconnect forgets everything.
+PressHub_Social_YouTube::disconnect();
+assert_false( PressHub_Social_YouTube::is_connected(), 'Disconnect removes the sign-in' );
+assert_equals( [], PressHub_Social_YouTube::channel(), 'Disconnect removes the channel' );
+
+PressHub_Social_YouTube::set_http( null );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', false );
+delete_option( 'presshub_social_youtube_shorts_enabled' );
+delete_option( 'presshub_social_youtube_podcast_enabled' );
+delete_option( 'presshub_social_youtube_podcast_playlist_id' );
+delete_option( 'presshub_social_youtube_client_id' );
+delete_option( 'presshub_social_youtube_client_secret' );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός' );
 
 // Fallback: an article short that cannot be prepared is posted the classic way.
 update_post_meta( 890, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
@@ -2872,6 +3901,937 @@ $still_pending_tt = array_values( array_filter(
 ) );
 assert_equals( 2, count( $still_pending_tt ), 'cancel_superseded(instagram) leaves TikTok short jobs pending' );
 
+// ----------------------------------------------------------------------
+// Suite: Facebook Reels (Shorts), next to the Facebook link post
+// ----------------------------------------------------------------------
+echo "\n--- Suite: Facebook Reels (Shorts) ---\n";
+
+delete_option( 'presshub_social_facebook_shorts_enabled' );
+assert_false( PressHub_Social_Settings_Storage::get_facebook_shorts_enabled(), 'Facebook Reels are off by default' );
+update_option( 'presshub_social_facebook_shorts_enabled', true );
+$_POST = [ 'unrelated_tab' => '1' ];
+assert_true( PressHub_Social_Settings_Storage::sanitize_facebook_shorts_enabled( null ), 'sanitize_facebook_shorts_enabled keeps the stored value when the box is on another tab' );
+$_POST = [];
+assert_true( in_array( 'facebook', PressHub_Social_TikTok_Shorts::PLATFORMS, true ), 'Facebook is a shorts platform' );
+assert_false( PressHub_Social_TikTok_Shorts::has_classic_fallback( [ 'platform' => 'facebook' ] ), 'A Facebook Reel never falls back to a classic post (the link post is already made)' );
+assert_false( PressHub_Social_TikTok_Shorts::has_classic_fallback( [ 'platform' => 'youtube' ] ), 'A YouTube short never falls back to a classic post' );
+assert_true( PressHub_Social_TikTok_Shorts::has_classic_fallback( [ 'platform' => 'instagram' ] ), 'An Instagram article short still falls back to the classic post' );
+
+$fb_short_post_id = 912;
+$GLOBALS['mock_posts'][ $fb_short_post_id ] = (object) [
+    'ID'           => $fb_short_post_id,
+    'post_title'   => 'Daily Briefing Podcast FB Reels Test',
+    'post_content' => 'Podcast body',
+    'post_status'  => 'publish',
+    'post_type'    => 'post',
+];
+update_post_meta( $fb_short_post_id, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $fb_short_post_id, '_presshub_podcast_script', '[SPEAKER_1]: Welcome to the news.' );
+assert_true( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'automation', 'facebook' ), 'should_split is true for Facebook when Facebook Reels are on in Pull Mode' );
+update_option( 'presshub_social_engine_facebook', 'api' );
+delete_option( 'presshub_social_meta_page_id' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'api', 'facebook' ), 'Facebook Reels on the API engine need the Meta Page ID and token' );
+update_option( 'presshub_social_meta_page_id', '1234567890' );
+update_option( 'presshub_social_meta_access_token', 'user-token-abc' );
+assert_true( PressHub_Social_TikTok_Shorts::facebook_reels_via_api(), 'Facebook Reels go through the Graph API with the API engine and Meta set up' );
+assert_true( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'api', 'facebook' ), 'should_split is true for Facebook on the API engine with Meta set up' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( $fb_short_post_id, 'api', 'instagram' ), 'The API engine still makes no Instagram Reels' );
+$fb_api_ids = PressHub_Social_Dispatcher::enqueue_facebook_shorts( $fb_short_post_id, 'api', null, null, time() );
+assert_equals( 'automation', PressHub_Social_Queue::get_job( $fb_api_ids[0] )['engine'] ?? '', 'A Reel queued for the API engine is a worker job' );
+
+// The claim: a worker that can upload Reels through the API gets them without a Facebook
+// session, with mode api; a browser Facebook post is not handed to it.
+PressHub_Social_Queue::reset_memory_store();
+$fb_ready_meta = [ 'tiktok_short' => [
+    'index'   => 0,
+    'count'   => 1,
+    'hook'    => 'Reel hook',
+    'caption' => 'Reel caption #news',
+    'images'  => [],
+    'audio'   => [ 'audio_url' => 'https://example.com/uploads/reel.wav', 'segments' => [ [ 'speaker' => 1, 'text' => 'Hi', 'start' => 0, 'end' => 1 ] ] ],
+] ];
+$fb_reel_job = PressHub_Social_Queue::enqueue( [
+    'post_id' => $fb_short_post_id, 'platform' => 'facebook', 'engine' => 'automation', 'post_copy' => PressHub_Social_TikTok_Shorts::placeholder_copy( 0, 1 ),
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'status' => 'pending', 'metadata' => $fb_ready_meta,
+] );
+$fb_browser_job = PressHub_Social_Queue::enqueue( [
+    'post_id' => $fb_short_post_id, 'platform' => 'facebook', 'engine' => 'automation', 'post_copy' => 'A browser link post',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'status' => 'pending',
+] );
+$fb_req = new WP_REST_Request( 'POST', '/worker/claim' );
+$fb_req->set_param( 'sessions', [ 'facebook' => false, 'tiktok' => true ] );
+$fb_req->set_param( 'limit', 5 );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $fb_req )['jobs'] ), 'A worker without a Facebook session or the Reels API capability gets no Facebook job' );
+$fb_req->set_param( 'capabilities', [ 'facebook_reels_api' ] );
+$fb_claimed = PressHub_Social_REST_Controller::handle_claim( $fb_req )['jobs'];
+assert_equals( [ (int) $fb_reel_job ], array_map( fn( $j ) => (int) $j['id'], $fb_claimed ), 'A Reels API worker without a Facebook session gets the Reel, not the browser post' );
+assert_equals( 'api', $fb_claimed[0]['facebook_reel']['mode'] ?? '', 'The claimed Reel says to upload it through the Graph API' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $fb_browser_job )['status'] ?? '', 'The browser Facebook post stays queued' );
+PressHub_Social_Queue::update_job( (int) $fb_reel_job, [ 'status' => 'pending' ] );
+update_option( 'presshub_social_engine_facebook', 'automation' );
+$fb_req->set_param( 'sessions', [ 'facebook' => true ] );
+$fb_browser_claim = PressHub_Social_REST_Controller::handle_claim( $fb_req )['jobs'];
+$fb_browser_reel  = array_values( array_filter( $fb_browser_claim, fn( $j ) => (int) $j['id'] === (int) $fb_reel_job ) );
+assert_equals( 'browser', $fb_browser_reel[0]['facebook_reel']['mode'] ?? '', 'On the automation engine the Reel is posted with the browser session' );
+assert_equals( 2, count( $fb_browser_claim ), 'A worker with a Facebook session gets the browser post too' );
+PressHub_Social_Queue::reset_memory_store();
+
+// The Page token for the worker's upload.
+PressHub_Social_Meta_API_Client::set_http_get( fn( $url ) => [ 'access_token' => 'page-token-xyz', 'id' => '1234567890' ] );
+$fb_tok = PressHub_Social_REST_Controller::handle_facebook_token( new WP_REST_Request( 'POST', '/worker/facebook/token' ) );
+assert_equals( '1234567890', $fb_tok['page_id'] ?? '', 'The Facebook token route gives the Page ID' );
+assert_equals( 'page-token-xyz', $fb_tok['access_token'] ?? '', 'The Facebook token route gives the Page token, not the stored token' );
+assert_equals( PressHub_Social_Meta_API_Client::GRAPH_API_VERSION, $fb_tok['graph_version'] ?? '', 'The Facebook token route gives the Graph API version' );
+PressHub_Social_Meta_API_Client::set_http_get( null );
+delete_option( 'presshub_social_meta_access_token' );
+$fb_tok_err = PressHub_Social_REST_Controller::handle_facebook_token( new WP_REST_Request( 'POST', '/worker/facebook/token' ) );
+assert_true( is_wp_error( $fb_tok_err ) && 409 === ( $fb_tok_err->get_error_data()['status'] ?? 0 ), 'The Facebook token route refuses (409) without a Meta token' );
+delete_option( 'presshub_social_meta_page_id' );
+delete_option( 'presshub_social_engine_facebook' );
+
+$fb_link_time = time() + 600;
+$fb_ids       = PressHub_Social_Dispatcher::enqueue_facebook_shorts( $fb_short_post_id, 'automation', null, null, $fb_link_time );
+assert_equals( 2, count( $fb_ids ), 'A podcast gets Shorts per Podcast Facebook Reel jobs' );
+$fb_first = PressHub_Social_Queue::get_job( $fb_ids[0] );
+assert_equals( 'facebook', $fb_first['platform'], 'The Reel job is a Facebook job' );
+assert_true( PressHub_Social_TikTok_Shorts::is_short_job( $fb_first ), 'The Facebook Reel job is a short job' );
+assert_true( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) $fb_first['post_copy'] ), 'The Reel keeps the placeholder until the short\'s own caption fills it' );
+assert_equals(
+    gmdate( 'Y-m-d H:i:s', $fb_link_time + PressHub_Social_Dispatcher::shorts_stagger_minutes() * 60 ),
+    (string) $fb_first['scheduled_at'],
+    'The first Reel follows the link post by the platform stagger'
+);
+
+update_option( 'presshub_social_facebook_shorts_enabled', false );
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_facebook_shorts( $fb_short_post_id, 'automation', null, null, time() ), 'No Reel when Facebook Reels are off' );
+
+// Through the dispatcher: the link post stays and the Reels come after it.
+update_option( 'presshub_social_facebook_shorts_enabled', true );
+update_option( 'presshub_social_engine_facebook', 'automation' );
+$fb_saved_platforms = get_option( 'presshub_social_enabled_platforms', null );
+$fb_saved_sessions  = get_option( 'presshub_social_worker_sessions', null );
+update_option( 'presshub_social_enabled_platforms', [ 'facebook' ] );
+update_option( 'presshub_social_worker_sessions', [ 'facebook' => true ] );
+PressHub_Social_Queue::reset_memory_store();
+$fb_all = PressHub_Social_Dispatcher::enqueue_for_post( $fb_short_post_id, [ 'facebook' ] );
+$fb_jobs  = array_map( [ 'PressHub_Social_Queue', 'get_job' ], $fb_all );
+$fb_links = array_values( array_filter( $fb_jobs, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_short_job( $j ) ) );
+$fb_reels = array_values( array_filter( $fb_jobs, [ 'PressHub_Social_TikTok_Shorts', 'is_short_job' ] ) );
+assert_equals( 1, count( $fb_links ), 'With Facebook Reels on, the Facebook link post is still queued' );
+assert_false( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) ( $fb_links[0]['post_copy'] ?? '' ) ), 'The link post has its own copy, not a short placeholder' );
+assert_equals( 2, count( $fb_reels ), 'The Reels are queued next to the link post' );
+assert_true( strtotime( $fb_reels[0]['scheduled_at'] . ' UTC' ) > strtotime( $fb_links[0]['scheduled_at'] . ' UTC' ), 'The first Reel goes out after the link post' );
+PressHub_Social_Queue::reset_memory_store();
+delete_option( 'presshub_social_engine_facebook' );
+delete_option( 'presshub_social_facebook_shorts_enabled' );
+null === $fb_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $fb_saved_platforms );
+null === $fb_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $fb_saved_sessions );
+
+// ----------------------------------------------------------------------
+// Suite: One story schedule for every platform's shorts
+// ----------------------------------------------------------------------
+echo "\n--- Suite: One story schedule for every platform's shorts ---\n";
+
+foreach ( [ 'tiktok', 'instagram', 'facebook', 'youtube' ] as $us_p ) {
+    update_option( 'presshub_social_' . $us_p . '_shorts_enabled', true );
+}
+PressHub_Social_Queue::reset_memory_store();
+$us_start   = time() + 300;
+$us_targets = [ 'facebook' => 'automation', 'youtube' => 'automation', 'tiktok' => 'automation', 'instagram' => 'automation' ];
+$us_ids     = PressHub_Social_Dispatcher::enqueue_shorts( $fb_short_post_id, $us_targets, null, null, $us_start );
+$us_jobs    = array_map( [ 'PressHub_Social_Queue', 'get_job' ], $us_ids );
+$us_by      = [];
+foreach ( $us_jobs as $us_j ) {
+    $us_by[ $us_j['platform'] ][] = $us_j;
+}
+assert_equals( [ 'tiktok', 'instagram', 'youtube', 'facebook' ], array_keys( $us_by ), 'Shorts are queued per platform in the fixed order, whatever order the targets come in' );
+$us_counts = array_map( 'count', $us_by );
+assert_equals( 1, count( array_unique( $us_counts ) ), 'Every platform gets the same number of story jobs' );
+$us_stagger = PressHub_Social_Dispatcher::shorts_stagger_minutes() * 60;
+assert_equals( 300, $us_stagger, 'Platforms of one story are 5 minutes apart by default' );
+foreach ( [ 'tiktok' => 0, 'instagram' => 1, 'youtube' => 2, 'facebook' => 3 ] as $us_p => $us_pos ) {
+    assert_equals( gmdate( 'Y-m-d H:i:s', $us_start + $us_pos * $us_stagger ), (string) $us_by[ $us_p ][0]['scheduled_at'], "The first story goes to {$us_p} in its place in the story slot" );
+}
+if ( count( $us_by['tiktok'] ) > 1 ) {
+    $us_gap = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+    assert_equals( gmdate( 'Y-m-d H:i:s', $us_start + $us_gap + $us_stagger ), (string) $us_by['instagram'][1]['scheduled_at'], 'The second story keeps the same platform offset one spacing later' );
+}
+assert_equals( 'automation', $us_by['facebook'][0]['engine'], 'A Facebook Reel stays a worker job' );
+
+// A Facebook Reel never goes out before the Facebook link post.
+PressHub_Social_Queue::reset_memory_store();
+$us_link = $us_start + 3600;
+$us_two  = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_shorts( $fb_short_post_id, [ 'tiktok' => 'automation', 'facebook' => 'api' ], null, null, $us_start, [], $us_link ) );
+$us_fb   = array_values( array_filter( $us_two, fn( $j ) => 'facebook' === $j['platform'] ) )[0] ?? [];
+assert_equals( 'facebook', $us_fb['platform'] ?? '', 'The Reel is queued with the TikTok shorts' );
+assert_equals( gmdate( 'Y-m-d H:i:s', $us_link + $us_stagger ), (string) ( $us_fb['scheduled_at'] ?? '' ), 'A Reel whose slot comes before the link post waits until the stagger after it' );
+
+// The same story picks the same music on every platform, so the worker renders it once.
+$us_seed_a = PressHub_Social_TikTok_Shorts::story_seed( [ 'id' => 11, 'post_id' => 77, 'metadata' => [ 'tiktok_short' => [ 'index' => 1 ] ] ] );
+$us_seed_b = PressHub_Social_TikTok_Shorts::story_seed( [ 'id' => 12, 'post_id' => 77, 'metadata' => [ 'tiktok_short' => [ 'index' => 1 ] ] ] );
+$us_seed_c = PressHub_Social_TikTok_Shorts::story_seed( [ 'id' => 13, 'post_id' => 77, 'metadata' => [ 'tiktok_short' => [ 'index' => 2 ] ] ] );
+assert_equals( $us_seed_a, $us_seed_b, 'Two platforms\' jobs of one story share the music seed' );
+assert_true( $us_seed_a !== $us_seed_c, 'Two stories of a post take turns between tracks' );
+
+// Through the dispatcher: TikTok and Instagram shorts come from the same schedule.
+$us_saved_platforms = get_option( 'presshub_social_enabled_platforms', null );
+$us_saved_sessions  = get_option( 'presshub_social_worker_sessions', null );
+update_option( 'presshub_social_enabled_platforms', [ 'tiktok', 'instagram' ] );
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true, 'instagram' => true ] );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_engine_instagram', 'automation' );
+update_option( 'presshub_social_tiktok_slides_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+$us_all  = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $fb_short_post_id, [ 'tiktok', 'instagram' ] ) );
+$us_tt   = array_values( array_filter( $us_all, fn( $j ) => 'tiktok' === $j['platform'] ) );
+$us_ig   = array_values( array_filter( $us_all, fn( $j ) => 'instagram' === $j['platform'] ) );
+assert_true( count( $us_tt ) > 0 && count( $us_tt ) === count( $us_ig ), 'The dispatcher queues the same stories for TikTok and Instagram' );
+assert_true( (bool) array_filter( $us_all, [ 'PressHub_Social_TikTok_Shorts', 'is_short_job' ] ) && count( $us_all ) === count( array_filter( $us_all, [ 'PressHub_Social_TikTok_Shorts', 'is_short_job' ] ) ), 'With shorts on, TikTok and Instagram get only short jobs' );
+assert_equals( $us_stagger, strtotime( $us_ig[0]['scheduled_at'] . ' UTC' ) - strtotime( $us_tt[0]['scheduled_at'] . ' UTC' ), 'Instagram posts the story one stagger after TikTok' );
+PressHub_Social_Queue::reset_memory_store();
+delete_option( 'presshub_social_engine_tiktok' );
+delete_option( 'presshub_social_engine_instagram' );
+delete_option( 'presshub_social_tiktok_slides_enabled' );
+foreach ( [ 'tiktok', 'instagram', 'facebook', 'youtube' ] as $us_p ) {
+    delete_option( 'presshub_social_' . $us_p . '_shorts_enabled' );
+}
+null === $us_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $us_saved_platforms );
+null === $us_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $us_saved_sessions );
+
+// ----------------------------------------------------------------------
+// Suite: X video posts (2.86.0)
+// ----------------------------------------------------------------------
+echo "\n--- Suite: X video posts ---\n";
+
+delete_option( 'presshub_social_twitter_shorts_enabled' );
+assert_false( PressHub_Social_Settings_Storage::get_twitter_shorts_enabled(), 'X video posts are off by default' );
+update_option( 'presshub_social_twitter_shorts_enabled', true );
+$_POST = [ 'unrelated_tab' => '1' ];
+assert_true( PressHub_Social_Settings_Storage::sanitize_twitter_shorts_enabled( null ), 'sanitize_twitter_shorts_enabled keeps the stored value when the box is on another tab' );
+$_POST = [];
+assert_true( in_array( 'twitter', PressHub_Social_TikTok_Shorts::PLATFORMS, true ), 'X is a shorts platform' );
+assert_equals( 'X', PressHub_Social_TikTok_Shorts::platform_label( 'twitter' ), 'X is called X in log lines' );
+assert_true( PressHub_Social_TikTok_Shorts::has_classic_fallback( [ 'platform' => 'twitter' ] ), 'An X article short falls back to the image post' );
+assert_equals( 'twitter', array_slice( PressHub_Social_Dispatcher::SHORTS_PLATFORM_ORDER, -1 )[0], 'X comes last in a story slot (its link post goes first)' );
+
+$x_saved_platforms = get_option( 'presshub_social_enabled_platforms', null );
+$x_saved_format    = get_option( 'presshub_social_tiktok_shorts_format', null );
+$x_saved_article   = get_option( 'presshub_social_tiktok_article_shorts_enabled', null );
+$x_saved_sessions  = get_option( 'presshub_social_worker_sessions', null );
+update_option( 'presshub_social_enabled_platforms', [ 'twitter' ] );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true ] );
+update_option( 'presshub_social_engine_twitter', 'automation' );
+
+// Podcast: the daily brief only, as an extra post after the link tweet.
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
+assert_false( PressHub_Social_Dispatcher::shorts_wanted( $fb_short_post_id, 'twitter', 'automation' ), 'A podcast in one-short-per-story format gets no X video (X gets only the daily brief)' );
+update_option( 'presshub_social_tiktok_shorts_format', 'brief' );
+assert_true( PressHub_Social_Dispatcher::shorts_wanted( $fb_short_post_id, 'twitter', 'automation' ), 'A podcast in daily brief format gets its brief on X' );
+assert_false( PressHub_Social_Dispatcher::shorts_wanted( $fb_short_post_id, 'twitter', 'api' ), 'X videos need the automation engine' );
+PressHub_Social_Queue::reset_memory_store();
+$x_pod  = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $fb_short_post_id, [ 'twitter' ] ) );
+$x_link = array_values( array_filter( $x_pod, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_short_job( $j ) ) );
+$x_vid  = array_values( array_filter( $x_pod, [ 'PressHub_Social_TikTok_Shorts', 'is_short_job' ] ) );
+assert_equals( 1, count( $x_link ), 'A podcast keeps its X link post' );
+assert_equals( 1, count( $x_vid ), 'A podcast gets one X video: its daily brief' );
+$x_vid_meta = is_array( $x_vid[0]['metadata'] ) ? $x_vid[0]['metadata'] : (array) json_decode( (string) $x_vid[0]['metadata'], true );
+assert_true( ! empty( $x_vid_meta['tiktok_short']['brief'] ), 'The X video is the daily brief' );
+assert_true( strtotime( $x_vid[0]['scheduled_at'] . ' UTC' ) > strtotime( $x_link[0]['scheduled_at'] . ' UTC' ), 'The X brief video goes out after the link tweet' );
+
+// The written daily brief gets no X video (its podcast tells the same stories).
+update_post_meta( $fb_short_post_id, '_presshub_briefing_type', 'text' );
+assert_false( PressHub_Social_Dispatcher::shorts_wanted( $fb_short_post_id, 'twitter', 'automation' ), 'The written daily brief gets no X video' );
+update_post_meta( $fb_short_post_id, '_presshub_briefing_type', 'podcast' );
+
+// Article: the X post is its short, with the usual X text and link.
+$x_article_id = 913;
+$GLOBALS['POSTS_STORE'][ $x_article_id ] = [
+    'ID'           => $x_article_id,
+    'post_title'   => 'X Video Article Test',
+    'post_content' => 'The council approved the new coastal road after a long debate on costs and safety.',
+    'post_status'  => 'publish',
+    'post_type'    => 'post',
+];
+$x_article_url = (string) get_permalink( $x_article_id );
+update_post_meta( $x_article_id, '_presshub_social_copy_twitter', 'The council approved the coastal road. ' . $x_article_url );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+assert_equals( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE, PressHub_Social_TikTok_Shorts::source_type( $x_article_id ), 'The test post is an article' );
+PressHub_Social_Queue::reset_memory_store();
+$x_art = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $x_article_id, [ 'twitter' ] ) );
+assert_equals( 1, count( $x_art ), 'An article gets one X post' );
+assert_true( PressHub_Social_TikTok_Shorts::is_short_job( $x_art[0] ), 'The article\'s X post is its short (the video replaces the image)' );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( $x_art[0] ), 'The X short is an article short, so it can fall back to the image post' );
+assert_false( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) $x_art[0]['post_copy'] ), 'The X short carries the usual X text, not a placeholder' );
+assert_true( '' !== $x_article_url && str_contains( (string) $x_art[0]['post_copy'], $x_article_url ), 'The X short keeps the article link' );
+update_option( 'presshub_social_twitter_shorts_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+$x_off = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $x_article_id, [ 'twitter' ] ) );
+assert_true( 1 === count( $x_off ) && ! PressHub_Social_TikTok_Shorts::is_short_job( $x_off[0] ), 'With X video posts off, the article gets the usual X post' );
+update_option( 'presshub_social_twitter_shorts_enabled', true );
+
+// Claim: only a worker that can post X videos gets them; a brief over X's limit is cancelled.
+PressHub_Social_Queue::reset_memory_store();
+$x_ready = function ( float $end ) {
+    return [ 'tiktok_short' => [
+        'index' => 0, 'count' => 1, 'brief' => true, 'hook' => 'Brief hook', 'caption' => 'Today in Cyprus #news', 'images' => [],
+        'audio' => [ 'audio_url' => 'https://example.com/uploads/brief.wav', 'segments' => [ [ 'speaker' => 1, 'text' => 'Hi', 'start' => 0, 'end' => $end ] ] ],
+    ] ];
+};
+$x_ok_job = PressHub_Social_Queue::enqueue( [
+    'post_id' => $fb_short_post_id, 'platform' => 'twitter', 'engine' => 'automation', 'post_copy' => PressHub_Social_TikTok_Shorts::placeholder_copy( 0, 1 ),
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'status' => 'pending', 'metadata' => $x_ready( 100.0 ),
+] );
+$x_req = new WP_REST_Request( 'POST', '/worker/claim' );
+$x_req->set_param( 'sessions', [ 'twitter' => true ] );
+$x_req->set_param( 'limit', 5 );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $x_req )['jobs'] ), 'A worker without the X video capability gets no X video' );
+assert_true( str_starts_with( (string) PressHub_Social_Queue::get_job( $x_ok_job )['last_error'], 'Waiting' ), 'The X video says it waits for a newer worker' );
+$x_req->set_param( 'capabilities', [ PressHub_Social_TikTok_Shorts::TWITTER_VIDEO_CAPABILITY ] );
+$x_claimed = PressHub_Social_REST_Controller::handle_claim( $x_req )['jobs'];
+assert_equals( [ (int) $x_ok_job ], array_map( fn( $j ) => (int) $j['id'], $x_claimed ), 'A worker that can post X videos gets the brief' );
+assert_equals( PressHub_Social_TikTok_Shorts::TWITTER_MAX_VIDEO_SECONDS, (int) ( $x_claimed[0]['tiktok_short']['max_seconds'] ?? 0 ), 'The claimed X video says how long X lets it be' );
+assert_true( str_contains( (string) $x_claimed[0]['post_copy'], 'http' ), 'The brief\'s X caption gets the post\'s link' );
+assert_equals( '', PressHub_Social_TikTok_Shorts::too_long_for_twitter( PressHub_Social_Queue::get_job( $x_ok_job ) ), 'A 101-second video fits X' );
+
+$x_long_job = PressHub_Social_Queue::enqueue( [
+    'post_id' => $fb_short_post_id, 'platform' => 'twitter', 'engine' => 'automation', 'post_copy' => PressHub_Social_TikTok_Shorts::placeholder_copy( 0, 1 ),
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'status' => 'pending', 'metadata' => $x_ready( 150.0 ),
+] );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $x_req )['jobs'] ), 'A brief longer than X takes is not handed out' );
+$x_long = PressHub_Social_Queue::get_job( $x_long_job );
+assert_equals( 'cancelled', $x_long['status'], 'A brief longer than X takes is cancelled' );
+assert_true( str_starts_with( (string) $x_long['last_error'], 'Not posted:' ) && str_contains( (string) $x_long['last_error'], '140' ), 'Its note says it is too long for X' );
+add_filter( 'presshub_social_twitter_max_video_seconds', fn() => 600 );
+assert_equals( '', PressHub_Social_TikTok_Shorts::too_long_for_twitter( array_merge( $x_long, [ 'status' => 'pending' ] ) ), 'The limit can be raised with a filter (X Premium)' );
+remove_all_filters( 'presshub_social_twitter_max_video_seconds' );
+
+PressHub_Social_Queue::reset_memory_store();
+delete_post_meta( $x_article_id, '_presshub_social_copy_twitter' );
+null === $x_saved_article ? delete_option( 'presshub_social_tiktok_article_shorts_enabled' ) : update_option( 'presshub_social_tiktok_article_shorts_enabled', $x_saved_article );
+null === $x_saved_format ? delete_option( 'presshub_social_tiktok_shorts_format' ) : update_option( 'presshub_social_tiktok_shorts_format', $x_saved_format );
+unset( $GLOBALS['POSTS_STORE'][ $x_article_id ] );
+delete_option( 'presshub_social_engine_twitter' );
+delete_option( 'presshub_social_twitter_shorts_enabled' );
+null === $x_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $x_saved_platforms );
+null === $x_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $x_saved_sessions );
+
+// ----------------------------------------------------------------------
+// Suite: TikTok photo slides (#333)
+// ----------------------------------------------------------------------
+echo "\n--- Suite: TikTok photo slides ---\n";
+
+delete_option( 'presshub_social_tiktok_slides_enabled' );
+delete_option( 'presshub_social_tiktok_slides_words' );
+delete_option( 'presshub_social_tiktok_slides_max' );
+assert_true( PressHub_Social_Settings_Storage::get_tiktok_slides_enabled(), 'TikTok Photo Slides are on by default' );
+assert_equals( 30, PressHub_Social_Settings_Storage::get_tiktok_slides_words(), 'Words per photo slide default to 30' );
+assert_equals( 10, PressHub_Social_Settings_Storage::get_tiktok_slides_max(), 'Most photo slides default to 10' );
+assert_equals( 12, PressHub_Social_Settings_Storage::sanitize_tiktok_slides_words( 2 ), 'Words per slide are clamped to at least 12' );
+assert_equals( 35, PressHub_Social_Settings_Storage::sanitize_tiktok_slides_max( 99 ), 'Photo slides are clamped to TikTok\'s 35' );
+update_option( 'presshub_social_tiktok_slides_enabled', true );
+$_POST = [ 'unrelated_tab' => '1' ];
+assert_true( PressHub_Social_Settings_Storage::sanitize_tiktok_slides_enabled( null ), 'sanitize_tiktok_slides_enabled keeps the stored value when the box is on another tab' );
+$_POST = [];
+delete_option( 'presshub_social_prompt_tiktok_slides_sounds' );
+assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_slides_sounds(), 'neutral:' ), 'Sound searches are seeded from the asset file' );
+assert_equals( 'emotional piano', PressHub_Social_TikTok_Shorts::sound_query( 'serious' ), 'sound_query gives the search words of the mood' );
+assert_equals( '', PressHub_Social_TikTok_Shorts::sound_query( 'unknown' ), 'A mood without a line keeps TikTok\'s own sound' );
+
+// Slide texts: speaker tags removed, whole sentences, every word kept.
+$sl_script = "[SPEAKER_1]: Πρώτη πρόταση εδώ. Δεύτερη πρόταση με λίγες ακόμα λέξεις;\n[SPEAKER_2]: Τρίτη πρόταση! Τέταρτη και τελευταία πρόταση.";
+$sl_texts  = PressHub_Social_TikTok_Shorts::slide_texts( $sl_script, 7, 8 );
+assert_true( count( $sl_texts ) >= 2, 'slide_texts cuts the script into several slides' );
+assert_false( (bool) preg_match( '/SPEAKER/u', implode( ' ', $sl_texts ) ), 'slide_texts drops the speaker tags' );
+assert_equals( 'Πρώτη πρόταση εδώ.', $sl_texts[0], 'A slide ends on a whole sentence' );
+$sl_words = fn( $t ) => count( preg_split( '/\s+/u', trim( $t ), -1, PREG_SPLIT_NO_EMPTY ) );
+assert_equals( $sl_words( 'Πρώτη πρόταση εδώ. Δεύτερη πρόταση με λίγες ακόμα λέξεις; Τρίτη πρόταση! Τέταρτη και τελευταία πρόταση.' ), array_sum( array_map( $sl_words, $sl_texts ) ), 'slide_texts keeps every word' );
+$sl_long = '[SPEAKER_1]: ' . implode( ' ', array_fill( 0, 120, 'λέξη' ) ) . '.';
+$sl_fit  = PressHub_Social_TikTok_Shorts::slide_texts( $sl_long, 12, 4 );
+assert_equals( 4, count( $sl_fit ), 'A long script fits the most slides allowed' );
+assert_equals( 120, array_sum( array_map( $sl_words, $sl_fit ) ), 'The fitted slides still hold every word' );
+assert_equals( [], PressHub_Social_TikTok_Shorts::slide_texts( '[SPEAKER_1]:   ', 30, 8 ), 'An empty script gives no slides' );
+
+// Queueing: one slide job per short, halfway between two shorts.
+$sl_post_id = 913;
+$GLOBALS['mock_posts'][ $sl_post_id ] = (object) [
+    'ID'           => $sl_post_id,
+    'post_title'   => 'Daily Briefing Podcast Slides Test',
+    'post_content' => 'Podcast body',
+    'post_status'  => 'publish',
+    'post_type'    => 'post',
+];
+update_post_meta( $sl_post_id, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $sl_post_id, '_presshub_podcast_script', '[SPEAKER_1]: Welcome to the news.' );
+PressHub_Social_Queue::reset_memory_store();
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_post_id, 'api', time() ), 'No photo slides on the TikTok API engine' );
+$sl_start = time() + 300;
+$sl_ids   = PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_post_id, 'automation', $sl_start );
+$sl_count = PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
+assert_equals( $sl_count, count( $sl_ids ), 'A podcast gets one photo slide job per short' );
+$sl_first = PressHub_Social_Queue::get_job( $sl_ids[0] );
+$sl_gap   = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+assert_true( PressHub_Social_TikTok_Shorts::is_slides_job( $sl_first ), 'The queued job is a photo slide job' );
+assert_true( PressHub_Social_TikTok_Shorts::is_short_job( $sl_first ), 'A photo slide job is prepared like a short' );
+assert_equals( 'tiktok', $sl_first['platform'], 'Photo slides go to TikTok' );
+assert_equals( gmdate( 'Y-m-d H:i:s', $sl_start + (int) floor( $sl_gap / 2 ) ), (string) $sl_first['scheduled_at'], 'The first photo post goes out halfway to the second short' );
+assert_false( PressHub_Social_TikTok_Shorts::has_classic_fallback( $sl_first ), 'Photo slides never fall back to a classic post' );
+assert_false( PressHub_Social_TikTok_Shorts::is_ready( $sl_first ), 'An unprepared slide job is not ready' );
+
+// Through the dispatcher with TikTok video shorts on: the shorts only, no photo posts of the
+// same stories (2.84.0, a story goes to TikTok once).
+$sl_saved_platforms = get_option( 'presshub_social_enabled_platforms', null );
+$sl_saved_sessions  = get_option( 'presshub_social_worker_sessions', null );
+update_option( 'presshub_social_enabled_platforms', [ 'tiktok' ] );
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true ] );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+PressHub_Social_Queue::reset_memory_store();
+$sl_all    = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $sl_post_id, [ 'tiktok' ] ) );
+$sl_slides = array_values( array_filter( $sl_all, [ 'PressHub_Social_TikTok_Shorts', 'is_slides_job' ] ) );
+$sl_videos = array_values( array_filter( $sl_all, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_slides_job( $j ) ) );
+assert_equals( 0, count( $sl_slides ), 'With TikTok Shorts on, the dispatcher queues no photo slides of the same stories' );
+assert_equals( $sl_count, count( $sl_videos ), 'The video shorts are queued as before' );
+// The slides queued next to the shorts directly still share their plan (preparation below).
+PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_post_id, 'automation', time() );
+
+// Preparation: shared plan and images, no speech for the slide jobs.
+$sl_synth = 0;
+$sl_imgs  = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => json_encode( [ 'shorts' => [
+    [ 'topic' => 'One', 'hook' => 'Hook one', 'script' => '[SPEAKER_1]: First sentence of story one. Second sentence.', 'caption' => 'Caption one #news', 'mood' => 'serious', 'visuals' => [ 'Scene one' ] ],
+    [ 'topic' => 'Two', 'hook' => 'Hook two', 'script' => '[SPEAKER_1]: Story two.', 'caption' => 'Caption two #news', 'mood' => 'neutral', 'visuals' => [ 'Scene two' ] ],
+    [ 'topic' => 'Three', 'hook' => 'Hook three', 'script' => '[SPEAKER_1]: Story three.', 'caption' => 'Caption three #news', 'mood' => 'neutral', 'visuals' => [ 'Scene three' ] ],
+] ] ) );
+PressHub_Social_TikTok_Shorts::set_synthesizer( function( $short, $job ) use ( &$sl_synth ) {
+    $sl_synth++;
+    return [ 'url' => 'https://example.com/sl-audio-' . $sl_synth . '.mp3', 'id' => 300 + $sl_synth, 'segments' => [ [ 'speaker' => 'SPEAKER_1', 'text' => 'Line', 'start' => 0.0, 'end' => 2.0 ] ] ];
+} );
+PressHub_Social_TikTok_Shorts::set_image_generator( function( $prompt, $pid, $short ) use ( &$sl_imgs ) {
+    $sl_imgs++;
+    return [ 'url' => 'https://example.com/sl-img-' . $sl_imgs . '.png', 'id' => 400 + $sl_imgs ];
+} );
+PressHub_Social_TikTok_Shorts::prepare_post( $sl_post_id );
+assert_equals( $sl_count, $sl_synth, 'Only the video shorts are voiced' );
+assert_equals( $sl_count, $sl_imgs, 'The slides share the shorts\' story images' );
+$sl_ready = array_values( array_filter( PressHub_Social_Queue::get_jobs_for_post( $sl_post_id ), [ 'PressHub_Social_TikTok_Shorts', 'is_slides_job' ] ) );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( $sl_ready[0] ), 'A prepared slide job is ready without audio' );
+$sl_meta = json_decode( (string) $sl_ready[0]['metadata'], true )['tiktok_short'] ?? [];
+assert_false( isset( $sl_meta['audio'] ), 'A slide job stores no audio' );
+
+// Claim: only a worker with the capability; the payload has tiktok_slides and no audio.
+foreach ( PressHub_Social_Queue::get_jobs_for_post( $sl_post_id ) as $sl_j ) {
+    PressHub_Social_Queue::update_job( (int) $sl_j['id'], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+}
+update_post_meta( $sl_post_id, '_presshub_audio_url', 'https://example.com/full-podcast.mp3' );
+$sl_req = new WP_REST_Request( 'POST', '/worker/claim' );
+$sl_req->set_param( 'sessions', [ 'tiktok' => true ] );
+$sl_req->set_param( 'limit', 10 );
+$sl_claim_old = PressHub_Social_REST_Controller::handle_claim( $sl_req )['jobs'];
+assert_equals( 0, count( array_filter( $sl_claim_old, fn( $j ) => ! empty( $j['tiktok_slides'] ) || PressHub_Social_TikTok_Shorts::is_slides_job( $j ) ) ), 'A worker without the photo slides capability gets no slide job' );
+$sl_waiting = PressHub_Social_Queue::get_job( (int) $sl_ready[0]['id'] );
+assert_equals( 'pending', $sl_waiting['status'] ?? '', 'The slide job waits in the queue' );
+assert_true( str_starts_with( (string) ( $sl_waiting['last_error'] ?? '' ), 'Waiting for a worker' ), 'The waiting slide job says what it waits for' );
+$sl_req->set_param( 'capabilities', [ PressHub_Social_TikTok_Shorts::SLIDES_CAPABILITY ] );
+$sl_claim = array_values( array_filter( PressHub_Social_REST_Controller::handle_claim( $sl_req )['jobs'], fn( $j ) => ! empty( $j['tiktok_slides'] ) ) );
+assert_true( count( $sl_claim ) >= 1, 'A worker with the capability gets the slide jobs' );
+$sl_payload = $sl_claim[0];
+assert_true( empty( $sl_payload['audio_url'] ), 'A slide job carries no audio, not even the podcast\'s' );
+assert_false( isset( $sl_payload['tiktok_short'] ), 'A slide job is not handed out as a video short' );
+assert_equals( 'Hook one', $sl_payload['tiktok_slides']['hook'] ?? '', 'The slides carry the short\'s hook' );
+assert_equals( [ 'First sentence of story one. Second sentence.' ], $sl_payload['tiktok_slides']['slides'] ?? [], 'The slides carry the script as text' );
+assert_equals( 'emotional piano', $sl_payload['tiktok_slides']['sound_query'] ?? '', 'The slides carry the sound search of their mood' );
+assert_equals( 1, count( array_filter( (array) ( $sl_payload['tiktok_slides']['images'] ?? [] ), fn( $u ) => (bool) preg_match( '#^https://example\.com/sl-img-\d\.png$#', (string) $u ) ) ), 'The slides carry the story image' );
+assert_equals( 'Caption one #news', $sl_payload['post_copy'] ?? '', 'The placeholder becomes the short\'s caption' );
+assert_equals( '', (string) ( PressHub_Social_Queue::get_job( (int) $sl_payload['id'] )['last_error'] ?? '' ), 'The waiting note is cleared once handed out' );
+
+// An article's slides post its TikTok caption, like its video short, from one AI call (#333 review).
+$sl_art_id = 914;
+$GLOBALS['POSTS_STORE'][ $sl_art_id ] = [ 'ID' => $sl_art_id, 'post_title' => 'Άρθρο για φωτογραφίες', 'post_content' => '<p>Ένα άρθρο με αρκετό κείμενο για τις φωτογραφίες του TikTok.</p>', 'post_excerpt' => '', 'post_status' => 'publish' ];
+$GLOBALS['test_posts'][ $sl_art_id ]  = new WP_Post( $GLOBALS['POSTS_STORE'][ $sl_art_id ] );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+$sl_copy_calls = 0;
+PressHub_Social_AI_Copywriter::set_ai_caller( function() use ( &$sl_copy_calls ) {
+    $sl_copy_calls++;
+    return 'Λεζάντα άρθρου για TikTok #slides';
+} );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_jobs   = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $sl_art_id, [ 'tiktok' ] ) );
+$sl_art_slides = array_values( array_filter( $sl_art_jobs, [ 'PressHub_Social_TikTok_Shorts', 'is_slides_job' ] ) );
+$sl_art_videos = array_values( array_filter( $sl_art_jobs, fn( $j ) => ! PressHub_Social_TikTok_Shorts::is_slides_job( $j ) ) );
+assert_equals( 0, count( $sl_art_slides ), 'With TikTok Shorts on, an article gets its video short and no photo slides' );
+assert_equals( 1, count( $sl_art_videos ), 'The article gets one video short' );
+assert_equals( 'Λεζάντα άρθρου για TikTok #slides', $sl_art_videos[0]['post_copy'] ?? '', 'The article\'s video short posts the TikTok caption' );
+assert_equals( 1, $sl_copy_calls, 'The article\'s video short makes one caption call' );
+// With TikTok Shorts off (Article Shorts still on), the photo slides take the classic post's place.
+update_option( 'presshub_social_tiktok_shorts_enabled', false );
+$sl_copy_calls = 0;
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_jobs = array_map( [ 'PressHub_Social_Queue', 'get_job' ], PressHub_Social_Dispatcher::enqueue_for_post( $sl_art_id, [ 'tiktok' ] ) );
+assert_equals( 1, count( $sl_art_jobs ), 'Without TikTok Shorts an article goes to TikTok once' );
+assert_true( PressHub_Social_TikTok_Shorts::is_slides_job( $sl_art_jobs[0] ?? [] ), 'That one TikTok post is the photo slides, not the classic post' );
+assert_equals( 'Λεζάντα άρθρου για TikTok #slides', $sl_art_jobs[0]['post_copy'] ?? '', 'An article\'s slides post the TikTok caption prompt\'s copy' );
+assert_equals( 1, $sl_copy_calls, 'The article\'s slides make one caption call' );
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+update_post_meta( $sl_art_id, '_presshub_social_copy_tiktok', 'Δική μου λεζάντα' );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_own = PressHub_Social_Queue::get_job( PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_art_id, 'automation', time() )[0] );
+assert_equals( 'Δική μου λεζάντα', $sl_art_own['post_copy'] ?? '', 'An article\'s slides post the editor\'s own TikTok text' );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => '' );
+update_post_meta( $sl_art_id, '_presshub_social_copy_tiktok', '' );
+PressHub_Social_Queue::reset_memory_store();
+$sl_art_fail = PressHub_Social_Queue::get_job( PressHub_Social_Dispatcher::enqueue_tiktok_slides( $sl_art_id, 'automation', time() )[0] );
+assert_true( PressHub_Social_TikTok_Shorts::is_placeholder_copy( (string) ( $sl_art_fail['post_copy'] ?? '' ) ), 'Without a caption the article\'s slides keep the placeholder for the plan\'s caption' );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+delete_post_meta( $sl_art_id, '_presshub_social_copy_tiktok' );
+unset( $GLOBALS['POSTS_STORE'][ $sl_art_id ], $GLOBALS['test_posts'][ $sl_art_id ] );
+
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+PressHub_Social_TikTok_Shorts::set_synthesizer( null );
+PressHub_Social_TikTok_Shorts::set_image_generator( null );
+PressHub_Social_Queue::reset_memory_store();
+delete_post_meta( $sl_post_id, '_presshub_audio_url' );
+delete_option( 'presshub_social_tiktok_shorts_enabled' );
+delete_option( 'presshub_social_engine_tiktok' );
+update_option( 'presshub_social_tiktok_slides_enabled', false );
+null === $sl_saved_platforms ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $sl_saved_platforms );
+null === $sl_saved_sessions ? delete_option( 'presshub_social_worker_sessions' ) : update_option( 'presshub_social_worker_sessions', $sl_saved_sessions );
+
+// =============================================================================
+// Suite: Story repeats (2.84.0): a story goes out again only when it changed
+// =============================================================================
+echo "\n--- Suite: Story repeats ---\n";
+
+assert_equals( 36, PressHub_Social_Settings_Storage::get_story_repeat_hours(), 'Story Window defaults to 36 hours' );
+assert_equals( 2, PressHub_Social_Settings_Storage::get_story_max_posts(), 'Most Posts per Story per Platform defaults to 2' );
+assert_equals( 168, PressHub_Social_Settings_Storage::sanitize_story_repeat_hours( 500 ), 'The repeat window is clamped to a week' );
+assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_story_repeat_hours( -3 ), 'The repeat window can be 0 (off)' );
+assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_story_max_posts( 0 ), 'At least one post per story per platform' );
+assert_equals( 6, PressHub_Social_Settings_Storage::sanitize_story_max_posts( 40 ), 'At most six posts per story per platform' );
+assert_true( PressHub_Social_Story_Check::enabled(), 'The story check is on by default' );
+
+// What was told: published, processing and prepared jobs of other posts, inside the window.
+PressHub_Social_Queue::reset_memory_store();
+$rp_told_job = static function ( int $post_id, string $platform, array $short, string $status = 'published', int $ago = 3600 ): int {
+    $id = PressHub_Social_Queue::enqueue( [
+        'post_id'      => $post_id,
+        'platform'     => $platform,
+        'engine'       => 'automation',
+        'post_copy'    => 'Caption',
+        'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - $ago ),
+        'status'       => 'pending',
+        'metadata'     => [ 'tiktok_short' => array_merge( [ 'index' => 0, 'count' => 1, 'hook' => 'Hook' ], $short ) ],
+    ] );
+    if ( 'published' === $status ) {
+        PressHub_Social_Queue::mark_published( (int) $id, 'x', 'https://example.com/v/' . $id );
+        PressHub_Social_Queue::update_job( (int) $id, [ 'dispatched_at' => gmdate( 'Y-m-d H:i:s', time() - $ago ) ] );
+    } elseif ( 'cancelled' === $status ) {
+        PressHub_Social_Queue::cancel_job( (int) $id );
+    }
+    return (int) $id;
+};
+$rp_told_job( 950, 'tiktok', [ 'topic' => 'Αποφυλάκιση Αϊκούτ', 'story_key' => 'aykut-release' ] );
+$rp_told_job( 950, 'youtube', [ 'topic' => 'Αποφυλάκιση Αϊκούτ', 'story_key' => 'aykut-release' ] );
+$rp_told_job( 960, 'tiktok', [ 'topic' => 'Τιμές καυσίμων', 'story_key' => 'fuel-prices', 'dev_hash' => 'abc' ] );
+$rp_told_job( 961, 'tiktok', [ 'topic' => 'Old story', 'story_key' => 'old-story' ], 'published', 40 * 3600 );
+$rp_told_job( 962, 'tiktok', [ 'topic' => 'Cancelled story', 'story_key' => 'cancelled-story' ], 'cancelled' );
+$rp_told_job( 963, 'tiktok', [ 'topic' => '', 'story_key' => 'unprepared' ], 'pending', -600 );
+$rp_told = PressHub_Social_Story_Check::told( 999, [ 'tiktok' ] );
+$rp_keys = array_column( $rp_told, 'key' );
+assert_true( in_array( 'aykut-release', $rp_keys, true ) && in_array( 'fuel-prices', $rp_keys, true ), 'Stories posted in the window count as told' );
+assert_false( in_array( 'old-story', $rp_keys, true ), 'A story posted before the window does not count' );
+assert_false( in_array( 'cancelled-story', $rp_keys, true ), 'A cancelled short does not count' );
+assert_false( in_array( 'unprepared', $rp_keys, true ), 'A short not prepared yet does not count' );
+assert_equals( [], array_filter( PressHub_Social_Story_Check::told( 950, [ 'tiktok' ] ), fn( $e ) => 950 === $e['post_id'] ), 'A post\'s own shorts never count against it' );
+assert_equals( [ 'aykut-release' ], array_values( array_unique( array_column( PressHub_Social_Story_Check::told( 999, [ 'youtube' ] ), 'key' ) ) ), 'Only the platforms asked about count' );
+$rp_since = PressHub_Social_Queue::query_jobs( [ 'statuses' => [ 'published' ], 'since' => gmdate( 'Y-m-d H:i:s', time() - 7200 ), 'limit' => 50 ] );
+assert_equals( 3, count( $rp_since ), 'query_jobs filters by a list of statuses and by time' );
+
+// The prompt block names what was told, with its key and platforms.
+$rp_block = PressHub_Social_Story_Check::prompt_block( PressHub_Social_Story_Check::told( 999 ), [ 'fuel-prices' => [ 'title' => 'Fuel', 'development' => 'Prices up', 'status' => 'developing', 'hash' => 'abc' ] ], 36, 'σε κάθε short' );
+assert_true( 1 === substr_count( $rp_block, '[aykut-release]' ) && (bool) preg_match( '/\[aykut-release\][^\n]*\((tiktok, youtube|youtube, tiktok)\)/u', $rp_block ), 'The prompt lists a told story once, with every platform it went to' );
+assert_true( str_contains( $rp_block, '- fuel-prices: Fuel, Prices up (developing)' ), 'The prompt lists the editorial memory\'s stories' );
+assert_true( str_contains( $rp_block, '"whats_new"' ) && str_contains( $rp_block, 'σε κάθε short' ), 'The prompt asks for story_key and whats_new' );
+assert_equals( '', PressHub_Social_Story_Check::prompt_block( [], [], 36, 'x' ), 'No block when nothing was told and the memory is empty' );
+
+// The check in code.
+$rp_find = fn( array $shorts, array $memory = [], ?int $max = null ) => PressHub_Social_Story_Check::find_repeats( PressHub_Social_Story_Check::annotate( $shorts, $memory ), $rp_told, $memory, $max );
+$rp_r = $rp_find( [ [ 'topic' => 'Aykut', 'story_key' => 'aykut-release', 'whats_new' => '' ] ] );
+assert_true( 1 === count( $rp_r ) && str_contains( $rp_r[0]['reason'], 'no new development' ), 'A story told already, with nothing new, is a repeat' );
+assert_equals( [], $rp_find( [ [ 'topic' => 'Aykut', 'story_key' => 'aykut-release', 'whats_new' => 'Η κυβέρνηση ζήτησε εξηγήσεις από το Ισραήλ' ] ] ), 'A told story with a new fact goes out again' );
+assert_equals( [], $rp_find( [ [ 'topic' => 'New', 'story_key' => 'brand-new', 'whats_new' => '' ] ] ), 'A story not told yet is fine' );
+$rp_mem_same = [ 'fuel-prices' => [ 'title' => 'Fuel', 'development' => 'd', 'status' => 'developing', 'hash' => 'abc' ] ];
+$rp_r = $rp_find( [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => 'Claims something new' ] ], $rp_mem_same );
+assert_true( 1 === count( $rp_r ) && str_contains( $rp_r[0]['reason'], 'nothing new' ), 'A "new fact" the editorial memory does not show is still a repeat' );
+$rp_mem_new = [ 'fuel-prices' => [ 'title' => 'Fuel', 'development' => 'd2', 'status' => 'developing', 'hash' => 'def' ] ];
+assert_equals( [], $rp_find( [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => 'New EU figures' ] ], $rp_mem_new ), 'A story whose memory record moved, with its new fact, goes out again' );
+$rp_mem_done = [ 'fuel-prices' => [ 'title' => 'Fuel', 'development' => 'd2', 'status' => 'resolved', 'hash' => 'zzz' ] ];
+assert_true( str_contains( $rp_find( [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => 'x' ] ], $rp_mem_done )[0]['reason'] ?? '', 'resolved' ), 'A told story the memory marks resolved is not told again' );
+assert_true( str_contains( $rp_find( [ [ 'topic' => 'Aykut', 'story_key' => 'aykut-release', 'whats_new' => 'x' ] ], [], 1 )[0]['reason'] ?? '', 'inside the story window' ), 'A story already posted Most Posts per Story per Platform times on a platform waits, even with news' );
+$rp_r = $rp_find( [ [ 'topic' => 'A', 'story_key' => 'same' ], [ 'topic' => 'B', 'story_key' => 'same' ] ] );
+assert_true( 1 === count( $rp_r ) && 1 === $rp_r[0]['short'], 'The same story twice in one plan is a repeat' );
+$rp_r = $rp_find( [ [ 'brief' => true, 'stories' => [ [ 'topic' => 'x', 'story_key' => 'brand-new' ], [ 'topic' => 'y', 'story_key' => 'aykut-release' ] ] ] ] );
+assert_true( 1 === count( $rp_r ) && 1 === $rp_r[0]['story'], 'A brief\'s repeated story is found by its place in the brief' );
+
+// A podcast plan (one short per story): asked again, then the repeat is left out.
+$rp_pod = 952;
+$GLOBALS['mock_posts'][ $rp_pod ] = (object) [ 'ID' => $rp_pod, 'post_title' => 'Noon podcast', 'post_content' => 'Body', 'post_status' => 'publish', 'post_type' => 'post' ];
+update_post_meta( $rp_pod, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $rp_pod, '_presshub_podcast_script', '[SPEAKER_1]: Οι ειδήσεις.' );
+update_option( 'presshub_social_tiktok_shorts_format', 'stories' );
+update_option( 'presshub_social_tiktok_shorts_count', 2 );
+$rp_short = fn( string $topic, string $key, string $new = '' ) => [ 'topic' => $topic, 'hook' => 'Hook ' . $topic, 'script' => '[SPEAKER_1]: ' . $topic . '.', 'caption' => 'Caption ' . $topic . ' #news', 'mood' => 'neutral', 'visuals' => [], 'story_key' => $key, 'whats_new' => $new ];
+$rp_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$rp_calls, $rp_short ) {
+    $rp_calls[] = $user;
+    return json_encode( [ 'shorts' => [ $rp_short( 'Aykut', 'aykut-release' ), $rp_short( 'Budget', 'budget-225m' ), $rp_short( 'Water', 'groundwater' ), $rp_short( 'Fourth', 'fourth' ) ] ] );
+} );
+delete_post_meta( $rp_pod, PressHub_Social_TikTok_Shorts::PLAN_META );
+$rp_plan = PressHub_Social_TikTok_Shorts::get_plan( $rp_pod, 2, false, [ 'tiktok', 'youtube' ] );
+assert_equals( 2, count( $rp_calls ), 'A plan that repeats a story is asked for once more' );
+assert_true( str_contains( $rp_calls[0], '[aykut-release]' ), 'The plan prompt lists the stories already posted' );
+assert_true( str_contains( $rp_calls[1], 'repeats stories we already posted' ) && str_contains( $rp_calls[1], 'aykut-release' ), 'The second ask names the repeated story' );
+assert_equals( [ 'budget-225m', 'groundwater' ], array_column( $rp_plan['shorts'] ?? [], 'story_key' ), 'The repeat is left out and the next stories take its place' );
+assert_equals( 'aykut-release', $rp_plan['skipped'][0]['key'] ?? '', 'The plan records the skipped story' );
+
+// The prepared job keeps its story key, so the next plans can compare with it.
+update_option( 'presshub_social_enabled_platforms', [ 'tiktok' ] );
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true ] );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+update_option( 'presshub_social_tiktok_slides_enabled', false );
+PressHub_Social_TikTok_Shorts::set_synthesizer( fn( $short, $job ) => [ 'url' => 'https://example.com/rp.mp3', 'id' => 1, 'segments' => [ [ 'speaker' => 'SPEAKER_1', 'text' => 'x', 'start' => 0.0, 'end' => 1.0 ] ] ] );
+PressHub_Social_TikTok_Shorts::set_image_generator( fn() => new WP_Error( 'no', 'no images in this test' ) );
+$rp_jobs = PressHub_Social_Dispatcher::enqueue_for_post( $rp_pod, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( $rp_pod );
+$rp_meta = json_decode( (string) PressHub_Social_Queue::get_job( $rp_jobs[0] )['metadata'], true )['tiktok_short'] ?? [];
+assert_equals( 'budget-225m', $rp_meta['story_key'] ?? '', 'A prepared short stores its story key' );
+assert_true( array_key_exists( 'whats_new', $rp_meta ) && array_key_exists( 'dev_hash', $rp_meta ), 'A prepared short stores what was new and the memory hash' );
+
+// An article whose story was just told: its short is not made, the jobs are cancelled with the reason.
+$rp_art = 953;
+$GLOBALS['POSTS_STORE'][ $rp_art ] = [ 'ID' => $rp_art, 'post_title' => 'Άρθρο για τον Αϊκούτ', 'post_content' => '<p>Ο Αϊκούτ αφέθηκε ελεύθερος στο Ισραήλ, ξανά το ίδιο θέμα.</p>', 'post_excerpt' => '', 'post_status' => 'publish' ];
+$GLOBALS['test_posts'][ $rp_art ]  = new WP_Post( $GLOBALS['POSTS_STORE'][ $rp_art ] );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Λεζάντα #news' );
+PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => json_encode( [ 'shorts' => [ $rp_short( 'Aykut again', 'aykut-release' ) ] ] ) );
+$rp_art_jobs = PressHub_Social_Dispatcher::enqueue_for_post( $rp_art, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( $rp_art );
+$rp_art_job = PressHub_Social_Queue::get_job( $rp_art_jobs[0] );
+assert_equals( 'cancelled', $rp_art_job['status'] ?? '', 'An article short of a story just told is cancelled' );
+assert_true( str_starts_with( (string) ( $rp_art_job['last_error'] ?? '' ), 'Not posted: story already posted.' ), 'The cancelled short says why' );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+unset( $GLOBALS['POSTS_STORE'][ $rp_art ], $GLOBALS['test_posts'][ $rp_art ] );
+
+// A daily brief: a repeated story's part is cut from the script.
+$rp_brief_story = fn( string $topic, string $key ) => [ 'topic' => $topic, 'script' => '[SPEAKER_1]: ' . $topic . ' λέξεις εδώ.', 'visual' => 'Scene ' . $topic, 'story_key' => $key, 'whats_new' => '' ];
+$rp_brief_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$rp_brief_calls, $rp_brief_story ) {
+    $rp_brief_calls++;
+    return json_encode( [ 'shorts' => [ [ 'topic' => 'Brief', 'hook' => 'Οι ειδήσεις', 'intro' => '[SPEAKER_1]: Καλημέρα.', 'stories' => [ $rp_brief_story( 'Aykut', 'aykut-release' ), $rp_brief_story( 'Budget', 'budget-x' ), $rp_brief_story( 'Water', 'water-x' ) ], 'outro' => '[SPEAKER_1]: Τέλος.', 'mood' => 'neutral', 'caption' => 'Caption #news' ] ] ] );
+} );
+delete_post_meta( $rp_pod, PressHub_Social_TikTok_Shorts::PLAN_META );
+$rp_bplan = PressHub_Social_TikTok_Shorts::get_plan( $rp_pod, 1, true, [ 'tiktok' ] );
+assert_equals( 2, $rp_brief_calls, 'A brief that repeats a story is asked for once more' );
+assert_equals( [ 'budget-x', 'water-x' ], array_column( $rp_bplan['shorts'][0]['stories'] ?? [], 'story_key' ), 'The repeated story is cut from the brief' );
+assert_false( str_contains( (string) ( $rp_bplan['shorts'][0]['script'] ?? '' ), 'Aykut' ), 'The brief script no longer reads the repeated story' );
+
+// Off: Story Repeat Window 0 sends no block and keeps the plan.
+update_option( 'presshub_social_story_repeat_hours', 0 );
+$rp_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$rp_calls, $rp_short ) {
+    $rp_calls[] = $user;
+    return json_encode( [ 'shorts' => [ $rp_short( 'Aykut', 'aykut-release' ), $rp_short( 'Budget', 'budget-225m' ) ] ] );
+} );
+delete_post_meta( $rp_pod, PressHub_Social_TikTok_Shorts::PLAN_META );
+$rp_off = PressHub_Social_TikTok_Shorts::get_plan( $rp_pod, 2, false, [ 'tiktok' ] );
+assert_true( 1 === count( $rp_calls ) && ! str_contains( $rp_calls[0], 'ΗΔΗ ΔΗΜΟΣΙΕΥΣΕΙ' ), 'With the window at 0 the prompt has no repeat block' );
+assert_equals( 'aykut-release', $rp_off['shorts'][0]['story_key'] ?? '', 'With the window at 0 nothing is left out' );
+delete_option( 'presshub_social_story_repeat_hours' );
+
+// The written daily brief gets no video posts; its podcast tells the stories.
+$rp_text = 954;
+$GLOBALS['mock_posts'][ $rp_text ] = (object) [ 'ID' => $rp_text, 'post_title' => 'Πρωινή Ενημέρωση', 'post_content' => 'Body', 'post_status' => 'publish', 'post_type' => 'post' ];
+update_post_meta( $rp_text, '_presshub_briefing_type', 'text' );
+assert_true( '' !== PressHub_Social_Dispatcher::no_video_reason( $rp_text ), 'The written daily brief gets no videos' );
+PressHub_Social_Queue::reset_memory_store();
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_for_post( $rp_text, [ 'tiktok' ] ), 'The written daily brief is not queued for TikTok' );
+assert_false( PressHub_Social_Dispatcher::shorts_wanted( $rp_text, 'facebook', 'automation' ), 'The written daily brief gets no Facebook Reel' );
+add_filter( 'presshub_social_briefing_text_video', '__return_true' );
+assert_equals( '', PressHub_Social_Dispatcher::no_video_reason( $rp_text ), 'A filter gives the written brief videos again (a site without podcasts)' );
+remove_filter( 'presshub_social_briefing_text_video', '__return_true' );
+
+// Trending roundups are not held back by a rule of their own (their post mode is a setting).
+$rp_r2 = 957;
+update_post_meta( $rp_r2, PressHub_Social_Dispatcher::TRENDING_META_KEY, 'run:abc' );
+assert_equals( '', PressHub_Social_Dispatcher::no_video_reason( $rp_r2 ), 'A trending roundup gets its video' );
+assert_false( PressHub_Social_Post_Gate::single_story( $rp_r2 ), 'A trending roundup is not tagged as one story' );
+assert_false( PressHub_Social_Post_Gate::single_story( $rp_text ), 'A daily brief is not tagged as one story' );
+
+// =============================================================================
+// Suite: Social post gate (2.84.0): every post on every platform passes it
+// =============================================================================
+echo "\n--- Suite: Social post gate ---\n";
+
+PressHub_Social_Queue::reset_memory_store();
+PressHub_Social_Post_Gate::reset_cache();
+update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook' ] );
+update_option( 'presshub_social_engine_twitter', 'automation' );
+update_option( 'presshub_social_engine_facebook', 'automation' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'facebook' => true, 'tiktok' => true ] );
+$pg_link_job = static function ( int $post_id, string $platform, array $story, string $status = 'published', int $ago = 3600 ): int {
+    $id = PressHub_Social_Queue::enqueue( [
+        'post_id'      => $post_id,
+        'platform'     => $platform,
+        'engine'       => 'api',
+        'post_copy'    => 'Copy',
+        'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - $ago ),
+        'status'       => 'pending',
+        'metadata'     => [ PressHub_Social_Post_Gate::STORY_META => $story ],
+    ] );
+    if ( 'published' === $status ) {
+        PressHub_Social_Queue::mark_published( (int) $id, 'x', 'https://example.com/p/' . $id );
+        PressHub_Social_Queue::update_job( (int) $id, [ 'dispatched_at' => gmdate( 'Y-m-d H:i:s', time() - $ago ) ] );
+    }
+    return (int) $id;
+};
+$pg_article = static function ( int $id, string $title ) {
+    $GLOBALS['POSTS_STORE'][ $id ] = [ 'ID' => $id, 'post_title' => $title, 'post_content' => '<p>' . $title . ' κείμενο.</p>', 'post_excerpt' => '', 'post_status' => 'publish' ];
+    $GLOBALS['test_posts'][ $id ]  = new WP_Post( $GLOBALS['POSTS_STORE'][ $id ] );
+    delete_post_meta( $id, PressHub_Social_Post_Gate::POST_META );
+};
+$pg_copy_calls = 0;
+PressHub_Social_AI_Copywriter::set_ai_caller( function () use ( &$pg_copy_calls ) {
+    $pg_copy_calls++;
+    return 'Κείμενο ανάρτησης #news';
+} );
+
+// Nothing posted in the window: no story tag call, the posts go out, tagged by title.
+$pg_tag_calls = [];
+PressHub_Social_Post_Gate::set_ai_caller( function ( string $sys, string $user ) use ( &$pg_tag_calls ) {
+    $pg_tag_calls[] = $user;
+    return json_encode( [ 'story_key' => 'aykut-release', 'whats_new' => '' ] );
+} );
+$pg_article( 970, 'Αφέθηκε ελεύθερος ο Αϊκούτ' );
+$pg_ids = PressHub_Social_Dispatcher::enqueue_for_post( 970, [ 'twitter', 'facebook' ] );
+assert_equals( 2, count( $pg_ids ), 'With nothing posted in the window, the article goes to every platform' );
+assert_equals( [], $pg_tag_calls, 'With nothing posted in the window, no story tag is asked for' );
+$pg_meta = json_decode( (string) PressHub_Social_Queue::get_job( $pg_ids[0] )['metadata'], true );
+assert_equals( 'post-970', $pg_meta['story']['story_key'] ?? '', 'An untagged post is known in the ledger as post-<id>' );
+PressHub_Social_Queue::mark_published( $pg_ids[0], 'x', 'https://example.com/970' );
+PressHub_Social_Queue::mark_published( $pg_ids[1], 'x', 'https://example.com/970f' );
+
+// The same story again with nothing new: stopped before any copy is written, and the
+// queue shows why. The tag is asked for once for both platforms.
+$pg_copy_calls = 0;
+PressHub_Social_Post_Gate::set_ai_caller( function ( string $sys, string $user ) use ( &$pg_tag_calls ) {
+    $pg_tag_calls[] = $user;
+    return json_encode( [ 'story_key' => 'post-970', 'whats_new' => '' ] );
+} );
+$pg_article( 971, 'Ελεύθερος ο Αϊκούτ, ξανά' );
+$pg_ids = PressHub_Social_Dispatcher::enqueue_for_post( 971, [ 'twitter', 'facebook' ] );
+assert_equals( [], $pg_ids, 'A repeated story with nothing new is not queued' );
+assert_equals( 1, count( $pg_tag_calls ), 'The story tag is asked for once per post, not per platform' );
+assert_true( str_contains( $pg_tag_calls[0], '[post-970]' ) && str_contains( $pg_tag_calls[0], 'Ελεύθερος ο Αϊκούτ, ξανά' ), 'The tag prompt has the article and the stories already posted' );
+assert_equals( 0, $pg_copy_calls, 'No AI copy is written for a post the gate stops' );
+$pg_blocked = PressHub_Social_Queue::query_jobs( [ 'post_id' => 971, 'limit' => 10 ] );
+assert_equals( 2, count( $pg_blocked ), 'Each stopped platform shows in the Social Queue' );
+assert_true( 'cancelled' === $pg_blocked[0]['status'] && str_starts_with( (string) $pg_blocked[0]['last_error'], 'Not posted: ' ) && str_contains( (string) $pg_blocked[0]['last_error'], 'no new development' ), 'A stopped post is cancelled with the reason' );
+assert_true( PressHub_Social_Dispatcher::has_publish_jobs( 971 ), 'A stopped post is not queued again on its next save' );
+
+// With a new fact it goes out, leading with it.
+$pg_tag_calls = [];
+PressHub_Social_Post_Gate::set_ai_caller( fn() => json_encode( [ 'story_key' => 'post-970', 'whats_new' => 'Η Λευκωσία ζήτησε εξηγήσεις' ] ) );
+$pg_article( 972, 'Η Λευκωσία ζητά εξηγήσεις για τον Αϊκούτ' );
+$pg_ids = PressHub_Social_Dispatcher::enqueue_for_post( 972, [ 'twitter' ] );
+assert_equals( 1, count( $pg_ids ), 'A told story with a new fact is queued' );
+$pg_meta = json_decode( (string) PressHub_Social_Queue::get_job( $pg_ids[0] )['metadata'], true );
+assert_equals( 'Η Λευκωσία ζήτησε εξηγήσεις', $pg_meta['story']['whats_new'] ?? '', 'The job keeps what was new' );
+PressHub_Social_Queue::mark_published( $pg_ids[0], 'x', 'https://example.com/972' );
+
+// Most Posts per Story per Platform: even with news, a third post of the story waits.
+PressHub_Social_Post_Gate::set_ai_caller( fn() => json_encode( [ 'story_key' => 'post-970', 'whats_new' => 'Νέα δήλωση' ] ) );
+$pg_article( 973, 'Τρίτο άρθρο για τον Αϊκούτ' );
+assert_true( str_contains( PressHub_Social_Post_Gate::check_post( 973, 'twitter' ), 'posted 2 times on twitter' ), 'A story at the most posts on a platform is stopped there' );
+assert_equals( '', PressHub_Social_Post_Gate::check_post( 973, 'instagram' ), 'The limit is per platform' );
+
+// A failed tag call lets the post go (logged), untagged.
+PressHub_Social_Post_Gate::set_ai_caller( fn() => new WP_Error( 'down', 'provider down' ) );
+$pg_article( 974, 'Άλλη είδηση' );
+assert_equals( '', PressHub_Social_Post_Gate::check_post( 974, 'twitter' ), 'A failed story tag never stops a post' );
+assert_equals( 'post-974', PressHub_Social_Post_Gate::tag_post( 974, false )['story_key'] ?? '', 'The post keeps its untagged key' );
+
+// A failed tag call is not repeated for the post's other platforms in the same request.
+$pg_fail_calls = 0;
+PressHub_Social_Post_Gate::set_ai_caller( function () use ( &$pg_fail_calls ) {
+    $pg_fail_calls++;
+    return new WP_Error( 'down', 'provider down' );
+} );
+$pg_article( 975, 'Ακόμη μία είδηση' );
+PressHub_Social_Post_Gate::check_post( 975, 'twitter' );
+PressHub_Social_Post_Gate::check_post( 975, 'facebook' );
+assert_equals( 1, $pg_fail_calls, 'A failed story tag is asked for once per request' );
+assert_equals( '', get_post_meta( 975, PressHub_Social_Post_Gate::POST_META, true ), 'A failed story tag is not kept on the post, so a later request asks again' );
+
+// Other checks run at the queue stage even for a post with no story tag (gate off).
+update_option( 'presshub_social_story_repeat_hours', 0 );
+$pg_block_all = fn( array $checks ) => $checks + [ 'hold' => fn( array $c ) => 'queue' === $c['stage'] ? 'held for review' : '' ];
+add_filter( 'presshub_social_post_gate_checks', $pg_block_all );
+assert_equals( 'held for review', PressHub_Social_Post_Gate::check_post( 975, 'twitter' ), 'A custom check runs at the queue stage with no story tag' );
+remove_filter( 'presshub_social_post_gate_checks', $pg_block_all );
+delete_option( 'presshub_social_story_repeat_hours' );
+
+// One plan serves every platform: a story told on one platform only is kept for the others.
+$pg_told = [ [ 'key' => 'fuel-prices', 'topic' => 'Fuel', 'hook' => '', 'whats_new' => '', 'dev_hash' => '', 'platform' => 'facebook', 'post_id' => 1, 'job_id' => 1, 'when' => time() - 60, 'format' => 'post', 'status' => 'published' ] ];
+$pg_plan_one = [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => '' ] ];
+assert_equals( [], PressHub_Social_Post_Gate::check_stories( 990, $pg_plan_one, [ 'tiktok', 'facebook' ], $pg_told, [] ), 'A story told on one platform stays in a plan that serves others too' );
+assert_equals( 1, count( PressHub_Social_Post_Gate::check_stories( 990, $pg_plan_one, [ 'facebook' ], $pg_told, [] ) ), 'A story told on the only planned platform is left out' );
+$pg_told[] = array_merge( $pg_told[0], [ 'platform' => 'tiktok', 'job_id' => 2 ] );
+assert_equals( 1, count( PressHub_Social_Post_Gate::check_stories( 990, $pg_plan_one, [ 'tiktok', 'facebook' ], $pg_told, [] ) ), 'A story told on every planned platform is left out' );
+
+// An article's short is stopped at the queue, before its caption and plan are made.
+update_option( 'presshub_social_enabled_platforms', [ 'tiktok' ] );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+$rp_told_job( 976, 'tiktok', [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices' ] );
+$pg_plan_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$pg_plan_calls ) {
+    $pg_plan_calls++;
+    return '{}';
+} );
+PressHub_Social_Post_Gate::set_ai_caller( fn() => json_encode( [ 'story_key' => 'fuel-prices', 'whats_new' => '' ] ) );
+$pg_copy_calls = 0;
+$pg_article( 977, 'Τιμές καυσίμων ξανά' );
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_for_post( 977, [ 'tiktok' ] ), 'An article short of a repeated story is not queued' );
+assert_equals( 0, $pg_copy_calls + $pg_plan_calls, 'No caption or plan AI call is made for it' );
+$pg_blocked = PressHub_Social_Queue::query_jobs( [ 'post_id' => 977, 'limit' => 5 ] );
+assert_true( 1 === count( $pg_blocked ) && 'cancelled' === $pg_blocked[0]['status'], 'The stopped short shows in the queue as cancelled' );
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+delete_option( 'presshub_social_tiktok_shorts_enabled' );
+delete_option( 'presshub_social_engine_tiktok' );
+update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook' ] );
+
+// An article's short takes the story key its other posts got, so the article has one key.
+update_post_meta( 978, PressHub_Social_Post_Gate::POST_META, [ 'story_key' => 'fuel-prices', 'topic' => 'Fuel', 'whats_new' => 'New figures', 'dev_hash' => '' ] );
+$pg_applied = PressHub_Social_Post_Gate::apply_post_tag( 978, [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-cost-rise', 'whats_new' => '' ] ] );
+assert_true( 'fuel-prices' === $pg_applied[0]['story_key'] && 'New figures' === $pg_applied[0]['whats_new'], 'An article short carries the article\'s kept story tag' );
+assert_equals( 'other', PressHub_Social_Post_Gate::apply_post_tag( 979, [ [ 'story_key' => 'other' ] ] )[0]['story_key'], 'Without a kept tag the plan keeps its own key' );
+assert_equals( 'Plan fact', PressHub_Social_Post_Gate::apply_post_tag( 978, [ [ 'story_key' => 'x', 'whats_new' => 'Plan fact' ] ] )[0]['whats_new'], 'A new fact the plan names is kept' );
+$pg_fb_id = PressHub_Social_Queue::enqueue( [ 'post_id' => 978, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Caption ready', 'status' => 'pending',
+    'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 1 ] ] ] );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Λεζάντα #news' );
+PressHub_Social_TikTok_Shorts::fallback_to_classic( PressHub_Social_Queue::get_job( $pg_fb_id ), new WP_Error( 'x', 'render failed' ) );
+$pg_fb_meta = json_decode( (string) PressHub_Social_Queue::get_job( $pg_fb_id )['metadata'], true );
+assert_equals( 'fuel-prices', $pg_fb_meta['story']['story_key'] ?? '', 'A short that falls back to the classic post keeps the story tag' );
+delete_post_meta( 978, PressHub_Social_Post_Gate::POST_META );
+
+// Out: checked again at claim and dispatch against what went out since, with no AI call.
+PressHub_Social_Queue::reset_memory_store();
+$pg_short = PressHub_Social_Queue::enqueue( [ 'post_id' => 980, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'c', 'status' => 'pending',
+    'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'topic' => 'Fuel', 'story_key' => 'fuel-prices', 'whats_new' => '' ] ] ] );
+assert_equals( '', PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( $pg_short ) ), 'A job whose story did not go out since passes' );
+$pg_other = $rp_told_job( 981, 'tiktok', [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices' ], 'pending', 60 );
+assert_equals( '', PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( $pg_short ) ), 'Only what went out counts at claim, not what waits beside it' );
+PressHub_Social_Queue::mark_published( $pg_other, 'x', 'https://example.com/981' );
+$pg_reason = PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( $pg_short ) );
+assert_true( str_contains( $pg_reason, 'fuel-prices' ), 'A job whose story went out in the meantime is stopped' );
+$pg_brief = PressHub_Social_Queue::enqueue( [ 'post_id' => 982, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'c', 'status' => 'pending',
+    'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'brief' => true, 'topic' => 'Brief', 'stories' => [ [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices' ], [ 'topic' => 'A', 'story_key' => 'a' ], [ 'topic' => 'B', 'story_key' => 'b' ] ] ] ] ] );
+assert_equals( '', PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( $pg_brief ) ), 'A brief with two fresh stories left still goes out' );
+$pg_bypass = PressHub_Social_Queue::repost_as_new_job( $pg_short );
+assert_equals( '', PressHub_Social_Post_Gate::check_job( PressHub_Social_Queue::get_job( (int) $pg_bypass ) ), 'A job reposted by hand skips the gate' );
+
+// The worker claim cancels a stopped job with its reason.
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true ] );
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+PressHub_Social_Queue::cancel_job( (int) $pg_bypass );
+PressHub_Social_Queue::cancel_job( $pg_brief );
+$pg_req = new WP_REST_Request( 'POST', '/presshub-social/v1/jobs/claim' );
+$pg_req->set_param( 'sessions', [ 'tiktok' => true ] );
+$pg_claim = PressHub_Social_REST_Controller::handle_claim( $pg_req );
+assert_false( in_array( $pg_short, array_map( fn( $j ) => (int) ( $j['id'] ?? 0 ), $pg_claim['jobs'] ?? [] ), true ), 'The worker never gets a job the gate stops' );
+$pg_job = PressHub_Social_Queue::get_job( $pg_short );
+assert_true( 'cancelled' === $pg_job['status'] && str_starts_with( (string) $pg_job['last_error'], 'Not posted: ' ), 'The claim cancels the stopped job with the reason' );
+
+// API dispatch: stopped before anything is sent.
+$pg_api = $pg_link_job( 983, 'twitter', [ 'story_key' => 'fuel-prices', 'topic' => 'Fuel', 'whats_new' => '' ], 'pending', 0 );
+$pg_link_job( 984, 'twitter', [ 'story_key' => 'fuel-prices', 'topic' => 'Fuel', 'whats_new' => '' ], 'published', 120 );
+$pg_res = PressHub_Social_Dispatcher::dispatch_job( $pg_api );
+assert_true( is_wp_error( $pg_res ) && PressHub_Social_Post_Gate::BLOCKED_CODE === $pg_res->get_error_code(), 'API dispatch stops a repeated post' );
+assert_equals( 'cancelled', PressHub_Social_Queue::get_job( $pg_api )['status'] ?? '', 'The stopped API job is cancelled' );
+
+// More checks plug in through a filter, for every platform.
+$pg_filter = fn( array $checks ) => $checks + [ 'no_weekend' => fn( array $c ) => 'threads' === $c['platform'] ? 'not on this platform today' : '' ];
+add_filter( 'presshub_social_post_gate_checks', $pg_filter );
+assert_equals( 'not on this platform today', PressHub_Social_Post_Gate::check( [ 'platform' => 'threads', 'post_id' => 1 ] ), 'A check added through the filter can stop a post' );
+assert_equals( '', PressHub_Social_Post_Gate::check( [ 'platform' => 'twitter', 'post_id' => 1 ] ), 'A check added through the filter lets others go' );
+remove_filter( 'presshub_social_post_gate_checks', $pg_filter );
+
+// Plan stage: a podcast whose edition's stories are all blocked is not planned at all.
+if ( ! class_exists( 'PressHub_AI_Memory_Store' ) ) {
+    class PressHub_AI_Memory_Store {
+        public static array $rows = [];
+        public static function get_entries_for_range( $from, $to, $scope, $status ): array {
+            return array_values( array_filter( self::$rows, fn( $r ) => $r['period_start'] >= $from && $r['period_start'] <= $to ) );
+        }
+        public static function decode_content( string $json ): array {
+            $d = json_decode( $json, true );
+            return is_array( $d ) ? $d : [];
+        }
+    }
+}
+PressHub_Social_Queue::reset_memory_store();
+PressHub_Social_Post_Gate::reset_cache();
+$pg_day = gmdate( 'Y-m-d' );
+PressHub_AI_Memory_Store::$rows = [ [ 'period_start' => $pg_day, 'edition' => 'noon', 'content_json' => json_encode( [ 'stories' => [
+    [ 'key' => 'fuel-prices', 'title' => 'Fuel', 'development' => 'Same', 'status' => 'resolved' ],
+    [ 'key' => 'aykut-release', 'title' => 'Aykut', 'development' => 'Same', 'status' => 'resolved' ],
+] ] ) ] ];
+$pg_pod = 985;
+$GLOBALS['mock_posts'][ $pg_pod ] = (object) [ 'ID' => $pg_pod, 'post_title' => 'Noon podcast', 'post_content' => 'Body', 'post_status' => 'publish', 'post_type' => 'post' ];
+update_post_meta( $pg_pod, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $pg_pod, '_presshub_briefing_date', $pg_day );
+update_post_meta( $pg_pod, '_presshub_briefing_edition', 'noon' );
+update_post_meta( $pg_pod, '_presshub_podcast_script', '[SPEAKER_1]: Οι ειδήσεις.' );
+$rp_told_job( 986, 'tiktok', [ 'topic' => 'Fuel', 'story_key' => 'fuel-prices' ] );
+$rp_told_job( 986, 'tiktok', [ 'topic' => 'Aykut', 'story_key' => 'aykut-release' ] );
+$pg_plan_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$pg_plan_calls ) {
+    $pg_plan_calls++;
+    return '{}';
+} );
+delete_post_meta( $pg_pod, PressHub_Social_TikTok_Shorts::PLAN_META );
+$pg_plan = PressHub_Social_TikTok_Shorts::get_plan( $pg_pod, 1, true, [ 'tiktok' ] );
+assert_true( is_wp_error( $pg_plan ) && PressHub_Social_Post_Gate::BLOCKED_CODE === $pg_plan->get_error_code(), 'An edition with nothing that may go out again is not planned' );
+assert_equals( 0, $pg_plan_calls, 'No plan AI call is made for it' );
+PressHub_AI_Memory_Store::$rows[0]['content_json'] = json_encode( [ 'stories' => [
+    [ 'key' => 'fuel-prices', 'title' => 'Fuel', 'development' => 'Same', 'status' => 'resolved' ],
+    [ 'key' => 'new-story', 'title' => 'New', 'development' => 'First time', 'status' => 'new' ],
+] ] );
+PressHub_Social_Post_Gate::reset_cache();
+assert_equals( '', PressHub_Social_Post_Gate::edition_blocked( $pg_pod, PressHub_Social_Story_Check::told( $pg_pod, [ 'tiktok' ] ), PressHub_Social_Story_Check::memory_stories( $pg_day ) ), 'An edition with one story that may go out is planned' );
+PressHub_AI_Memory_Store::$rows = [];
+PressHub_Social_Post_Gate::reset_cache();
+
+PressHub_Social_Post_Gate::set_ai_caller( null );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+foreach ( [ 970, 971, 972, 973, 974, 975, 977 ] as $pg_id ) {
+    unset( $GLOBALS['POSTS_STORE'][ $pg_id ], $GLOBALS['test_posts'][ $pg_id ] );
+}
+delete_option( 'presshub_social_engine_twitter' );
+delete_option( 'presshub_social_engine_facebook' );
+
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+PressHub_Social_TikTok_Shorts::set_synthesizer( null );
+PressHub_Social_TikTok_Shorts::set_image_generator( null );
+PressHub_Social_Queue::reset_memory_store();
+delete_option( 'presshub_social_tiktok_shorts_format' );
+delete_option( 'presshub_social_tiktok_shorts_count' );
+delete_option( 'presshub_social_tiktok_shorts_enabled' );
+delete_option( 'presshub_social_engine_tiktok' );
+delete_option( 'presshub_social_enabled_platforms' );
+delete_option( 'presshub_social_worker_sessions' );
+
 // Verify wait_for_instagram_container handles IN_PROGRESS -> FINISHED, ERROR, and timeout
 $poll_calls = 0;
 PressHub_Social_Meta_API_Client::set_http_get( function() use ( &$poll_calls ) {
@@ -3223,10 +5183,9 @@ update_option( 'presshub_social_engine_instagram', 'automation' );
 update_option( 'presshub_social_worker_mode', 'pull' );
 $img_saved_sessions = get_option( 'presshub_social_worker_sessions', [] );
 update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'facebook' => true, 'instagram' => true, 'tiktok' => true ] );
-$img_saved_enabled = [];
+$img_saved_enabled = get_option( 'presshub_social_enabled_platforms', null );
 foreach ( [ 'twitter', 'facebook', 'instagram' ] as $img_p ) {
-    $img_saved_enabled[ $img_p ] = get_option( 'presshub_social_enabled_' . $img_p, null );
-    update_option( 'presshub_social_enabled_' . $img_p, 1 );
+    PressHub_Social_Settings_Storage::set_platform_enabled( $img_p, true );
 }
 PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Κείμενο ανάρτησης https://presshub.cy/x' );
 delete_option( 'presshub_social_post_images_enabled' );
@@ -3407,6 +5366,47 @@ for ( $i = 0; $i < PressHub_Social_Settings_Storage::get_max_attempts(); $i++ ) 
 }
 assert_equals( 'fallback', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $plan_fail_ids[0] ) ), 'After the retry budget the job falls back to the featured image' );
 
+// A misplaced bracket is repaired; an unusable or empty answer is asked for again, with the reason.
+assert_equals( [ 'a', 'b' ], PressHub_Social_Post_Images::parse_plan( '{"images":["a","b"]]}', 3 ), 'The image plan repairs a misplaced closing bracket' );
+assert_true( is_wp_error( PressHub_Social_Post_Images::parse_plan( '{"images":["a","b"', 3 ) ), 'A cut-off image plan is rejected, not repaired' );
+$broken_images = PressHub_Social_Post_Images::parse_plan( '{"images":["a" "b"]}', 3 );
+assert_true( is_wp_error( $broken_images ) && str_contains( $broken_images->get_error_message(), 'not valid JSON' ), 'Broken image plan JSON is reported as invalid JSON' );
+foreach ( [ 'invalid' => '{"images":[]}', 'empty' => '' ] as $kind_of_bad => $first_answer ) {
+    PressHub_Social_Queue::reset_memory_store();
+    delete_post_meta( 760, PressHub_Social_Post_Images::PLAN_META );
+    delete_post_meta( 760, PressHub_Social_Post_Images::PREP_ATTEMPTS_META );
+    $img_retry_prompts = [];
+    PressHub_Social_Post_Images::set_ai_caller( function ( $sys, $user ) use ( &$img_retry_prompts, $first_answer ) {
+        $img_retry_prompts[] = $user;
+        return 1 === count( $img_retry_prompts ) ? $first_answer : '{"images":["Harbour at dawn","Power cable on a ship"]}';
+    } );
+    PressHub_Social_Image_Library::set_generator( fn( $prompt, $aspect, $post_id, $context ) => [ 'url' => 'https://example.com/uploads/retry-' . md5( $prompt . $aspect ) . '.png', 'id' => 8900 ] );
+    $img_retry_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+    PressHub_Social_Post_Images::prepare_post( 760 );
+    assert_equals( 2, count( $img_retry_prompts ), "An {$kind_of_bad} image plan answer is asked for once more in the same run" );
+    assert_true( str_contains( $img_retry_prompts[1] ?? '', 'Your previous answer was unusable:' ) && ! str_contains( $img_retry_prompts[0], 'previous answer' ), "The {$kind_of_bad} image plan retry says why" );
+    assert_equals( 'ready', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $img_retry_ids[0] ) ), "The images are made from the second answer after an {$kind_of_bad} one" );
+}
+
+// End to end for the image plan: records and rows marked, repair noted.
+PressHub_Social_Queue::reset_memory_store();
+delete_post_meta( 760, PressHub_Social_Post_Images::PLAN_META );
+delete_post_meta( 760, PressHub_Social_Post_Images::PREP_ATTEMPTS_META );
+$img_e2e = [];
+PressHub_Social_Post_Images::set_ai_caller( function () use ( &$img_e2e ) {
+    $answer    = 0 === count( $img_e2e ) ? '{"images":[]}' : '{"images":["Harbour at dawn","Power cable on a ship"]]}';
+    $call      = presshub_test_plan_call( 'post_images_plan', 'social_post_images', $answer );
+    $img_e2e[] = $call;
+    return $call;
+} );
+$img_e2e_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+PressHub_Social_Post_Images::prepare_post( 760 );
+$img_first  = PressHub_AI_Generation_Recorder::get( $img_e2e[0]['record_id'] ?? 0 );
+$img_second = PressHub_AI_Generation_Recorder::get( $img_e2e[1]['record_id'] ?? 0 );
+assert_true( 'error' === ( $img_first['status'] ?? '' ) && 'error' === ( presshub_test_token_row( $img_e2e[0]['log_id'] )['status'] ?? '' ), 'Image plan: the unusable answer\'s record and row are marked error' );
+assert_equals( 'JSON repaired: dropped 1 misplaced ].', $img_second['error_message'] ?? '', 'Image plan: the repaired answer is noted on its record' );
+assert_equals( 'ready', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $img_e2e_ids[0] ) ), 'Image plan: the images are made from the repaired answer' );
+
 // A job still waiting long after its posting time is released.
 PressHub_Social_Queue::reset_memory_store();
 $late_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
@@ -3434,13 +5434,78 @@ delete_option( 'presshub_social_post_images_instagram' );
 delete_option( 'presshub_social_meta_page_id' );
 delete_option( 'presshub_social_meta_access_token' );
 update_option( 'presshub_social_worker_sessions', $img_saved_sessions );
-foreach ( $img_saved_enabled as $img_p => $img_v ) {
-    if ( null === $img_v ) {
-        delete_option( 'presshub_social_enabled_' . $img_p );
-    } else {
-        update_option( 'presshub_social_enabled_' . $img_p, $img_v );
-    }
+null === $img_saved_enabled ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $img_saved_enabled );
+
+// ----------------------------------------------------------------------
+// Contract (#237): the settings clean-up leaves the worker claim payload
+// byte-identical for the same settings.
+// ----------------------------------------------------------------------
+echo "\n--- Contract: worker claim payload unchanged by the settings clean-up (#237) ---\n";
+foreach ( [ 'class-settings-registry.php', 'class-settings-transfer.php', 'class-settings-cleanup.php' ] as $cleanup_f ) {
+    require_once $base_dir . '/includes/' . $cleanup_f;
 }
+$GLOBALS['POSTS_STORE'][502] = [
+    'ID'           => 502,
+    'post_type'    => 'post',
+    'post_status'  => 'publish',
+    'post_title'   => 'Contract article',
+    'post_content' => 'Content...',
+];
+// A site as 2.44.0 left it: the removed options still hold values.
+$contract_removed = [
+    'presshub_social_github_token'          => 'ghp_contract_social_token_0001',
+    'presshub_social_twitter_api_key'       => 'contract-consumer-key',
+    'presshub_social_twitter_api_secret'    => 'contract-consumer-secret',
+    'presshub_social_twitter_access_secret' => 'contract-access-secret',
+    'presshub_ai_briefing_podcast_prompt_1' => 'Old single-presenter prompt',
+    'presshub_ai_briefing_podcast_prompt_2' => 'Old two-presenter prompt',
+    'presshub_ai_briefing_podcast_prompt_3' => 'Old three-presenter prompt',
+];
+foreach ( $contract_removed as $k => $v ) {
+    update_option( $k, $v );
+}
+delete_option( PressHub_Settings_Cleanup::VERSION_OPTION );
+$contract_claim = static function () {
+    $id  = PressHub_Social_Queue::enqueue( [
+        'post_id'      => 502,
+        'platform'     => 'twitter',
+        'engine'       => 'automation',
+        'post_copy'    => 'Contract tweet',
+        'scheduled_at' => '2026-01-01 00:00:00',
+    ] );
+    $res = PressHub_Social_REST_Controller::handle_claim( new WP_REST_Request( 'POST', '/worker/claim' ) );
+    $job = null;
+    foreach ( (array) ( $res['jobs'] ?? [] ) as $j ) {
+        if ( (int) ( $j['id'] ?? $j['job_id'] ?? 0 ) === (int) $id ) {
+            $job = $j;
+        }
+    }
+    // Only the job's own id and timestamps may differ between two claims.
+    $strip = static function ( $v ) use ( &$strip ) {
+        if ( ! is_array( $v ) ) {
+            return $v;
+        }
+        $out = [];
+        foreach ( $v as $k => $x ) {
+            if ( in_array( (string) $k, [ 'id', 'job_id', 'created_at', 'updated_at', 'claimed_at', 'locked_at', 'lease_expires_at', 'attempts' ], true ) ) {
+                continue;
+            }
+            $out[ $k ] = $strip( $x );
+        }
+        return $out;
+    };
+    return [ null !== $job, json_encode( [ 'ok' => $res['ok'] ?? null, 'job' => $strip( $job ) ] ) ];
+};
+[ $before_found, $before_json ] = $contract_claim();
+$cleanup_report = PressHub_Settings_Cleanup::run();
+[ $after_found, $after_json ] = $contract_claim();
+assert_true( $before_found && $after_found, 'Contract: the worker claims the job before and after the clean-up' );
+assert_true( ! empty( $cleanup_report['removed'] ) && 7 === count( array_filter( $cleanup_report['removed'] ) ), 'Contract: the clean-up removed the seven stored rows' );
+assert_equals( $before_json, $after_json, 'Contract: worker claim payload is byte-identical before and after the clean-up' );
+foreach ( array_keys( $contract_removed ) as $k ) {
+    delete_option( $k );
+}
+delete_option( PressHub_Settings_Cleanup::VERSION_OPTION );
 
 // ----------------------------------------------------------------------
 // Test Summary

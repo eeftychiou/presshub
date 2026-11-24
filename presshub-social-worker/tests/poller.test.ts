@@ -584,6 +584,117 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(mockPoster.mock.calls[0][0].aiGenerated).toBeUndefined();
     });
 
+    const xShortFetch = (maxSeconds?: number): { fetch: typeof fetch; completes: any[] } => {
+      const completes: any[] = [];
+      const fetchFn: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                {
+                  id: 410,
+                  platform: 'twitter',
+                  post_id: 80,
+                  post_title: 'Ενημέρωση',
+                  post_copy: 'Today in Cyprus https://presshub.cy/?p=80',
+                  audio_url: 'https://presshub.cy/wp-content/uploads/brief-80.wav',
+                  video_title: 'Η ενημέρωση',
+                  media_urls: ['https://presshub.cy/wp-content/uploads/ai-1.jpg'],
+                  tiktok_short: {
+                    index: 0,
+                    count: 1,
+                    hook: 'Η ενημέρωση',
+                    badge: 'ΕΝΗΜΕΡΩΣΗ',
+                    images: ['https://presshub.cy/wp-content/uploads/short-1.jpg'],
+                    segments: [{ speaker: 1, text: 'Καλημέρα.', start: 0, end: 1.0 }],
+                    ...(maxSeconds !== undefined ? { max_seconds: maxSeconds } : {})
+                  }
+                }
+              ]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          completes.push(JSON.parse(init?.body || '{}'));
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      return { fetch: fetchFn, completes };
+    };
+
+    test('renders an X short and posts the video, not the AI images', async () => {
+      const { fetch: mockFetch } = xShortFetch(140);
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: '/tmp/x-short.mp4', width: 1080, height: 1920, duration: 118, captions: 30, images: 1, music: true });
+      const mockPoster = jest.fn().mockResolvedValue({ success: true, platform: 'twitter', externalPostUrl: 'https://x.com/presshubcy/status/1' });
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster, generateShortFn: mockGenerateShort });
+
+      const stats = await poller.pollOnce();
+      expect(stats.succeeded).toBe(1);
+      expect(mockGenerateShort).toHaveBeenCalledWith(expect.objectContaining({ badge: 'ΕΝΗΜΕΡΩΣΗ' }));
+      expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ platform: 'twitter', mediaPath: '/tmp/x-short.mp4', copy: 'Today in Cyprus https://presshub.cy/?p=80' }));
+      expect(mockPoster.mock.calls[0][0].mediaPaths).toBeUndefined();
+    });
+
+    test('does not post an X video longer than X takes', async () => {
+      const { fetch: mockFetch, completes } = xShortFetch(140);
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: '/tmp/x-long.mp4', width: 1080, height: 1920, duration: 151, captions: 30, images: 1, music: false });
+      const mockPoster = jest.fn();
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster, generateShortFn: mockGenerateShort });
+
+      const stats = await poller.pollOnce();
+      expect(stats.failed).toBe(1);
+      expect(mockPoster).not.toHaveBeenCalled();
+      expect(completes[0]).toEqual(expect.objectContaining({ job_id: 410, status: 'failed' }));
+      expect(String(completes[0].error)).toContain("X's 140s limit");
+      expect(completes[0].metadata?.short_render_failed).toBeUndefined();
+    });
+
+    test('renders a Facebook Reel short and posts the video, not the AI images', async () => {
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                {
+                  id: 406,
+                  platform: 'facebook',
+                  post_id: 78,
+                  post_title: 'Άρθρο',
+                  post_copy: 'Facebook Reel caption #κύπρος',
+                  audio_url: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-78-1-abcd1234.wav',
+                  video_title: 'Hook',
+                  tiktok_short: { index: 0, count: 1, hook: 'Hook', source: 'article', badge: 'ΑΠΟΨΗ', images: [], segments: [] }
+                }
+              ]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: '/tmp/fb-reel.mp4', width: 1080, height: 1920, duration: 35, captions: 10, images: 0, music: false });
+      const mockPoster = jest.fn().mockResolvedValue({ success: true, platform: 'facebook', externalPostUrl: 'https://www.facebook.com/reel/1234567890' });
+      const poller = new PressHubPoller({
+        wpUrl: 'https://presshub.cy',
+        workerSecret: 'test-secret',
+        fetchFn: mockFetch,
+        posterHandler: mockPoster,
+        generateShortFn: mockGenerateShort
+      });
+
+      const stats = await poller.pollOnce();
+      expect(stats.succeeded).toBe(1);
+      expect(mockGenerateShort).toHaveBeenCalledWith(expect.objectContaining({ hook: 'Hook', badge: 'ΑΠΟΨΗ' }));
+      expect(mockGenerateShort.mock.calls[0][0].endCardLine).toBe('Ολόκληρη η ενημέρωση στο presshub.cy');
+      expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ platform: 'facebook', mediaPath: '/tmp/fb-reel.mp4', copy: 'Facebook Reel caption #κύπρος' }));
+      expect(mockPoster.mock.calls[0][0].mediaPaths).toBeUndefined();
+    });
+
     test('saves a TikTok short test render and never posts it', async () => {
       const fs = require('fs');
       const os = require('os');
@@ -713,6 +824,42 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(mockPoster).not.toHaveBeenCalled();
       expect(reports[0]).toEqual(expect.objectContaining({ job_id: 402, status: 'failed' }));
       expect(reports[0].error).toMatch(/no audio_url/);
+      expect(reports[0].metadata).toEqual({ short_render_failed: true });
+    });
+
+    test('flags a short that failed to render, but not one that failed to post', async () => {
+      const reports: any[] = [];
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                { id: 410, platform: 'tiktok', post_copy: 'Λεζάντα', video_title: 'Hook', audio_url: 'https://presshub.cy/a.wav', tiktok_short: { index: 0, count: 1, hook: 'Hook', source: 'article', badge: 'ΑΠΟΨΗ' } },
+                { id: 411, platform: 'instagram', post_copy: 'Λεζάντα', video_title: 'Hook', audio_url: 'https://presshub.cy/a.wav', tiktok_short: { index: 0, count: 1, hook: 'Hook', source: 'article', badge: 'ΑΠΟΨΗ' } }
+              ]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          reports.push(JSON.parse(init.body));
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      const mockGenerateShort = jest.fn()
+        .mockRejectedValueOnce(new Error('FFmpeg exited with code 1'))
+        .mockResolvedValueOnce({ filePath: '/tmp/ig-reel.mp4', width: 1080, height: 1920, duration: 35, captions: 10, images: 0, music: false });
+      const mockPoster = jest.fn().mockRejectedValue(new Error('Instagram upload timed out'));
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster, generateShortFn: mockGenerateShort });
+
+      const stats = await poller.pollOnce();
+      expect(stats.failed).toBe(2);
+      const renderFail = reports.find((r) => r.job_id === 410);
+      const postFail = reports.find((r) => r.job_id === 411);
+      expect(renderFail).toEqual(expect.objectContaining({ status: 'failed', metadata: { short_render_failed: true } }));
+      expect(postFail).toEqual(expect.objectContaining({ status: 'failed' }));
+      expect(postFail.metadata).toBeUndefined();
     });
   });
 

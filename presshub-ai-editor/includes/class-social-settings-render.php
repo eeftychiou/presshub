@@ -92,7 +92,7 @@ class PressHub_Social_Settings_Render {
         <div class="presshub-social-reset-box">
             <h4><?php echo esc_html__( 'Restore Prompts & Templates', 'presshub-social-autopost' ); ?></h4>
             <p class="description">
-                <?php echo esc_html__( 'Reset all prompt templates and static formats back to the official default files from assets/prompts/. Any customizations made in the fields above will be overwritten.', 'presshub-social-autopost' ); ?>
+                <?php echo esc_html__( 'Reset all prompt templates and static formats to their built-in defaults. Any customizations made in the fields above will be overwritten.', 'presshub-social-autopost' ); ?>
             </p>
             <p>
                 <a href="<?php echo esc_url( $url ); ?>" class="button button-secondary presshub-confirm-link" data-confirm="<?php echo esc_attr__( 'Are you sure you want to restore all prompts to defaults? Your customized prompt changes will be lost.', 'presshub-social-autopost' ); ?>">
@@ -126,7 +126,9 @@ class PressHub_Social_Settings_Render {
             $is_checked    = in_array( $platform, $enabled, true );
             $is_configured = PressHub_Social_Settings_Storage::is_platform_configured( $platform );
             $engine        = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
-            $engine_label  = ( 'automation' === $engine ) ? __( 'Automation Worker', 'presshub-social-autopost' ) : __( 'Official REST API', 'presshub-social-autopost' );
+            $engine_label  = 'youtube' === $platform
+                ? __( 'Worker + YouTube API (videos only)', 'presshub-social-autopost' )
+                : ( ( 'automation' === $engine ) ? __( 'Automation Worker', 'presshub-social-autopost' ) : __( 'Official REST API', 'presshub-social-autopost' ) );
 
             $session_ok    = PressHub_Social_Settings_Storage::is_platform_session_active( $platform );
             $badge = ( $is_configured && ! $session_ok )
@@ -138,7 +140,7 @@ class PressHub_Social_Settings_Render {
             echo '<div class="ph-display-flex ph-align-items-center ph-justify-content-space-between ph-padding-8px-12px ph-background-fff ph-border-1px-solid-ccd0d4 ph-border-radius-4px">';
             echo '<label class="ph-font-weight-600 ph-font-size-13px ph-cursor-pointer ph-display-flex ph-align-items-center ph-gap-8px">';
             echo '<input type="checkbox" name="presshub_social_enabled_platforms[]" value="' . esc_attr( $platform ) . '" ' . checked( $is_checked, true, false ) . ' /> ';
-            echo esc_html( ucfirst( $platform ) );
+            echo esc_html( self::platform_label( $platform ) );
             echo '</label>';
             echo '<div class="ph-display-flex ph-align-items-center ph-gap-10px">';
             echo '<span class="ph-font-size-12px ph-color-666">' . esc_html( $engine_label ) . '</span>';
@@ -159,13 +161,6 @@ class PressHub_Social_Settings_Render {
         </select>
         <p class="description"><?php echo esc_html__( 'In AI mode, each platform receives uniquely tailored editorial copy. In template mode, placeholders like {title} and {url} are replaced statically.', 'presshub-social-autopost' ); ?></p>
         <?php
-    }
-
-    public function render_github_token_field(): void {
-        $this->render_secret_field( [
-            'option' => 'presshub_social_github_token',
-            'desc'   => __( 'Optional GitHub Personal Access Token (PAT) for automatic plugin updates if the repository is private. Automatically inherits the token from PressHub AI Editor if left blank.', 'presshub-social-autopost' ),
-        ] );
     }
 
     public function render_platform_engine_field( array $args ): void {
@@ -204,70 +199,10 @@ class PressHub_Social_Settings_Render {
     // Field Renderers: AI Copywriter
     // ------------------------------------------------------------------
 
-    public function render_ai_provider_field(): void {
-        $current = PressHub_Social_Settings_Storage::get_ai_provider();
-        ?>
-        <select id="presshub_social_ai_provider" name="presshub_social_ai_provider">
-            <option value="" <?php selected( $current, '' ); ?>><?php echo esc_html__( '— Automatic / First Enabled Provider —', 'presshub-social-autopost' ); ?></option>
-            <?php
-            if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
-                $providers = PressHub_AI_Provider_Store::get_all( true );
-                foreach ( $providers as $prov ) {
-                    $type = $prov['type'] ?? '';
-                    if ( empty( $prov['enabled'] ) || ( empty( $prov['api_key'] ) && 'ollama_local' !== $type ) ) {
-                        continue;
-                    }
-                    $id    = $prov['id'] ?? $type;
-                    $name  = $prov['name'] ?? ucfirst( $id );
-                    $model = $prov['default_model'] ?? '';
-                    $label = $name . ( '' !== $model ? ' (' . $model . ')' : '' );
-                    if ( class_exists( 'PressHub_Social_AI_Copywriter' ) && ! PressHub_Social_AI_Copywriter::is_text_provider( $prov ) ) {
-                        // Speech, image and music models cannot write copy. Only a saved choice
-                        // is still listed, marked, so the operator can see and change it.
-                        if ( $current !== $id ) {
-                            continue;
-                        }
-                        $label .= ' ' . __( '— not a text model, social copy uses the automatic provider', 'presshub-social-autopost' );
-                    }
-                    echo '<option value="' . esc_attr( $id ) . '" ' . selected( $current, $id, false ) . '>' . esc_html( $label ) . '</option>';
-                }
-            }
-            ?>
-        </select>
-        <p class="description"><?php echo esc_html__( 'Select which configured and enabled provider generates social copy, or leave empty to use the active default provider.', 'presshub-social-autopost' ); ?></p>
-        <?php
-    }
-
-    public function render_ai_model_field(): void {
-        $model = PressHub_Social_Settings_Storage::get_ai_model();
-        ?>
-        <input type="text" id="presshub_social_ai_model" name="presshub_social_ai_model" value="<?php echo esc_attr( $model ); ?>" class="regular-text" placeholder="e.g. gpt-4o, claude-3-5-sonnet-20240620" />
-        <p class="description"><?php echo esc_html__( 'Optional model override for social copy. Leave blank to use the provider record default model.', 'presshub-social-autopost' ); ?></p>
-        <?php
-    }
-
-    public function render_ai_temperature_field(): void {
-        $temp = get_option( 'presshub_social_ai_temperature', '0.7' );
-        ?>
-        <input type="number" step="0.01" min="0" max="2" id="presshub_social_ai_temperature" name="presshub_social_ai_temperature" value="<?php echo esc_attr( $temp ); ?>" class="small-text" />
-        <p class="description"><?php echo esc_html__( 'Creativity vs determinism (0.0 to 2.0). Default: 0.7. Leave blank to defer to provider default.', 'presshub-social-autopost' ); ?></p>
-        <?php
-    }
-
-    public function render_ai_max_tokens_field(): void {
-        $tokens = PressHub_Social_Settings_Storage::get_ai_max_tokens();
-        ?>
-        <input type="number" step="1" min="0" max="65536" id="presshub_social_ai_max_tokens" name="presshub_social_ai_max_tokens" value="<?php echo esc_attr( $tokens > 0 ? $tokens : '' ); ?>" class="small-text" placeholder="Default" />
-        <p class="description"><?php echo esc_html__( 'Maximum tokens for generated copy (64 to 65536). Enter 0 or leave empty to defer to provider default.', 'presshub-social-autopost' ); ?></p>
-        <?php
-    }
-
-    public function render_ai_timeout_field(): void {
-        $timeout = PressHub_Social_Settings_Storage::get_ai_timeout();
-        ?>
-        <input type="number" step="1" min="0" max="600" id="presshub_social_ai_timeout" name="presshub_social_ai_timeout" value="<?php echo esc_attr( $timeout > 0 ? $timeout : '' ); ?>" class="small-text" placeholder="Default" />
-        <p class="description"><?php echo esc_html__( 'Timeout in seconds for AI copy generation requests (10 to 600). Enter 0 or leave empty to defer to provider default.', 'presshub-social-autopost' ); ?></p>
-        <?php
+    /** The read-only "Model: …" line of a task, linking to its row in AI models (#236). */
+    public function render_model_line( array $args = [] ): void {
+        require_once __DIR__ . '/class-model-tasks.php';
+        echo PressHub_Model_Tasks::feature_line( (string) ( $args['task'] ?? '' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line().
     }
 
     // ------------------------------------------------------------------
@@ -443,7 +378,12 @@ class PressHub_Social_Settings_Render {
         // they are not a switch of their own here (#234 review).
         $tiktok    = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
         $instagram = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
-        if ( ! $tiktok && ! $instagram ) {
+        $facebook  = PressHub_Social_Settings_Storage::get_facebook_shorts_enabled();
+        $twitter   = PressHub_Social_Settings_Storage::get_twitter_shorts_enabled();
+        $youtube   = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() || PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
+        // TikTok photo slides (#333) are on by default, so they count only where TikTok is posted to.
+        $slides = PressHub_Social_Settings_Storage::get_tiktok_slides_enabled() && PressHub_Social_Settings_Storage::is_platform_enabled( 'tiktok' );
+        if ( ! $tiktok && ! $slides && ! $instagram && ! $facebook && ! $twitter && ! $youtube ) {
             return [];
         }
         $issues = [];
@@ -454,9 +394,11 @@ class PressHub_Social_Settings_Render {
                 'link' => __( 'Change worker mode', 'presshub-social-autopost' ),
             ];
         }
-        if ( $tiktok && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'tiktok' ) ) {
+        if ( ( $tiktok || $slides ) && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'tiktok' ) ) {
             $issues[] = [
-                'text' => __( 'TikTok shorts need the automation engine, but TikTok uses another engine.', 'presshub-social-autopost' ),
+                'text' => $tiktok
+                    ? __( 'TikTok shorts need the automation engine, but TikTok uses another engine.', 'presshub-social-autopost' )
+                    : __( 'TikTok photo slides need the automation engine, but TikTok uses another engine.', 'presshub-social-autopost' ),
                 'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_tiktok' ),
                 'link' => __( 'Change TikTok engine', 'presshub-social-autopost' ),
             ];
@@ -466,6 +408,40 @@ class PressHub_Social_Settings_Render {
                 'text' => __( 'Instagram Reels need the automation engine, but Instagram uses another engine.', 'presshub-social-autopost' ),
                 'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_instagram' ),
                 'link' => __( 'Change Instagram engine', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $twitter && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'twitter' ) ) {
+            $issues[] = [
+                'text' => __( 'X video posts need the automation engine, but X uses another engine.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_twitter' ),
+                'link' => __( 'Change X engine', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $facebook && 'api' === PressHub_Social_Settings_Storage::get_platform_engine( 'facebook' ) && ! PressHub_Social_TikTok_Shorts::facebook_reels_via_api() ) {
+            $issues[] = [
+                'text' => __( 'Facebook Reels go through the Graph API with the API engine, but the Meta Page ID or access token is not set.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'credentials', 'presshub_social_meta_page_id' ),
+                'link' => __( 'Set the Meta Page ID and token', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $youtube && class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason() ) {
+            $issues[] = [
+                'text' => __( 'YouTube is on, but Google refused the stored sign-in. Connect YouTube again.', 'presshub-social-autopost' ),
+                'url'  => PressHub_Settings_Sections::url( 'connections', 'presshub-youtube-account' ),
+                'link' => __( 'Connect YouTube', 'presshub-social-autopost' ),
+            ];
+        } elseif ( $youtube && ! ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected() ) ) {
+            $issues[] = [
+                'text' => __( 'YouTube is on, but no YouTube channel is connected.', 'presshub-social-autopost' ),
+                'url'  => PressHub_Settings_Sections::url( 'connections', 'presshub-youtube-account' ),
+                'link' => __( 'Connect YouTube', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $youtube && ! PressHub_Social_Settings_Storage::is_platform_enabled( 'youtube' ) ) {
+            $issues[] = [
+                'text' => __( 'YouTube is off in the platform list, so nothing is queued for it.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'general' ),
+                'link' => __( 'Turn on YouTube', 'presshub-social-autopost' ),
             ];
         }
         return $issues;
@@ -481,7 +457,12 @@ class PressHub_Social_Settings_Render {
             <h3 class="ph-margin-0_8em-0-0_4em">
                 <?php
                 /* translators: %d: number of things to fix */
-                echo esc_html( sprintf( _n( 'Shorts can\'t run yet. %d thing to fix:', 'Shorts can\'t run yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) ) );
+                $only_episodes = ! PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_instagram_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_facebook_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_twitter_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+                echo esc_html( $only_episodes
+                    /* translators: %d: number of things to fix */
+                    ? sprintf( _n( 'YouTube podcast episodes can\'t be uploaded yet. %d thing to fix:', 'YouTube podcast episodes can\'t be uploaded yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) )
+                    /* translators: %d: number of things to fix */
+                    : sprintf( _n( 'Shorts can\'t run yet. %d thing to fix:', 'Shorts can\'t run yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) ) );
                 ?>
             </h3>
             <ol>
@@ -499,6 +480,7 @@ class PressHub_Social_Settings_Render {
         $rows  = [
             'TikTok'          => 'tiktok',
             'Instagram Reels' => 'instagram',
+            'Facebook Reels'  => 'facebook',
         ];
         echo '<ul class="ph-margin-0-0-8px presshub-shorts-ready-list">';
         foreach ( $rows as $label => $platform ) {
@@ -513,6 +495,23 @@ class PressHub_Social_Settings_Render {
                     $pull ? 'Pull' : 'Push'
                 ) ) ) . '</li>';
         }
+        $connected = class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected();
+        $channel   = $connected ? (string) ( PressHub_Social_YouTube::channel()['title'] ?? '' ) : '';
+        $reported  = PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' );
+        if ( ! $connected ) {
+            $why = class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason()
+                ? __( '(Google refused the sign-in: connect YouTube again in Connections)', 'presshub-social-autopost' )
+                : __( '(connect a YouTube channel in Connections)', 'presshub-social-autopost' );
+        } elseif ( ! $pull ) {
+            $why = __( '(the worker must be in Pull mode)', 'presshub-social-autopost' );
+        } elseif ( ! $reported ) {
+            $why = __( '(the worker has not reported YouTube yet: update and restart it)', 'presshub-social-autopost' );
+        } else {
+            $why = '';
+        }
+        echo '<li>YouTube: ' . ( '' === $why
+            ? '<strong>' . esc_html__( 'Ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html( sprintf( /* translators: %s: channel name */ __( '(channel %s, worker in Pull mode)', 'presshub-social-autopost' ), $channel ) )
+            : '<strong>' . esc_html__( 'Not ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html( $why ) ) . '</li>';
         echo '</ul>';
     }
 
@@ -520,12 +519,12 @@ class PressHub_Social_Settings_Render {
     public function render_shorts_narration_intro(): void {
         $engine = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
         $label  = ( '' === $engine || 'gemini' === $engine || 0 === strpos( $engine, 'gemini' ) ) ? 'Gemini TTS' : 'Google Cloud TTS';
-        $url    = PressHub_Settings_Sections::url( 'daily-briefing', 'briefing-voices' );
+        $url    = PressHub_Settings_Sections::url( 'ai-models', 'model-speech' );
         ?>
         <p>
             <?php echo esc_html__( 'Speech engine:', 'presshub-social-autopost' ); ?>
             <strong><?php echo esc_html( $label ); ?></strong>
-            &mdash; <a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html__( 'change in Daily Briefing → Voices & audio', 'presshub-social-autopost' ); ?></a>
+            &mdash; <a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html__( 'change in AI models → Speech', 'presshub-social-autopost' ); ?></a>
         </p>
         <?php
     }
@@ -537,6 +536,7 @@ class PressHub_Social_Settings_Render {
             'facebook'  => 'Facebook',
             'instagram' => 'Instagram',
             'tiktok'    => 'TikTok',
+            'youtube'   => 'YouTube',
         ];
         return $labels[ $platform ] ?? ucfirst( $platform );
     }
@@ -571,7 +571,7 @@ class PressHub_Social_Settings_Render {
                 <p><?php echo esc_html__( 'In Push mode this site calls the worker when it has a job. Use Test below to check that it answers.', 'presshub-social-autopost' ); ?></p>
             <?php endif; ?>
             <?php
-            $automation = array_values( array_filter( PressHub_Social_Settings_Storage::PLATFORMS, static function ( $p ) {
+            $automation = array_values( array_filter( PressHub_Social_Settings_Storage::ENGINE_PLATFORMS, static function ( $p ) {
                 return 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p );
             } ) );
             if ( $automation ) :
@@ -617,7 +617,12 @@ class PressHub_Social_Settings_Render {
             'describedby' => 'presshub_social_worker_secret-desc',
         ] );
         ?>
-        <p class="description" id="presshub_social_worker_secret-desc"><?php echo esc_html__( 'The worker signs in with this secret. It must match PRESSHUB_WORKER_SECRET in the worker’s .env file.', 'presshub-social-autopost' ); ?></p>
+        <p class="description" id="presshub_social_worker_secret-desc"><?php echo sprintf(
+            /* translators: 1: the worker setting name, 2: the worker's settings file */
+            esc_html__( 'The worker signs in with this secret. It must match %1$s in the worker’s %2$s file.', 'presshub-social-autopost' ),
+            '<code>PRESSHUB_WORKER_SECRET</code>',
+            '<code>.env</code>'
+        ); ?></p>
         <p class="presshub-worker-regenerate">
             <button type="button" class="button" id="presshub-social-regenerate-secret"
                 data-confirm="<?php echo esc_attr__( 'Make a new worker secret? The worker stops posting until you paste the new secret into PRESSHUB_WORKER_SECRET in its .env file and restart it.', 'presshub-social-autopost' ); ?>">
@@ -657,7 +662,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_tiktok_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_tiktok_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post one 30-60 second video per top story: a hook-first script read by the briefing presenters, with the hook on screen, captions that follow the voice, AI story images and its own caption. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post short vertical videos made from it (a two-minute daily brief, or one 30-60 second video per top story, see Podcast Shorts Format): a hook-first script read by the briefing presenters, with the hook on screen, captions that follow the voice, AI story images and its own caption. With Article Shorts on, each article also becomes one such video. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }
@@ -668,8 +673,232 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_instagram_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_instagram_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Also post each podcast short as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Also post each short (podcast shorts, and article shorts when Article Shorts are on) as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
+        <?php
+    }
+
+    public function render_facebook_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_facebook_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_facebook_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_facebook_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Also post each short (podcast stories and, with Article Shorts on, articles) to the Facebook Page as a Reel, with the short\'s own caption. The usual Facebook link post to the article is still made; each Reel follows it by the time between shorts. Needs Facebook enabled and the worker in Pull Mode. With the API engine the worker uploads each Reel through the Graph API (the Meta token needs pages_manage_posts); with the automation engine it posts it with the Facebook browser session.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_twitter_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_twitter_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_twitter_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_twitter_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Post videos to X. With Article Shorts on, an article\'s X post carries the article short instead of its image, with the same text and link; if the short cannot be made, the usual image post goes out. A podcast\'s daily brief (Podcast Shorts Format: daily brief) goes to X as one extra video post after the usual link post; a brief longer than X\'s 2 minutes 20 seconds is not posted there. Needs X on the automation engine, the worker in Pull Mode and worker 1.12.0 or later.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_tiktok_slides_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_tiktok_slides_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_tiktok_slides_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_tiktok_slides_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Post a story (a podcast story in one-short-per-story format or, with Article Shorts on, an article) to TikTok as a photo post when TikTok gets no video of it: the hook and the script as text over the story images, with no voice, and a TikTok sound found for the story\'s mood (Sound Searches under Prompts). With TikTok Shorts on, TikTok gets the videos and no photo posts, so a story is not posted twice. Needs TikTok on the automation engine, the worker in Pull Mode and worker 1.10.0 or later.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_youtube_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_youtube_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_youtube_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Also upload each short (podcast stories and, with Article Shorts on, articles) to YouTube. YouTube makes every vertical video of three minutes or less a Short by itself. The title is the short\'s hook and the description is its caption. Needs a connected YouTube channel and the worker in Pull Mode.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_youtube_podcast_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_youtube_podcast_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_youtube_podcast_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Upload every Daily Briefing podcast to YouTube as a full episode: a 16:9 video of the whole audio over the podcast\'s image, titled like the post, with the YouTube description from the YouTube Caption Prompt, added to the podcast playlist below.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_youtube_podcast_language_playlists_field(): void {
+        $option = 'presshub_social_youtube_podcast_language_playlists';
+        $langs  = class_exists( 'PressHub_AI_Podcast_Translations' ) ? PressHub_AI_Podcast_Translations::LANGUAGES : [];
+        $on     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_languages() : [];
+        foreach ( $langs as $lang => $info ) :
+            $id = $option . '_' . $lang;
+            ?>
+            <p>
+                <label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $info['name'] ); ?></label><br />
+                <input type="text" id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $option . '[' . $lang . ']' ); ?>" value="<?php echo esc_attr( PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( $lang ) ); ?>" class="regular-text" placeholder="PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+                <?php if ( ! in_array( $lang, $on, true ) ) : ?>
+                    <span class="description"><?php echo esc_html__( '(not made: turn this language on under Settings, Daily Briefing, Other languages)', 'presshub-social-autopost' ); ?></span>
+                <?php endif; ?>
+            </p>
+            <?php
+        endforeach;
+        ?>
+        <p class="description"><?php echo esc_html__( 'The playlist each language\'s episodes are added to. Make one playlist per language in YouTube Studio, set it as a podcast there, then paste its link or ID. Empty uploads that language\'s episodes without a playlist.', 'presshub-social-autopost' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Each language adds two uploads a day (morning and midday) to the channel\'s 100 uploads a day, which shorts share. Adding an episode to its playlist uses 50 of the project\'s 10,000 daily API units.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
+    public function render_youtube_episode_enhanced_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_youtube_episode_enhanced();
+        ?>
+        <input type="hidden" name="presshub_social_youtube_episode_enhanced_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_youtube_episode_enhanced" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Show the story images of the podcast\'s shorts, one topic at a time, with captions like the shorts, a title card per topic and a chapter list in the description. Off: the whole audio over the podcast\'s image.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_tiktok_shorts_format_field(): void {
+        $current = PressHub_Social_Settings_Storage::get_tiktok_shorts_format();
+        $labels  = [
+            'brief'   => __( 'Daily brief: one video of about two minutes with the top stories', 'presshub-social-autopost' ),
+            'stories' => __( 'One short per story (Shorts per Podcast)', 'presshub-social-autopost' ),
+        ];
+        ?>
+        <select id="presshub_social_tiktok_shorts_format" name="presshub_social_tiktok_shorts_format">
+            <?php foreach ( PressHub_Social_Settings_Storage::TIKTOK_SHORTS_FORMATS as $value ) : ?>
+                <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current, $value ); ?>><?php echo esc_html( $labels[ $value ] ?? $value ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'What each podcast becomes on the shorts platforms. Daily brief: one video of about two minutes with the day\'s top stories, each with its own image, and no photo slides. One short per story: Shorts per Podcast videos of 30-60 seconds, one story each. Articles are not affected.', 'presshub-social-autopost' ); ?> <?php echo esc_html__( 'Default: Daily brief.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
+    public function render_tiktok_full_podcast_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_tiktok_full_podcast_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_tiktok_full_podcast_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_tiktok_full_podcast_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'With Podcast Shorts Format on Daily brief and TikTok Shorts on, also post the whole podcast to TikTok as one video over the podcast\'s image, half the Time Between Shorts after the brief.', 'presshub-social-autopost' ); ?> <?php echo esc_html__( 'Default: on.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_tiktok_story_posts_format_field(): void {
+        $current = PressHub_Social_Settings_Storage::get_tiktok_story_posts_format();
+        $labels  = [
+            'random' => __( 'Random: each post is a video short or photo slides', 'presshub-social-autopost' ),
+            'video'  => __( 'Video shorts only', 'presshub-social-autopost' ),
+            'slides' => __( 'Photo slides only', 'presshub-social-autopost' ),
+        ];
+        ?>
+        <select id="presshub_social_tiktok_story_posts_format" name="presshub_social_tiktok_story_posts_format">
+            <?php foreach ( PressHub_Social_Settings_Storage::TIKTOK_STORY_POSTS_FORMATS as $value ) : ?>
+                <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current, $value ); ?>><?php echo esc_html( $labels[ $value ] ?? $value ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'What each TikTok Story Post is: a voiced video short with captions, or photo slides with the story as text and a TikTok sound. Photo slides need worker 1.10.0 or later.', 'presshub-social-autopost' ); ?> <?php echo esc_html__( 'Default: Random.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
+    public function render_youtube_privacy_field(): void {
+        $current = PressHub_Social_Settings_Storage::get_youtube_privacy_status();
+        $labels  = [
+            'public'   => __( 'Public', 'presshub-social-autopost' ),
+            'unlisted' => __( 'Unlisted (only people with the link)', 'presshub-social-autopost' ),
+            'private'  => __( 'Private (only you, for testing)', 'presshub-social-autopost' ),
+        ];
+        ?>
+        <select id="presshub_social_youtube_privacy_status" name="presshub_social_youtube_privacy_status">
+            <?php foreach ( PressHub_Social_Settings_Storage::YOUTUBE_PRIVACY as $value ) : ?>
+                <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current, $value ); ?>><?php echo esc_html( $labels[ $value ] ?? $value ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'Who can watch the shorts and episodes once they are uploaded. Use Private for a first test.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
+    public function render_youtube_category_field(): void {
+        $current = PressHub_Social_Settings_Storage::get_youtube_category_id();
+        $labels  = [
+            25 => __( 'News & Politics', 'presshub-social-autopost' ),
+            22 => __( 'People & Blogs', 'presshub-social-autopost' ),
+            24 => __( 'Entertainment', 'presshub-social-autopost' ),
+            27 => __( 'Education', 'presshub-social-autopost' ),
+            17 => __( 'Sports', 'presshub-social-autopost' ),
+            28 => __( 'Science & Technology', 'presshub-social-autopost' ),
+        ];
+        if ( ! isset( $labels[ $current ] ) ) {
+            /* translators: %d: YouTube category number */
+            $labels[ $current ] = sprintf( __( 'Category %d', 'presshub-social-autopost' ), $current );
+        }
+        ?>
+        <select id="presshub_social_youtube_category_id" name="presshub_social_youtube_category_id">
+            <?php foreach ( $labels as $id => $label ) : ?>
+                <option value="<?php echo esc_attr( (string) $id ); ?>" <?php selected( $current, $id ); ?>><?php echo esc_html( $label ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'YouTube category of every upload.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Connections → YouTube account: the address to paste in Google Cloud, the channel
+     * that is connected, and Connect / Disconnect / Test. Reads stored data only.
+     */
+    public function render_youtube_account_field(): void {
+        $notice    = PressHub_Social_YouTube::take_notice();
+        $connected = PressHub_Social_YouTube::is_connected();
+        $channel   = PressHub_Social_YouTube::channel();
+        ?>
+        <div id="presshub-youtube-account">
+            <?php if ( $notice ) : ?>
+                <div class="notice inline <?php echo ! empty( $notice['ok'] ) ? 'notice-success' : 'notice-error'; ?>"><p><?php echo esc_html( (string) $notice['text'] ); ?></p></div>
+            <?php endif; ?>
+            <p>
+                <label for="presshub-youtube-redirect-uri"><?php echo esc_html__( 'Authorized redirect URI (paste it into your Google OAuth client):', 'presshub-social-autopost' ); ?></label><br />
+                <input type="text" id="presshub-youtube-redirect-uri" class="large-text code" readonly="readonly" value="<?php echo esc_attr( PressHub_Social_YouTube::redirect_uri() ); ?>" />
+            </p>
+            <p>
+                <?php if ( $connected ) : ?>
+                    <?php
+                    /* translators: %s: YouTube channel name */
+                    echo esc_html( sprintf( __( 'Connected channel: %s', 'presshub-social-autopost' ), (string) ( $channel['title'] ?? __( 'unknown', 'presshub-social-autopost' ) ) ) );
+                    ?>
+                    <a class="button button-secondary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::disconnect_link() ); ?>"><?php echo esc_html__( 'Disconnect', 'presshub-social-autopost' ); ?></a>
+                    <a class="button button-secondary" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect another channel', 'presshub-social-autopost' ); ?></a>
+                <?php elseif ( PressHub_Social_YouTube::has_client() && '' !== PressHub_Social_YouTube::reconnect_reason() ) : ?>
+                    <?php
+                    /* translators: 1: channel name, 2: Google's error */
+                    echo esc_html( sprintf( __( 'Uploads to %1$s stopped: Google refused the sign-in (%2$s).', 'presshub-social-autopost' ), (string) ( $channel['title'] ?? 'YouTube' ), PressHub_Social_YouTube::reconnect_reason() ) );
+                    ?>
+                    <a class="button button-primary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect YouTube again', 'presshub-social-autopost' ); ?></a>
+                    <a class="button button-secondary" href="<?php echo esc_url( PressHub_Social_YouTube::disconnect_link() ); ?>"><?php echo esc_html__( 'Disconnect', 'presshub-social-autopost' ); ?></a>
+                <?php elseif ( PressHub_Social_YouTube::has_client() ) : ?>
+                    <?php echo esc_html__( 'No channel connected.', 'presshub-social-autopost' ); ?>
+                    <a class="button button-primary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect YouTube', 'presshub-social-autopost' ); ?></a>
+                <?php else : ?>
+                    <?php echo esc_html__( 'Save the client ID and client secret above, then Connect YouTube appears here.', 'presshub-social-autopost' ); ?>
+                <?php endif; ?>
+            </p>
+            <p class="description"><?php echo esc_html__( 'Connect signs in with Google as the YouTube channel. Use the Google account that owns the channel; for a Brand Account channel, pick the channel when Google asks.', 'presshub-social-autopost' ); ?></p>
+            <?php if ( $connected && PressHub_Social_YouTube::paused_until() > 0 ) : ?>
+                <p><strong><?php
+                /* translators: %s: UTC date and time */
+                echo esc_html( sprintf( __( 'The daily YouTube upload quota is used up. Uploads resume at %s UTC.', 'presshub-social-autopost' ), gmdate( 'Y-m-d H:i', PressHub_Social_YouTube::paused_until() ) ) );
+                ?></strong></p>
+            <?php endif; ?>
+            <?php if ( $connected ) { $this->render_test_connection_button( 'youtube' ); } ?>
+        </div>
         <?php
     }
 
@@ -679,7 +908,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_tiktok_article_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_tiktok_article_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Also turn every article and opinion piece into one short, made like the podcast shorts (narration, captions that follow the voice, AI images, music), on TikTok and, when Instagram Reels are on, on Instagram. The post text is the usual AI caption. If the short cannot be made, the article is posted the classic way.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Also turn every article and opinion piece into one short, made like the podcast shorts (narration, captions that follow the voice, AI images, music), on every platform whose own shorts switch is on (TikTok Shorts, Instagram Reels, YouTube Shorts), each independently of the others. The post text is the usual AI caption. If the short cannot be made, the article is posted the classic way on TikTok and Instagram; YouTube takes only videos, so there it is skipped.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }

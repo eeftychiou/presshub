@@ -43,94 +43,51 @@ class SettingsSanitizeTest
 
         $cbs = self::callbacks();
 
-        // --- Case 1: provider whitelist ---
-        if ( self::sanitize( $cbs, 'presshub_ai_provider', 'foo' ) !== 'openai' ) {
-            $failures[] = "provider 'foo' should sanitize to 'openai'.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_provider', 'anthropic' ) !== 'anthropic' ) {
-            $failures[] = "provider 'anthropic' should pass through.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_provider', 'GEMINI' ) !== 'openai' ) {
-            $failures[] = "provider 'GEMINI' (case-sensitive) should sanitize to 'openai'.";
-        }
-
         // --- Case 2: API key HTML is stripped ---
         self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_api_key', '<script>alert(1)</script>' ) !== 'alert(1)' ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', '<script>alert(1)</script>' ) !== 'alert(1)' ) {
             $failures[] = "api key '<script>alert(1)</script>' should have HTML stripped.";
         }
 
         // --- Case 3: empty key post preserves the saved key ---
         self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-existing';
-        if ( self::sanitize( $cbs, 'presshub_ai_api_key', '' ) !== 'sk-existing' ) {
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-existing';
+        if ( self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', '' ) !== 'sk-existing' ) {
             $failures[] = "empty api key post should preserve the saved key.";
         }
 
         // --- Case 4: empty key post with no saved value stays empty ---
         self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_api_key', '' ) !== '' ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', '' ) !== '' ) {
             $failures[] = "empty api key post with no saved value should stay empty.";
         }
 
         // --- Case 5: masked value is never stored as a real key ---
         self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-1234567890';
-        if ( self::sanitize( $cbs, 'presshub_ai_api_key', '••••7890' ) !== 'sk-1234567890' ) {
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-1234567890';
+        if ( self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', '••••7890' ) !== 'sk-1234567890' ) {
             $failures[] = "a masked key post should preserve the saved key, not store the mask.";
         }
 
-        // --- Case 6: temperature clamps to [0,2]; only non-numeric falls back to 0.7 (#258) ---
+        // --- Case 7: max_tokens int clamp [1, 65536] (a per-task limit: #309 E1
+        // removed the per-provider options; Connections clamps its own) ---
         self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '5.0' ) !== 2.0 ) {
-            $failures[] = "temperature 5.0 should clamp to 2.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '0.5' ) !== 0.5 ) {
-            $failures[] = "temperature 0.5 should pass through.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '-1' ) !== 0.0 ) {
-            $failures[] = "temperature -1 should clamp to 0.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', 'abc' ) !== 0.7 ) {
-            $failures[] = "non-numeric temperature should fall back to 0.7.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '2' ) !== 2.0 ) {
-            $failures[] = "temperature 2 (upper bound) should pass through.";
-        }
-
-        // --- Case 7: max_tokens int clamp [1, 65536] ---
-        self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '500' ) !== 500 ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_coauthor_max_tokens', '500' ) !== 500 ) {
             $failures[] = 'max_tokens 500 should pass through.';
         }
         // #233: 0 means "provider default" (the same as empty), so a stored 0
         // survives a re-save or an import; negative values still clamp to 1.
-        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '0' ) !== 0 ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_coauthor_max_tokens', '0' ) !== 0 ) {
             $failures[] = 'max_tokens 0 should stay 0 (provider default).';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '-5' ) !== 1 ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_coauthor_max_tokens', '-5' ) !== 1 ) {
             $failures[] = 'max_tokens -5 should clamp to 1.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '99999' ) !== 65536 ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_coauthor_max_tokens', '99999' ) !== 65536 ) {
             $failures[] = 'max_tokens 99999 should clamp to 65536.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', 'abc' ) !== 1 ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_coauthor_max_tokens', 'abc' ) !== 1 ) {
             $failures[] = 'non-numeric max_tokens should clamp to 1.';
-        }
-
-        // --- Case 8: timeout int clamp [10, 300] (#259) ---
-        self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '45' ) !== 45 ) {
-            $failures[] = 'timeout 45 should pass through.';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '1' ) !== 10 ) {
-            $failures[] = 'timeout 1 should clamp to 10.';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '7' ) !== 10 ) {
-            $failures[] = 'timeout 7 should clamp to 10 (the API client ignores lower values).';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '1000' ) !== 300 ) {
-            $failures[] = 'timeout 1000 should clamp to 300.';
         }
 
         // --- Case 9: rate limit per-hour clamp [1, 10000] ---
@@ -193,21 +150,6 @@ class SettingsSanitizeTest
             $failures[] = "empty region should fall back to 'us-central1'.";
         }
 
-        // --- Case 14: per-provider model sanitization + defaults ---
-        self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_model_openai', '<b>gpt-4o</b>' ) !== 'gpt-4o' ) {
-            $failures[] = "model '<b>gpt-4o</b>' should have HTML stripped.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_model_openai', '' ) !== 'gpt-4o' ) {
-            $failures[] = "empty openai model should fall back to 'gpt-4o'.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_model_anthropic', '' ) !== 'claude-3-5-sonnet-20240620' ) {
-            $failures[] = "empty anthropic model should fall back to 'claude-3-5-sonnet-20240620'.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_model_gemini', '' ) !== 'gemini-2.5-flash' ) {
-            $failures[] = "empty gemini model should fall back to 'gemini-2.5-flash'.";
-        }
-
         // --- Case 15: google cloud key + github token sanitization ---
         self::reset_options();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'gc-key';
@@ -219,31 +161,19 @@ class SettingsSanitizeTest
             $failures[] = 'github token should have HTML stripped.';
         }
 
-        // --- Case 16: provider extras text sanitization ---
-        self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_anthropic_version', ' 2024-01-01 ' ) !== '2024-01-01' ) {
-            $failures[] = "anthropic version should be trimmed.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_anthropic_version', '<b>2023-06-01</b>' ) !== '2023-06-01' ) {
-            $failures[] = "anthropic version should have HTML stripped.";
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_openai_org', ' org-abc ' ) !== 'org-abc' ) {
-            $failures[] = "openai org should be trimmed.";
-        }
-
         // --- Case 17: "Remove stored key" checkbox deletes the saved secret ---
         self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-to-remove';
-        if ( self::sanitize( $cbs, 'presshub_ai_remove_api_key', '1' ) !== 0 ) {
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-to-remove';
+        if ( self::sanitize( $cbs, 'presshub_ai_remove_google_cloud_api_key', '1' ) !== 0 ) {
             $failures[] = 'remove_api_key sanitize should store 0 for the flag option.';
         }
-        if ( array_key_exists( 'presshub_ai_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
-            $failures[] = 'checking "Remove stored key" must delete presshub_ai_api_key.';
+        if ( array_key_exists( 'presshub_ai_google_cloud_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'checking "Remove stored key" must delete presshub_ai_google_cloud_api_key.';
         }
         self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-keep';
-        self::sanitize( $cbs, 'presshub_ai_remove_api_key', '' );
-        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] ?? null ) !== 'sk-keep' ) {
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-keep';
+        self::sanitize( $cbs, 'presshub_ai_remove_google_cloud_api_key', '' );
+        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] ?? null ) !== 'sk-keep' ) {
             $failures[] = 'an unchecked remove flag must keep the saved key.';
         }
         self::reset_options();
@@ -280,12 +210,12 @@ class SettingsSanitizeTest
         // --- Case 19: secrets persist with autoload disabled ---
         self::reset_options();
         $GLOBALS['UPDATE_OPTION_AUTOLOAD'] = [];
-        self::sanitize( $cbs, 'presshub_ai_api_key', 'sk-new-value' );
-        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] ?? null ) !== 'sk-new-value' ) {
+        self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', 'sk-new-value' );
+        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] ?? null ) !== 'sk-new-value' ) {
             $failures[] = 'a new api key should be persisted by the sanitize path.';
         }
-        if ( array_key_exists( 'presshub_ai_api_key', $GLOBALS['UPDATE_OPTION_AUTOLOAD'] ) && false !== $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_api_key'] ) {
-            $failures[] = 'api key must be saved with autoload=false; got: ' . var_export( $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_api_key'] ?? null, true );
+        if ( array_key_exists( 'presshub_ai_google_cloud_api_key', $GLOBALS['UPDATE_OPTION_AUTOLOAD'] ) && false !== $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_google_cloud_api_key'] ) {
+            $failures[] = 'api key must be saved with autoload=false; got: ' . var_export( $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_google_cloud_api_key'] ?? null, true );
         }
         // The masked round-trip also re-persists with autoload=false.
         self::reset_options();

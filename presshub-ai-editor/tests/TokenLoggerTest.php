@@ -45,6 +45,64 @@ function test_token_logger() {
     assert( 'briefing_curation' === $row1['action_trigger'], 'Action recorded' );
     echo '  [2] Log LLM request: OK' . PHP_EOL;
 
+    // 2b. The row ID is captured for the caller, which can mark the row failed later.
+    // Uses its own row, removed afterwards, so the totals checked below are unchanged.
+    $id_fail = PressHub_AI_Token_Logger::log_llm_request( 'social_tiktok_shorts', 'gemini', 'gemini-2.5-flash', 100, 50, 900, 'success', null, [], 1 );
+    $last    = PressHub_AI_Token_Logger::get_last_llm_request();
+    if ( (int) ( $last['log_id'] ?? 0 ) !== (int) $id_fail || (int) $id_fail <= 0 ) {
+        throw new RuntimeException( 'get_last_llm_request() carries the log_id of the row' );
+    }
+    if ( ! PressHub_AI_Token_Logger::mark_failed( (int) $id_fail, 'Response not usable: broken JSON' ) ) {
+        throw new RuntimeException( 'mark_failed() updates the row' );
+    }
+    $fail_key = null;
+    foreach ( $wpdb->tables['wp_presshub_ai_token_logs'] as $k => $r ) {
+        if ( (int) ( $r['id'] ?? 0 ) === (int) $id_fail ) {
+            $fail_key = $k;
+        }
+    }
+    $row_fail = null === $fail_key ? [] : $wpdb->tables['wp_presshub_ai_token_logs'][ $fail_key ];
+    if ( 'error' !== ( $row_fail['status'] ?? '' ) || 'Response not usable: broken JSON' !== ( $row_fail['error_message'] ?? '' ) || 150 !== (int) ( $row_fail['total_tokens'] ?? 0 ) ) {
+        throw new RuntimeException( 'A row marked failed shows error and the reason, and keeps its tokens' );
+    }
+    if ( PressHub_AI_Token_Logger::mark_failed( 0, 'x' ) ) {
+        throw new RuntimeException( 'mark_failed() ignores an unknown row' );
+    }
+    unset( $wpdb->tables['wp_presshub_ai_token_logs'][ $fail_key ] );
+    $wpdb->tables['wp_presshub_ai_token_logs'] = array_values( $wpdb->tables['wp_presshub_ai_token_logs'] );
+    echo '  [2b] Mark a logged request failed: OK' . PHP_EOL;
+
+    // 2c. The Usage & logs action filter lists every logged action, with readable names.
+    $checks = [
+        [ 'Shorts script (TikTok/YouTube)', PressHub_AI_Token_Logger::action_label( 'social_tiktok_shorts' ) ],
+        [ 'Social copy: X', PressHub_AI_Token_Logger::action_label( 'social_copy_twitter' ) ],
+        [ 'SEO: post title', PressHub_AI_Token_Logger::action_label( 'seo_post_title' ) ],
+        [ 'Url extract', PressHub_AI_Token_Logger::action_label( 'url_extract' ) ],
+    ];
+    foreach ( $checks as [ $want, $got ] ) {
+        if ( $want !== $got ) {
+            throw new RuntimeException( "action_label(): expected '{$want}', got '{$got}'" );
+        }
+    }
+    $options = PressHub_AI_Token_Logger::filter_options( [ 'url_extract', 'social_copy_facebook', 'briefing_curation', '' ] );
+    $keys    = array_keys( $options );
+    if ( 'coauthor_draft' !== $keys[0] || ! isset( $options['social_post_images'] ) || 'Social copy: Facebook' !== ( $options['social_copy_facebook'] ?? '' ) || 'url_extract' !== end( $keys ) || 1 !== count( array_keys( $keys, 'briefing_curation', true ) ) || isset( $options[''] ) ) {
+        throw new RuntimeException( 'filter_options() lists the known actions first, then every other logged action once, by name' );
+    }
+    $real_wpdb = $wpdb;
+    $wpdb      = new class {
+        public $prefix = 'wp_';
+        public $last_sql = '';
+        public function get_col( $sql ) { $this->last_sql = $sql; return [ 'url_extract', 'podcast_script', '', 'url_extract' ]; }
+    };
+    $logged = PressHub_AI_Token_Logger::get_logged_actions();
+    $sql    = $wpdb->last_sql;
+    $wpdb   = $real_wpdb;
+    if ( [ 'podcast_script', 'url_extract' ] !== $logged || false === strpos( $sql, 'SELECT DISTINCT action_trigger FROM wp_presshub_ai_token_logs' ) ) {
+        throw new RuntimeException( 'get_logged_actions() returns each logged action once, sorted' );
+    }
+    echo '  [2c] Action filter options: OK' . PHP_EOL;
+
     // 3. Log TTS request
     $id2 = PressHub_AI_Token_Logger::log_tts_request(
         'podcast_audio',

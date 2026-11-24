@@ -186,8 +186,22 @@ class PressHub_Settings_Registry {
     }
 
     /**
+     * A registry label, help text or old name in the site's language (#309, E10).
+     * The strings reach translators through includes/settings-registry-strings.php.
+     */
+    public static function translated( string $text ): string {
+        if ( '' === $text || ! function_exists( 'translate' ) ) {
+            return $text;
+        }
+        // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText,WordPress.WP.I18n.LowLevelTranslationFunction -- registry data; listed for translators in settings-registry-strings.php.
+        return (string) translate( $text, 'presshub-ai-editor' );
+    }
+
+    /**
      * Index for the settings search and the per-field Default / Reset links
-     * (#234): every active, rendered, non-secret option of both pages.
+     * (#234): every active, rendered option of both pages, with labels and
+     * help in the site's language (#309 E10); secrets by label and help only,
+     * never a value or default (#309 E3).
      * Defaults come from the registry, else from register_setting(); only
      * scalar defaults are passed.
      *
@@ -197,31 +211,45 @@ class PressHub_Settings_Registry {
         $registered = function_exists( 'get_registered_settings' ) ? get_registered_settings() : [];
         $index      = [];
         foreach ( self::all() as $key => $e ) {
-            if ( empty( $e['rendered'] ) || ! empty( $e['secret'] ) || ! empty( $e['removes'] ) || self::is_unused( $key ) ) {
+            if ( empty( $e['rendered'] ) || ! empty( $e['removes'] ) || self::is_unused( $key ) ) {
                 continue;
             }
+            // #309 (E3): secrets are found by their label and help; their value and
+            // default are never put in the index.
+            $is_secret = ! empty( $e['secret'] );
             $row = [
                 'key'      => $key,
                 'page'     => (string) ( $e['page'] ?? 'ai' ),
                 'tab'      => (string) ( $e['tab'] ?? '' ),
                 'section'  => PressHub_Settings_Sections::section_of( (string) $key, $e ),
                 'group'    => (string) ( $e['group'] ?? '' ),
-                'label'    => (string) ( $e['label'] ?? $key ),
-                'help'     => (string) ( $e['help'] ?? '' ),
-                'aliases'  => array_values( array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ),
+                'label'    => self::translated( (string) ( $e['label'] ?? $key ) ),
+                'help'     => self::translated( (string) ( $e['help'] ?? '' ) ),
+                'aliases'  => array_values( array_map( [ __CLASS__, 'translated' ], array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ) ),
                 'checkbox' => ! empty( $e['checkbox'] ),
             ];
-            if ( ! empty( $e['depends_on'] ) && is_string( $e['depends_on'] ) ) {
-                $parent            = self::get( $e['depends_on'] );
-                $row['depends_on'] = $e['depends_on'];
-                $row['depends_label'] = (string) ( $parent['label'] ?? $e['depends_on'] );
+            if ( $is_secret ) {
+                $row['secret'] = true;
+                $index[]       = $row;
+                continue;
+            }
+            if ( ! empty( $e['depends_on'] ) && ( is_string( $e['depends_on'] ) || is_array( $e['depends_on'] ) ) ) {
+                // One switch, or a list of switches of which any one turns the field on.
+                $parents = array_values( array_filter( array_map( 'strval', (array) $e['depends_on'] ) ) );
+                $labels  = [];
+                foreach ( $parents as $pk ) {
+                    $parent   = self::get( $pk );
+                    $labels[] = self::translated( (string) ( $parent['label'] ?? $pk ) );
+                }
+                $row['depends_on']    = 1 === count( $parents ) ? $parents[0] : $parents;
+                $row['depends_label'] = implode( '" or "', $labels );
             }
             $default = self::default_value( $key );
             if ( null === $default && isset( $registered[ $key ] ) && array_key_exists( 'default', $registered[ $key ] ) ) {
                 $default = $registered[ $key ]['default'];
             }
-            if ( is_bool( $default ) ) {
-                $default = $default ? 1 : 0;
+            if ( is_bool( $default ) || ( ! empty( $e['checkbox'] ) && is_scalar( $default ) ) ) {
+                $default = in_array( $default, [ true, 1, '1', 'on', 'yes', 'true' ], true ) ? 1 : 0;
             }
             if ( is_scalar( $default ) && ( ! is_string( $default ) || strlen( $default ) <= 200 ) ) {
                 $row['default'] = $default;
@@ -264,7 +292,7 @@ class PressHub_Settings_Registry {
             'whats_new_dismissed' => $dismissed,
             'whats_new'           => [
                 __( 'PressHub AI and PressHub Social settings are now one Settings page. Pick a section on the left; each section has its own Save.', 'presshub-ai-editor' ),
-                __( 'Connections holds the social platform accounts, the automation worker, Google Cloud and plugin updates. AI models holds the provider grid and the Copilot model.', 'presshub-ai-editor' ),
+                __( 'Connections holds every key and account: AI providers, social platform accounts, the automation worker, Google Cloud and plugin updates. AI models shows in one table which model each AI task uses.', 'presshub-ai-editor' ),
                 __( 'Writing & QA brings together Co-author drafting, the QA gate, SEO & tags and Featured images. Social publishing holds everything from the old Social settings page except the accounts.', 'presshub-ai-editor' ),
                 __( 'Site & system shows every retention period in one table, with link previews, rate limits and diagnostics. Token & usage logs are on PressHub → Usage & logs.', 'presshub-ai-editor' ),
                 __( 'Leaving a section with unsaved changes asks first. Old links and bookmarks still work: they open the section that now holds the setting.', 'presshub-ai-editor' ),
@@ -293,6 +321,7 @@ class PressHub_Settings_Registry {
                 /* translators: %d: number of changed fields */
                 'unsaved_many'       => __( '%d unsaved changes', 'presshub-ai-editor' ),
                 'error_prefix'       => __( 'Error:', 'presshub-ai-editor' ),
+                'warning_prefix'     => __( 'Warning:', 'presshub-ai-editor' ),
                 'invalid_value'      => __( 'Enter a valid value.', 'presshub-ai-editor' ),
                 'not_saved'          => __( 'Not saved. Fix the fields listed above.', 'presshub-ai-editor' ),
                 'whats_new_title'    => __( "What's new in settings", 'presshub-ai-editor' ),
@@ -382,7 +411,7 @@ class PressHub_Settings_Registry {
      * registered anything (tests, some hosts).
      */
     public static function ensure_registered( string $page = '' ): void {
-        if ( ( '' === $page || 'ai' === $page ) && ! isset( self::$registered['presshub_ai_provider'] ) && class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+        if ( ( '' === $page || 'ai' === $page ) && ! isset( self::$registered['presshub_ai_fetch_urls'] ) && class_exists( 'PressHub_AI_Settings_Storage' ) ) {
             // register_options() also adds the settings fields, whose callbacks live on the renderer.
             if ( ! class_exists( 'PressHub_AI_Settings_Render' ) ) {
                 require_once __DIR__ . '/class-settings-render.php';
@@ -433,10 +462,22 @@ class PressHub_Settings_Registry {
     /**
      * The settings screen posts its fields as a flat JSON object, so an array
      * field such as "presshub_ai_policy_fiches_budgets[podcast_script]" arrives
-     * as that literal key. Folds such keys into nested arrays (one level).
+     * as that literal key. Folds such keys into nested arrays (one level, or two as
+     * in "presshub_ai_briefing_podcast_language_voices[en][presenter_1]").
      */
     public static function expand_bracket_keys( array $post_data ): array {
         foreach ( $post_data as $key => $value ) {
+            if ( is_string( $key ) && preg_match( '/^([a-z0-9_]+)\[([a-z0-9_]+)\]\[([a-z0-9_]+)\]$/', $key, $m ) ) {
+                if ( ! isset( $post_data[ $m[1] ] ) || ! is_array( $post_data[ $m[1] ] ) ) {
+                    $post_data[ $m[1] ] = [];
+                }
+                if ( ! isset( $post_data[ $m[1] ][ $m[2] ] ) || ! is_array( $post_data[ $m[1] ][ $m[2] ] ) ) {
+                    $post_data[ $m[1] ][ $m[2] ] = [];
+                }
+                $post_data[ $m[1] ][ $m[2] ][ $m[3] ] = $value;
+                unset( $post_data[ $key ] );
+                continue;
+            }
             if ( is_string( $key ) && preg_match( '/^([a-z0-9_]+)\[([a-z0-9_]*)\]$/', $key, $m ) ) {
                 if ( ! isset( $post_data[ $m[1] ] ) || ! is_array( $post_data[ $m[1] ] ) ) {
                     $post_data[ $m[1] ] = [];
