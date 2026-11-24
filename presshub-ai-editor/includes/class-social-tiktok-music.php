@@ -267,6 +267,10 @@ class PressHub_Social_TikTok_Music {
             $lib[ $mood ] = array_merge( $tracks, [ $track ] );
             update_option( self::LIBRARY_OPTION, $lib, false );
             PressHub_Social_Logger::info( sprintf( 'TikTok shorts music: generated %s track %d/%d with %s.', $mood, $n, $need, $model ) );
+            // #309 (E4)
+            if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+                PressHub_AI_Audit_Logger::log( 'music_track_generated', 'music_library', $mood, [ 'attachment_id' => $track['id'], 'model' => $model ] );
+            }
 
             return [ 'mood' => $mood, 'track' => $track, 'remaining' => self::missing_count() ];
         }
@@ -282,6 +286,10 @@ class PressHub_Social_TikTok_Music {
         }
         update_option( self::LIBRARY_OPTION, [], false );
         PressHub_Social_Logger::info( 'TikTok shorts music: the track library was cleared.' );
+        // #309 (E4)
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'music_library_cleared', 'music_library', 'all', [] );
+        }
     }
 
     /**
@@ -404,7 +412,7 @@ class PressHub_Social_TikTok_Music {
         }
     }
 
-    /** The Gemini API key: the AI Editor's Gemini provider, then the legacy options. */
+    /** The Gemini API key: the AI Editor's Gemini provider (#237: legacy key options are not read). */
     private static function api_key(): string {
         if ( class_exists( 'PressHub_AI_API_Client' ) && method_exists( 'PressHub_AI_API_Client', 'lookup_provider_key_by_type' ) ) {
             $key = PressHub_AI_API_Client::lookup_provider_key_by_type( 'gemini' );
@@ -412,7 +420,6 @@ class PressHub_Social_TikTok_Music {
                 return $key;
             }
         }
-        $key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-        return '' !== $key ? $key : (string) get_option( 'presshub_ai_api_key', '' );
+        return '';
     }
 }

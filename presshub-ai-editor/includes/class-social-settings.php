@@ -121,7 +121,7 @@ class PressHub_Social_Settings {
         <div class="wrap">
             <h1><?php echo esc_html__( 'PressHub Social Dispatch Queue', 'presshub-social-autopost' ); ?></h1>
             <p><?php echo esc_html__( 'Manage and monitor pending, publishing, and published social media posts.', 'presshub-social-autopost' ); ?></p>
-            <div style="background:#fff; border:1px solid #ccd0d4; padding:20px; border-radius:4px; margin-top:15px;">
+            <div class="card presshub-queue-fallback">
                 <p><em><?php echo esc_html__( 'The queue management interface is active.', 'presshub-social-autopost' ); ?></em></p>
                 <p>
                     <a href="<?php echo esc_url( self::settings_url() ); ?>" class="button button-primary">
@@ -169,6 +169,9 @@ class PressHub_Social_Settings {
 
         PressHub_Social_Settings_Storage::reset_prompts_to_defaults();
         PressHub_Social_Logger::info( 'Operator reset social prompts and templates to asset defaults.' );
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'social_prompts_reset', 'settings', 'social-publishing', [ 'reset_to' => 'asset defaults' ] );
+        }
 
         wp_safe_redirect( add_query_arg( 'message', 'prompts_reset', self::settings_url( 'post-copy' ) ) );
         exit;
@@ -229,16 +232,45 @@ class PressHub_Social_Settings {
             'presshub_social_general_sec'
         );
 
-        // #233: unused, listed under Advanced & System → Diagnostics → Scheduled for removal.
-        if ( ! PressHub_Settings_Registry::is_unused( 'presshub_social_github_token' ) ) {
-            add_settings_field(
-                'presshub_social_github_token',
-                __( 'GitHub Personal Access Token (Auto-Updates)', 'presshub-social-autopost' ),
-                [ $render, 'render_github_token_field' ],
-                'presshub_social_general',
-                'presshub_social_general_sec'
-            );
-        }
+
+        add_settings_section(
+            'presshub_social_gate_sec',
+            __( 'Social post gate', 'presshub-social-autopost' ),
+            '__return_empty_string',
+            'presshub_social_general'
+        );
+
+        add_settings_field(
+            'presshub_social_story_repeat_hours',
+            __( 'Story Window', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_general',
+            'presshub_social_gate_sec',
+            [
+                'option'  => 'presshub_social_story_repeat_hours',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_STORY_REPEAT_HOURS,
+                'min'     => 0,
+                'max'     => 168,
+                'unit'    => __( 'hours', 'presshub-social-autopost' ),
+                'desc'    => __( 'Every social post, on every platform, is checked before it is prepared and again before it goes out. A story a platform already posted in this time goes out there again only with a new development, and then it leads with what is new. Stopped posts stay in the Social Queue as cancelled, with the reason. 0 turns the story check off.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_story_max_posts',
+            __( 'Most Posts per Story per Platform', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_general',
+            'presshub_social_gate_sec',
+            [
+                'option'  => 'presshub_social_story_max_posts',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_STORY_MAX_POSTS,
+                'min'     => 1,
+                'max'     => 6,
+                'unit'    => __( 'posts', 'presshub-social-autopost' ),
+                'desc'    => __( 'How many times one story may go out on one platform within Story Window, even when it keeps developing. Used while Story Window is above 0.', 'presshub-social-autopost' ),
+            ]
+        );
 
         add_settings_section(
             'presshub_social_engines_sec',
@@ -247,7 +279,7 @@ class PressHub_Social_Settings {
             'presshub_social_general'
         );
 
-        foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $platform ) {
+        foreach ( PressHub_Social_Settings_Storage::ENGINE_PLATFORMS as $platform ) {
             add_settings_field(
                 'presshub_social_engine_' . $platform,
                 ucfirst( $platform ) . ' ' . __( 'Engine', 'presshub-social-autopost' ),
@@ -297,8 +329,8 @@ class PressHub_Social_Settings {
         $image_platforms = [
             'twitter'   => [ __( 'X / Twitter Images', 'presshub-social-autopost' ), __( 'Landscape 16:9 images attached to the post (up to 4). An attached image replaces X\'s link preview card; the article link stays in the text.', 'presshub-social-autopost' ) ],
             'facebook'  => [ __( 'Facebook Images', 'presshub-social-autopost' ), __( 'Landscape 16:9 images (up to 4; more than 1 makes a multi-photo post). X and Facebook share the same images, so the second platform costs nothing extra.', 'presshub-social-autopost' ) ],
-            'instagram' => [ __( 'Instagram Image', 'presshub-social-autopost' ), __( 'One square 1:1 image used as the background of the Instagram card. Reels from podcast shorts keep their own story images.', 'presshub-social-autopost' ) ],
-            'tiktok'    => [ __( 'TikTok Image', 'presshub-social-autopost' ), __( 'One vertical 9:16 image used as the background of the TikTok video of an article. Podcast shorts keep their own story images.', 'presshub-social-autopost' ) ],
+            'instagram' => [ __( 'Instagram Image', 'presshub-social-autopost' ), __( 'One square 1:1 image used as the background of the Instagram card. Reels made from shorts keep their own story images.', 'presshub-social-autopost' ) ],
+            'tiktok'    => [ __( 'TikTok Image', 'presshub-social-autopost' ), __( 'One vertical 9:16 image used as the background of the TikTok video of an article. Shorts keep their own story images.', 'presshub-social-autopost' ) ],
         ];
         foreach ( $image_platforms as $image_platform => [ $label, $desc ] ) {
             add_settings_field(
@@ -379,29 +411,7 @@ class PressHub_Social_Settings {
             [ 'option' => 'presshub_social_twitter_bearer_token' ]
         );
 
-        // #233: unused, listed under Advanced & System → Diagnostics → Scheduled for removal.
-        if ( ! PressHub_Settings_Registry::is_unused( 'presshub_social_twitter_api_key' ) ) {
-            add_settings_field(
-                'presshub_social_twitter_api_key',
-                __( 'Twitter API Key', 'presshub-social-autopost' ),
-                [ $render, 'render_secret_field' ],
-                'presshub_social_credentials',
-                'presshub_social_twitter_sec',
-                [ 'option' => 'presshub_social_twitter_api_key' ]
-            );
-        }
 
-        // #233: unused, listed under Advanced & System → Diagnostics → Scheduled for removal.
-        if ( ! PressHub_Settings_Registry::is_unused( 'presshub_social_twitter_api_secret' ) ) {
-            add_settings_field(
-                'presshub_social_twitter_api_secret',
-                __( 'Twitter API Secret', 'presshub-social-autopost' ),
-                [ $render, 'render_secret_field' ],
-                'presshub_social_credentials',
-                'presshub_social_twitter_sec',
-                [ 'option' => 'presshub_social_twitter_api_secret' ]
-            );
-        }
 
         add_settings_field(
             'presshub_social_twitter_access_token',
@@ -411,24 +421,10 @@ class PressHub_Social_Settings {
             'presshub_social_twitter_sec',
             [
                 'option'        => 'presshub_social_twitter_access_token',
-                'test_platform' => PressHub_Settings_Registry::is_unused( 'presshub_social_twitter_access_secret' ) ? 'twitter' : '',
+                'test_platform' => 'twitter',
             ]
         );
 
-        // #233: unused, listed under Advanced & System → Diagnostics → Scheduled for removal.
-        if ( ! PressHub_Settings_Registry::is_unused( 'presshub_social_twitter_access_secret' ) ) {
-            add_settings_field(
-                'presshub_social_twitter_access_secret',
-                __( 'Twitter Access Secret', 'presshub-social-autopost' ),
-                [ $render, 'render_secret_field' ],
-                'presshub_social_credentials',
-                'presshub_social_twitter_sec',
-                [
-                    'option'        => 'presshub_social_twitter_access_secret',
-                    'test_platform' => 'twitter',
-                ]
-            );
-        }
 
         add_settings_section(
             'presshub_social_tiktok_sec',
@@ -456,6 +452,46 @@ class PressHub_Social_Settings {
             'presshub_social_credentials',
             'presshub_social_tiktok_sec',
             [ 'option' => 'presshub_social_tiktok_open_id' ]
+        );
+
+        add_settings_section(
+            'presshub_social_youtube_sec',
+            __( 'YouTube (Google OAuth)', 'presshub-social-autopost' ),
+            '__return_empty_string',
+            'presshub_social_credentials'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_client_id',
+            __( 'YouTube OAuth Client ID', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_credentials',
+            'presshub_social_youtube_sec',
+            [
+                'option'      => 'presshub_social_youtube_client_id',
+                'placeholder' => '1234567890-abc.apps.googleusercontent.com',
+                'desc'        => __( 'Client ID of the "Web application" OAuth client in your Google Cloud project (APIs & Services → Credentials).', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_client_secret',
+            __( 'YouTube OAuth Client Secret', 'presshub-social-autopost' ),
+            [ $render, 'render_secret_field' ],
+            'presshub_social_credentials',
+            'presshub_social_youtube_sec',
+            [
+                'option' => 'presshub_social_youtube_client_secret',
+                'desc'   => __( 'Client secret of the same OAuth client. Kept secret and masked.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_account',
+            __( 'YouTube Channel', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_account_field' ],
+            'presshub_social_credentials',
+            'presshub_social_youtube_sec'
         );
 
         // ------------------------------------------------------------------
@@ -520,6 +556,76 @@ class PressHub_Social_Settings {
         add_settings_section( 'presshub_social_shorts_script_sec', __( 'Schedule & script', 'presshub-social-autopost' ), '__return_empty_string', 'presshub_social_shorts' );
         add_settings_section( 'presshub_social_shorts_narration_sec', __( 'Narration', 'presshub-social-autopost' ), [ $render, 'render_shorts_narration_intro' ], 'presshub_social_shorts' );
         add_settings_section( 'presshub_social_shorts_music_sec', __( 'Music', 'presshub-social-autopost' ), '__return_empty_string', 'presshub_social_shorts' );
+        add_settings_section( 'presshub_social_shorts_youtube_sec', __( 'YouTube', 'presshub-social-autopost' ), '__return_empty_string', 'presshub_social_shorts' );
+
+        add_settings_field(
+            'presshub_social_youtube_podcast_enabled',
+            __( 'YouTube Podcast Episodes', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_podcast_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_episode_enhanced',
+            __( 'Episodes with Story Images and Captions', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_episode_enhanced_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_episode_image_wait_minutes',
+            __( 'Wait for Story Images', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec',
+            [
+                'option'  => 'presshub_social_youtube_episode_image_wait_minutes',
+                'default' => 90,
+                'min'     => 0,
+                'max'     => 240,
+                'unit'    => __( 'minutes', 'presshub-social-autopost' ),
+                'desc'    => __( 'How long an episode waits for its shorts\' story images before it is uploaded with the images that are ready (or the podcast\'s image). 0 does not wait.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_podcast_playlist_id',
+            __( 'Podcast Playlist ID', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec',
+            [
+                'option'      => 'presshub_social_youtube_podcast_playlist_id',
+                'placeholder' => 'PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+                'desc'        => __( 'The playlist every episode is added to. Make the playlist in YouTube Studio, set it as a podcast there (Create → New podcast, or the playlist\'s Set as podcast), then paste its link or ID. Empty uploads the episodes without a playlist.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_podcast_language_playlists',
+            __( 'English and Turkish Playlists', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_podcast_language_playlists_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_privacy_status',
+            __( 'YouTube Visibility', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_privacy_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_category_id',
+            __( 'YouTube Category', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_category_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
         add_settings_section( 'presshub_social_shorts_prompts_sec', '', '__return_empty_string', 'presshub_social_shorts_prompts' );
 
         add_settings_field(
@@ -658,6 +764,38 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_facebook_shorts_enabled',
+            __( 'Facebook Reels (Shorts)', 'presshub-social-autopost' ),
+            [ $render, 'render_facebook_shorts_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_twitter_shorts_enabled',
+            __( 'X Video Posts', 'presshub-social-autopost' ),
+            [ $render, 'render_twitter_shorts_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_slides_enabled',
+            __( 'TikTok Photo Slides', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_slides_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_shorts_enabled',
+            __( 'YouTube Shorts', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_shorts_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
+        );
+
+        add_settings_field(
             'presshub_social_tiktok_article_shorts_enabled',
             __( 'Article Shorts', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_article_shorts_enabled_field' ],
@@ -676,8 +814,64 @@ class PressHub_Social_Settings {
                 'default' => 3,
                 'min'     => 1,
                 'max'     => 5,
-                'desc'    => __( 'How many top stories of each podcast become their own TikTok video.', 'presshub-social-autopost' ),
+                'desc'    => __( 'How many top stories of each podcast become their own TikTok video, when Podcast Shorts Format is one short per story.', 'presshub-social-autopost' ),
             ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_format',
+            __( 'Podcast Shorts Format', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_shorts_format_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_brief_max_words',
+            __( 'Daily Brief Script Length', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_tiktok_brief_max_words',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_BRIEF_MAX_WORDS,
+                'min'     => 150,
+                'max'     => 380,
+                'unit'    => __( 'words', 'presshub-social-autopost' ),
+                'desc'    => __( 'Most words in the daily brief script, about 150 words a minute. 300 is about two minutes; the top stays under YouTube\'s three-minute limit for Shorts.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_full_podcast_enabled',
+            __( 'TikTok Full Podcast', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_full_podcast_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_story_posts',
+            __( 'TikTok Story Posts', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_tiktok_story_posts',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_STORY_POSTS,
+                'min'     => 0,
+                'max'     => 5,
+                'unit'    => __( 'posts', 'presshub-social-autopost' ),
+                'desc'    => __( 'With Podcast Shorts Format on Daily brief, how many of each podcast\'s top stories also go to TikTok as their own post of 30-60 seconds, after the brief and the Time Between Shorts apart. Each story is checked by the social post gate first, so a story already posted is not posted again. 0 posts none.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_story_posts_format',
+            __( 'TikTok Story Post Format', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_story_posts_format_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec'
         );
 
         add_settings_field(
@@ -693,6 +887,38 @@ class PressHub_Social_Settings {
                 'max'     => 720,
                 'unit'    => __( 'minutes', 'presshub-social-autopost' ),
                 'desc'    => __( 'The first short is posted when the podcast is published, the next ones this many minutes apart. Shorts from an earlier edition that have not been posted yet are cancelled when the next podcast is published.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_slides_words',
+            __( 'Words per Photo Slide', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_tiktok_slides_words',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SLIDES_WORDS,
+                'min'     => 12,
+                'max'     => 60,
+                'unit'    => __( 'words', 'presshub-social-autopost' ),
+                'desc'    => __( 'How much of the short\'s script goes on one TikTok photo slide. Sentences are kept whole, so a slide can run a little over.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_slides_max',
+            __( 'Most Photo Slides per Post', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
+            [
+                'option'  => 'presshub_social_tiktok_slides_max',
+                'default' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SLIDES_MAX,
+                'min'     => 3,
+                'max'     => 35,
+                'unit'    => __( 'slides', 'presshub-social-autopost' ),
+                'desc'    => __( 'Most slides in one TikTok photo post, with the title slide and the closing slide. A longer script puts more words on each slide so it still fits. TikTok takes up to 35.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -1018,7 +1244,20 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
-                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used for podcast posts when TikTok Shorts, TikTok Photo Slides, Instagram Reels or YouTube Shorts are on. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from the Shorts tab: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_tiktok_brief',
+            __( 'Daily Brief: Script Prompt', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_brief',
+                'rows'   => 10,
+                'desc'   => __( 'Used for podcast posts when Podcast Shorts Format is Daily brief. One call writes the brief as JSON {"shorts":[{"topic","hook","intro","stories":[{"topic","script","visual"}],"outro","mood","caption"}]}: the intro, one spoken part and one image description per story, and the outro are read in that order, and each story\'s image is shown while it is read. Placeholders: {max_words} (Daily Brief Script Length), {caption_words}, {moods} and {speakers} as in the Script Prompt above. From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title. Emptied, the brief fails instead of being posted.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -1031,7 +1270,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_article_short',
                 'rows'   => 10,
-                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the TikTok or Instagram Caption Prompt; this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the platform\'s usual caption prompt (TikTok, Instagram or YouTube); this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way (and skipped on YouTube).', 'presshub-social-autopost' ),
             ]
         );
 
@@ -1087,17 +1326,33 @@ class PressHub_Social_Settings {
             ]
         );
 
+        add_settings_field(
+            'presshub_social_prompt_tiktok_slides_sounds',
+            __( 'TikTok Photo Slides: Sound Searches', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_slides_sounds',
+                'rows'   => 4,
+                'desc'   => __( 'One line per mood, "mood: search words". The worker types the words of the story\'s mood into TikTok\'s sound search and picks the first sound it offers. A business account is only offered sounds cleared for business use. A mood without a line, or a search with no result, keeps the sound TikTok adds itself.', 'presshub-social-autopost' ),
+            ]
+        );
+
         $platform_labels = [
             'twitter'   => 'X/Twitter',
             'facebook'  => 'Facebook',
             'instagram' => 'Instagram',
             'tiktok'    => 'TikTok',
+            'youtube'   => 'YouTube',
         ];
         foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $platform ) {
             $label    = $platform_labels[ $platform ] ?? ucfirst( $platform );
             $use_note = 'tiktok' === $platform
                 ? __( ' Writes the caption of a normal TikTok post: an article, or the whole podcast when TikTok Shorts are off. Shorts write their own captions with the Shorts Script Prompt.', 'presshub-social-autopost' )
-                : '';
+                : ( 'youtube' === $platform
+                    ? __( ' Writes the description of a YouTube video: an article\'s short and a podcast episode. A podcast\'s shorts use their own captions.', 'presshub-social-autopost' )
+                    : '' );
             add_settings_field(
                 'presshub_social_prompt_' . $platform,
                 $label . ' ' . __( 'Caption Prompt', 'presshub-social-autopost' ),

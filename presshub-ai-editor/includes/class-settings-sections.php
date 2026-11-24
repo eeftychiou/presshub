@@ -31,6 +31,19 @@ require_once __DIR__ . '/class-capabilities.php';
 
 class PressHub_Settings_Sections {
 
+    /** admin-post action of the Settings form when JavaScript is off (#309, E2). */
+    const POST_ACTION = 'presshub_save_settings_section';
+
+    /** Nonce action for one section's no-JS form. */
+    public static function post_nonce( string $section ): string {
+        return 'presshub_save_settings_section_' . $section;
+    }
+
+    /** Transient holding the result of a no-JS save until the redirect shows it. */
+    public static function post_result_key( int $user_id ): string {
+        return 'presshub_settings_post_result_' . $user_id;
+    }
+
     /** Admin page slug of the one Settings page (unchanged from 3a). */
     const PAGE_SLUG = 'presshub-ai';
 
@@ -70,10 +83,7 @@ class PressHub_Settings_Sections {
     const KEY_SECTIONS = [
         'presshub_ai_remove_github_token'          => 'connections',
         'presshub_ai_remove_google_cloud_api_key'  => 'connections',
-        'presshub_social_github_token'             => 'connections',
         // #247: every secret is in Connections.
-        'presshub_ai_briefing_tts_api_key'         => 'connections',
-        'presshub_ai_remove_briefing_tts_api_key'  => 'connections',
         // #247: the press inbox login is in Connections; folders and filters stay in Daily Briefing.
         'presshub_ai_press_inbox_host'             => 'connections',
         'presshub_ai_press_inbox_port'             => 'connections',
@@ -216,6 +226,7 @@ class PressHub_Settings_Sections {
                     'briefing-text'       => __( 'Text story', 'presshub-ai-editor' ),
                     'briefing-podcast'    => __( 'Podcast script', 'presshub-ai-editor' ),
                     'briefing-voices'     => __( 'Voices & audio', 'presshub-ai-editor' ),
+                    'briefing-languages'  => __( 'Other languages', 'presshub-ai-editor' ),
                     'briefing-publishing' => __( 'Publishing', 'presshub-ai-editor' ),
                 ],
             ],

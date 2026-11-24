@@ -143,6 +143,9 @@ class PressHub_Social_Image_Library {
         }
 
         $prompt = self::build_prompt( $style, $description, $aspect );
+        // The description was written by the AI plan (post images, TikTok shorts),
+        // so the Media Library metadata comes from it, not from another LLM call.
+        $context += [ 'ai_metadata' => false, 'description' => $description ];
         try {
             if ( null !== self::$generator ) {
                 $result = call_user_func( self::$generator, $prompt, $aspect, $post_id, $context );

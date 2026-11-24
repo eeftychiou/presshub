@@ -29,6 +29,13 @@
         if (!form) {
             return null;
         }
+        // A saved key, token or password (#309 E3): point at its Replace key button,
+        // or the field box, never at the value.
+        var secretBox = form.querySelector('.presshub-secret[data-secret-for="' + key + '"]');
+        if (secretBox) {
+            var replaceBtn = secretBox.querySelector('.presshub-secret-replace:not([hidden])');
+            return replaceBtn || secretBox;
+        }
         // AI models: the list shown in place of the model ID field (#236).
         if (typeof window.PressHubModelControl === 'function') {
             var model = window.PressHubModelControl(key);
@@ -131,6 +138,12 @@
         var hasSection = /[?&]section=/.test(window.location.search);
         if (!hasSection && data.legacy_hashes && data.legacy_hashes[hash] && !document.getElementById(hash)) {
             window.location.replace(data.legacy_hashes[hash]);
+            return;
+        }
+        // A secret (#309 E3): its password input is hidden until Replace key, so
+        // go to the button through fieldFor().
+        if (/^[a-z0-9_]+$/i.test(hash) && document.querySelector('.presshub-secret[data-secret-for="' + hash + '"]')) {
+            reveal(fieldFor(hash));
             return;
         }
         var target = (typeof window.PressHubModelControl === 'function' && window.PressHubModelControl(hash)) || document.getElementById(hash);
@@ -278,7 +291,15 @@
     // Defaults with Reset (scalar defaults only; prompts keep their own
     // "Load default" buttons).
     // ------------------------------------------------------------------
+    /** A stored 0 that a number field below its minimum shows blank ("use the provider default", #309). */
+    function zeroMeansBlank(e, el) {
+        return e.default === 0 && el && el.tagName === 'INPUT' && el.type === 'number' && el.min !== '' && Number(el.min) > 0;
+    }
+
     function displayDefault(e, el) {
+        if (zeroMeansBlank(e, el)) {
+            return t.empty_default || '(empty: uses the provider or built-in default)';
+        }
         if (e.checkbox) {
             return e.default ? (t.on || 'On') : (t.off || 'Off');
         }
@@ -351,7 +372,7 @@
                 if (e.checkbox) {
                     $el.prop('checked', !!e.default);
                 } else {
-                    $el.val(String(e.default));
+                    $el.val(zeroMeansBlank(e, el) ? '' : String(e.default));
                 }
                 $el.trigger('input').trigger('change');
                 sync();

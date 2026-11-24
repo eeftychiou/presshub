@@ -280,12 +280,18 @@ class PressHub_AI_Provider_Store {
             return;
         }
 
-        $legacy_provider_raw = get_option( 'presshub_ai_provider', null );
-        $legacy_api_key_raw  = get_option( 'presshub_ai_api_key', null );
+        // #237, #309 (E1): the old flat options are removed; this one-time
+        // migration is the only place that still reads them, to move them
+        // into Connections (the settings clean-up runs it before deleting them).
+        $read_old            = static function ( string $key, $default = null ) {
+            return class_exists( 'PressHub_Settings_Cleanup' ) ? PressHub_Settings_Cleanup::read_removed( $key, $default ) : get_option( $key, $default );
+        };
+        $legacy_provider_raw = $read_old( 'presshub_ai_provider' );
+        $legacy_api_key_raw  = $read_old( 'presshub_ai_api_key' );
         $legacy_gcloud_key   = get_option( 'presshub_ai_google_cloud_api_key', null );
-        $legacy_tts_key      = get_option( 'presshub_ai_briefing_tts_api_key', null );
-        $openai_org_raw      = get_option( 'presshub_ai_openai_org', null );
-        $anthropic_ver_raw   = get_option( 'presshub_ai_anthropic_version', null );
+        $legacy_tts_key      = $read_old( 'presshub_ai_briefing_tts_api_key' );
+        $openai_org_raw      = $read_old( 'presshub_ai_openai_org' );
+        $anthropic_ver_raw   = $read_old( 'presshub_ai_anthropic_version' );
 
         $has_legacy_config = ( null !== $legacy_provider_raw ) ||
                              ( null !== $legacy_api_key_raw ) ||
@@ -296,10 +302,10 @@ class PressHub_AI_Provider_Store {
 
         if ( ! $has_legacy_config ) {
             foreach ( [ 'openai', 'anthropic', 'gemini' ] as $prov_type ) {
-                if ( null !== get_option( 'presshub_ai_model_' . $prov_type, null ) ||
-                     null !== get_option( 'presshub_ai_temperature_' . $prov_type, null ) ||
-                     null !== get_option( 'presshub_ai_max_tokens_' . $prov_type, null ) ||
-                     null !== get_option( 'presshub_ai_timeout_' . $prov_type, null ) ) {
+                if ( null !== $read_old( 'presshub_ai_model_' . $prov_type ) ||
+                     null !== $read_old( 'presshub_ai_temperature_' . $prov_type ) ||
+                     null !== $read_old( 'presshub_ai_max_tokens_' . $prov_type ) ||
+                     null !== $read_old( 'presshub_ai_timeout_' . $prov_type ) ) {
                     $has_legacy_config = true;
                     break;
                 }
@@ -332,7 +338,7 @@ class PressHub_AI_Provider_Store {
 
         // 1. OpenAI
         $openai_key          = ( 'openai' === $legacy_provider ) ? $legacy_api_key : '';
-        $openai_custom_model = get_option( 'presshub_ai_model_openai', null );
+        $openai_custom_model = $read_old( 'presshub_ai_model_openai' );
         if ( '' !== $openai_key || '' !== $openai_org || ( null !== $openai_custom_model && '' !== trim( (string) $openai_custom_model ) ) ) {
             $openai_headers = [];
             if ( '' !== $openai_org ) {
@@ -346,9 +352,9 @@ class PressHub_AI_Provider_Store {
                 'base_url'         => $templates['openai']['base_url'],
                 'default_model'    => (string) ( $openai_custom_model ?? $templates['openai']['default_model'] ),
                 'available_models' => $templates['openai']['available_models'],
-                'timeout'          => (int) get_option( 'presshub_ai_timeout_openai', 300 ),
-                'temperature'      => (float) get_option( 'presshub_ai_temperature_openai', 0.7 ),
-                'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_openai', PressHub_AI_Provider_Defaults::default_max_tokens() ),
+                'timeout'          => (int) $read_old( 'presshub_ai_timeout_openai', 300 ),
+                'temperature'      => (float) $read_old( 'presshub_ai_temperature_openai', 0.7 ),
+                'max_tokens'       => (int) $read_old( 'presshub_ai_max_tokens_openai', PressHub_AI_Provider_Defaults::default_max_tokens() ),
                 'headers'          => $openai_headers,
                 'enabled'          => true,
                 'is_system'        => true,
@@ -357,7 +363,7 @@ class PressHub_AI_Provider_Store {
 
         // 2. Google Gemini
         $gemini_key          = ( 'gemini' === $legacy_provider ) ? $legacy_api_key : '';
-        $gemini_custom_model = get_option( 'presshub_ai_model_gemini', null );
+        $gemini_custom_model = $read_old( 'presshub_ai_model_gemini' );
         $legacy_gcloud_trim  = trim( (string) ( $legacy_gcloud_key ?? '' ) );
         // Issue #43: also accept the legacy Google Cloud API key as the
         // Gemini credential when the operator never set the modern
@@ -374,9 +380,9 @@ class PressHub_AI_Provider_Store {
                 'base_url'         => $templates['gemini']['base_url'],
                 'default_model'    => (string) ( $gemini_custom_model ?? $templates['gemini']['default_model'] ),
                 'available_models' => $templates['gemini']['available_models'],
-                'timeout'          => (int) get_option( 'presshub_ai_timeout_gemini', 300 ),
-                'temperature'      => (float) get_option( 'presshub_ai_temperature_gemini', 0.7 ),
-                'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_gemini', PressHub_AI_Provider_Defaults::default_max_tokens() ),
+                'timeout'          => (int) $read_old( 'presshub_ai_timeout_gemini', 300 ),
+                'temperature'      => (float) $read_old( 'presshub_ai_temperature_gemini', 0.7 ),
+                'max_tokens'       => (int) $read_old( 'presshub_ai_max_tokens_gemini', PressHub_AI_Provider_Defaults::default_max_tokens() ),
                 'headers'          => [],
                 'enabled'          => true,
                 'is_system'        => true,
@@ -385,7 +391,7 @@ class PressHub_AI_Provider_Store {
 
         // 3. Anthropic Claude
         $anthropic_key          = ( 'anthropic' === $legacy_provider ) ? $legacy_api_key : '';
-        $anthropic_custom_model = get_option( 'presshub_ai_model_anthropic', null );
+        $anthropic_custom_model = $read_old( 'presshub_ai_model_anthropic' );
         if ( '' !== $anthropic_key || '' !== $anthropic_version || ( null !== $anthropic_custom_model && '' !== trim( (string) $anthropic_custom_model ) ) ) {
             $anthropic_headers = [];
             if ( '' !== $anthropic_version ) {
@@ -399,9 +405,9 @@ class PressHub_AI_Provider_Store {
                 'base_url'         => $templates['anthropic']['base_url'],
                 'default_model'    => (string) ( $anthropic_custom_model ?? $templates['anthropic']['default_model'] ),
                 'available_models' => $templates['anthropic']['available_models'],
-                'timeout'          => (int) get_option( 'presshub_ai_timeout_anthropic', 300 ),
-                'temperature'      => (float) get_option( 'presshub_ai_temperature_anthropic', 0.7 ),
-                'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_anthropic', PressHub_AI_Provider_Defaults::default_max_tokens() ),
+                'timeout'          => (int) $read_old( 'presshub_ai_timeout_anthropic', 300 ),
+                'temperature'      => (float) $read_old( 'presshub_ai_temperature_anthropic', 0.7 ),
+                'max_tokens'       => (int) $read_old( 'presshub_ai_max_tokens_anthropic', PressHub_AI_Provider_Defaults::default_max_tokens() ),
                 'headers'          => $anthropic_headers,
                 'enabled'          => true,
                 'is_system'        => true,
@@ -551,6 +557,12 @@ class PressHub_AI_Provider_Store {
         // Headers
         $headers = [];
         $raw_headers = $data['headers'] ?? ( $existing['headers'] ?? [] );
+        // The Connections dialog used to send the headers as a JSON string,
+        // which was dropped here, so every save cleared them (#309 E1).
+        if ( is_string( $raw_headers ) ) {
+            $decoded     = '' === trim( $raw_headers ) ? [] : json_decode( $raw_headers, true );
+            $raw_headers = is_array( $decoded ) ? $decoded : ( $existing['headers'] ?? [] );
+        }
         if ( is_array( $raw_headers ) ) {
             foreach ( $raw_headers as $hk => $hv ) {
                 $clean_k = sanitize_text_field( (string) $hk );

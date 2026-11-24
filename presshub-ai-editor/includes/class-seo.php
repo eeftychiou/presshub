@@ -109,7 +109,7 @@ class PressHub_AI_SEO {
 
         $user_prompt = strtr( $template, [
             '{title}'         => trim( $title ),
-            '{content}'       => self::excerpt( $content, 2000 ),
+            '{content}'       => self::excerpt( $content, 2000, 'generate_image_metadata' ),
             '{visual_prompt}' => trim( $visual_prompt ),
         ] );
 
@@ -211,7 +211,7 @@ class PressHub_AI_SEO {
         $max_tags    = self::max_tags();
         $user_prompt = strtr( $template, [
             '{title}'         => trim( $title ),
-            '{content}'       => self::excerpt( self::clean_text( $content ), self::CONTENT_EXCERPT_CHARS ),
+            '{content}'       => self::excerpt( self::clean_text( $content ), self::CONTENT_EXCERPT_CHARS, 'generate_post_seo' ),
             '{max_tags}'      => (string) $max_tags,
             '{existing_tags}' => self::existing_tags_list(),
         ] );
@@ -522,7 +522,37 @@ class PressHub_AI_SEO {
      */
     public static function review( array $input ): array {
         $checks = self::run_checks( $input );
-        $result = [
+        $result = self::checks_result( $checks );
+
+        $template = self::load_prompt( 'seo/seo_review.txt' );
+        if ( '' === $template ) {
+            $result['error'] = 'missing_template';
+            return $result;
+        }
+
+        $user_prompt = strtr( $template, [
+            '{title}'         => trim( (string) ( $input['title'] ?? '' ) ),
+            '{content}'       => self::excerpt( self::clean_text( (string) ( $input['content'] ?? '' ) ), self::CONTENT_EXCERPT_CHARS, 'seo_review' ),
+            '{seo_facts}'     => self::facts_text( $input, $checks ),
+            '{existing_tags}' => self::existing_tags_list(),
+        ] );
+
+        $data = self::call_json( 'coauthor', 'seo_review', $user_prompt, (int) ( $input['post_id'] ?? 0 ) );
+        if ( ! is_array( $data ) ) {
+            $result['error'] = is_wp_error( $data ) ? $data->get_error_code() : 'seo_json_error';
+            return $result;
+        }
+
+        return self::merge_ai_assessment( $result, $data );
+    }
+
+    /**
+     * The review result from the deterministic checks alone (no AI part yet).
+     *
+     * @param array $checks run_checks() output.
+     */
+    public static function checks_result( array $checks ): array {
+        return [
             'seo_score'                  => $checks['score'],
             'checks_score'               => $checks['score'],
             'ai_score'                   => null,
@@ -535,13 +565,15 @@ class PressHub_AI_SEO {
             'error'                      => null,
             'reviewed_at'                => gmdate( 'c' ),
         ];
+    }
 
-        $template = self::load_prompt( 'seo/seo_review.txt' );
-        if ( '' === $template ) {
-            $result['error'] = 'missing_template';
-            return $result;
-        }
-
+    /**
+     * The measured facts given to the AI, one line per check (the {seo_facts} placeholder).
+     *
+     * @param array $input  See run_checks().
+     * @param array $checks run_checks() output.
+     */
+    public static function facts_text( array $input, array $checks ): string {
         $facts = [];
         foreach ( $checks['checks'] as $c ) {
             $facts[] = sprintf( '- %s: %s (%s)', $c['label'], strtoupper( $c['status'] ), $c['detail'] );
@@ -552,21 +584,19 @@ class PressHub_AI_SEO {
         if ( ! empty( $input['excerpt'] ) ) {
             $facts[] = '- Current excerpt: ' . trim( (string) $input['excerpt'] );
         }
+        return implode( "\n", $facts );
+    }
 
-        $user_prompt = strtr( $template, [
-            '{title}'         => trim( (string) ( $input['title'] ?? '' ) ),
-            '{content}'       => self::excerpt( self::clean_text( (string) ( $input['content'] ?? '' ) ), self::CONTENT_EXCERPT_CHARS ),
-            '{seo_facts}'     => implode( "\n", $facts ),
-            '{existing_tags}' => self::existing_tags_list(),
-        ] );
-
-        $data = self::call_json( 'coauthor', 'seo_review', $user_prompt, (int) ( $input['post_id'] ?? 0 ) );
-        if ( ! is_array( $data ) ) {
-            $result['error'] = is_wp_error( $data ) ? $data->get_error_code() : 'seo_json_error';
-            return $result;
-        }
-
-        $ai_score = isset( $data['seo_score'] ) ? max( 0, min( 100, (int) $data['seo_score'] ) ) : null;
+    /**
+     * Combine the AI assessment (seo_score, focus_keyphrase, summary, suggestions,
+     * suggested_tags, suggested_meta_description) with the checks result.
+     * The SEO score is the mean of the checks score and the AI score.
+     *
+     * @param array $result checks_result() output.
+     * @param array $data   Decoded AI JSON.
+     */
+    public static function merge_ai_assessment( array $result, array $data ): array {
+        $ai_score    = isset( $data['seo_score'] ) && is_numeric( $data['seo_score'] ) ? max( 0, min( 100, (int) $data['seo_score'] ) ) : null;
         $suggestions = [];
         foreach ( (array) ( $data['suggestions'] ?? [] ) as $s ) {
             $line = self::clean_line( (string) $s, 300 );
@@ -576,7 +606,7 @@ class PressHub_AI_SEO {
         }
 
         $result['ai_score']                   = $ai_score;
-        $result['seo_score']                  = null === $ai_score ? $checks['score'] : (int) round( ( $checks['score'] + $ai_score ) / 2 );
+        $result['seo_score']                  = null === $ai_score ? $result['checks_score'] : (int) round( ( $result['checks_score'] + $ai_score ) / 2 );
         $result['focus_keyphrase']            = self::clean_line( (string) ( $data['focus_keyphrase'] ?? '' ), 60 );
         $result['summary']                    = self::clean_line( (string) ( $data['summary'] ?? '' ), 600 );
         $result['suggestions']                = array_slice( $suggestions, 0, 6 );
@@ -584,6 +614,45 @@ class PressHub_AI_SEO {
         $result['suggested_meta_description'] = self::clean_line( (string) ( $data['suggested_meta_description'] ?? '' ), 160 );
 
         return $result;
+    }
+
+    /**
+     * The SEO input of a saved post: title, content, excerpt, tag and category
+     * names and the featured image.
+     */
+    public static function input_for_post( int $post_id ): array {
+        $post = $post_id > 0 && function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+        $tags = [];
+        if ( $post_id > 0 && function_exists( 'wp_get_post_tags' ) ) {
+            foreach ( (array) wp_get_post_tags( $post_id ) as $t ) {
+                if ( is_object( $t ) && isset( $t->name ) ) {
+                    $tags[] = (string) $t->name;
+                }
+            }
+        }
+        $categories = [];
+        if ( $post_id > 0 && function_exists( 'wp_get_post_categories' ) ) {
+            foreach ( (array) wp_get_post_categories( $post_id ) as $cid ) {
+                $name = function_exists( 'get_cat_name' ) ? (string) get_cat_name( (int) $cid ) : '';
+                if ( '' !== $name ) {
+                    $categories[] = $name;
+                }
+            }
+        }
+        return [
+            'post_id'           => $post_id,
+            'title'             => $post ? (string) ( $post->post_title ?? '' ) : '',
+            'content'           => $post ? (string) ( $post->post_content ?? '' ) : '',
+            'excerpt'           => $post ? (string) ( $post->post_excerpt ?? '' ) : '',
+            'tags'              => array_values( array_unique( $tags ) ),
+            'categories'        => $categories,
+            'featured_image_id' => ( $post_id > 0 && function_exists( 'get_post_thumbnail_id' ) ) ? (int) get_post_thumbnail_id( $post_id ) : 0,
+        ];
+    }
+
+    /** The site's most used tags, for the {existing_tags} placeholder. */
+    public static function existing_tags_text(): string {
+        return self::existing_tags_list();
     }
 
     // ------------------------------------------------------------------
@@ -678,7 +747,7 @@ class PressHub_AI_SEO {
         return is_string( $host ) ? strtolower( (string) preg_replace( '/^www\./', '', $host ) ) : '';
     }
 
-    private static function max_tags(): int {
+    public static function max_tags(): int {
         return class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_seo_max_tags() : 8;
     }
 
@@ -695,8 +764,13 @@ class PressHub_AI_SEO {
         return $text;
     }
 
-    private static function excerpt( string $text, int $max ): string {
+    /** $for: the action of the call the excerpt goes into (its cut is noted for it). */
+    private static function excerpt( string $text, int $max, string $for ): string {
         $text = trim( $text );
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // Every excerpt here goes into an AI prompt: record the cut.
+            return PressHub_AI_Knowledge_Cuts::clip_material( $for, $text, $max, __( 'Article text', 'presshub-ai-editor' ), '...' );
+        }
         return mb_strlen( $text ) > $max ? mb_substr( $text, 0, $max ) . '...' : $text;
     }
 
@@ -750,7 +824,12 @@ class PressHub_AI_SEO {
             $client = new PressHub_AI_API_Client( $module );
             $raw    = $client->call_seo_json( $sys_prompt, $user_prompt, $action, $post_id );
         } catch ( Throwable $t ) {
-            return new WP_Error( 'seo_call_failed', $t->getMessage() );
+            $raw = new WP_Error( 'seo_call_failed', $t->getMessage() );
+        }
+        // The call took its excerpt cut; when it never ran (no API key, an
+        // error before the provider) the note goes too.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( $action );
         }
         if ( is_wp_error( $raw ) ) {
             return $raw;

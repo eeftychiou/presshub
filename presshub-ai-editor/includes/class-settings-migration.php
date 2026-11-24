@@ -184,17 +184,27 @@ class PressHub_AI_Settings_Migration {
      * guarded by the presshub_ai_migrated_models option.
      */
 
+    /** True once settings clean-up 3 removed the old flat provider options (#309 E1). */
+    private static function cleaned_up_e1(): bool {
+        return class_exists( 'PressHub_Settings_Cleanup' ) && PressHub_Settings_Cleanup::done_version() >= 3;
+    }
+
+    /** get_option() without the removed-option notice (these migrations predate the clean-up). */
+    private static function read_removed( string $key, $default ) {
+        return class_exists( 'PressHub_Settings_Cleanup' ) ? PressHub_Settings_Cleanup::read_removed( $key, $default ) : get_option( $key, $default );
+    }
+
     public static function migrate_legacy_model(): void {
         if ( get_option( 'presshub_ai_migrated_models' ) ) {
             return;
         }
 
-        $legacy = (string) get_option( 'presshub_ai_model', '' );
+        $legacy = self::cleaned_up_e1() ? '' : (string) get_option( 'presshub_ai_model', '' );
         if ( '' !== $legacy ) {
-            $provider = (string) get_option( 'presshub_ai_provider', 'openai' );
+            $provider = (string) self::read_removed( 'presshub_ai_provider', 'openai' );
             if ( in_array( $provider, self::PROVIDERS, true ) ) {
                 $key     = 'presshub_ai_model_' . $provider;
-                $current = (string) get_option( $key, '' );
+                $current = (string) self::read_removed( $key, '' );
                 if ( '' === $current ) {
                     update_option( $key, $legacy );
                 }
@@ -232,9 +242,10 @@ class PressHub_AI_Settings_Migration {
         $valid_tts       = 'gemini-3.1-flash-tts-preview';
 
         // Text-gen keys: legacy shared + per-provider Gemini.
-        $text_keys = [ 'presshub_ai_model', 'presshub_ai_model_gemini' ];
+        // #309 (E1): presshub_ai_model_gemini is removed by clean-up 3.
+        $text_keys = self::cleaned_up_e1() ? [ 'presshub_ai_model' ] : [ 'presshub_ai_model', 'presshub_ai_model_gemini' ];
         foreach ( $text_keys as $key ) {
-            $current = (string) get_option( $key, '' );
+            $current = (string) self::read_removed( $key, '' );
             if ( '' !== $current && in_array( $current, $deprecated_text, true ) ) {
                 update_option( $key, $valid_text );
             }

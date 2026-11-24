@@ -79,7 +79,7 @@ function trl_reset( int $rpm = 0 ): void {
     $wpdb->auto_increments = [];
     PressHub_AI_Generation_Recorder::create_table();
     PressHub_AI_TTS_Rate_Limiter::reset( TRL_MODEL );
-    $GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key']                     = 'test-gemini-key';
+    $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']              = [ [ 'id' => 'gemini-test', 'type' => 'gemini', 'name' => 'Gemini', 'enabled' => true, 'api_key' => 'test-gemini-key', 'default_model' => 'gemini-2.5-flash' ] ];
     $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model']                 = TRL_MODEL;
     $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_requests_per_minute']   = $rpm;
     $GLOBALS['CAPTURE_FILTER'] = 'trl_http';
@@ -321,7 +321,9 @@ $GLOBALS['UNSCHEDULED_EVENTS'] = [];
 presshub_ai_disarm_synthesis_watchdog( '2026-11-13', 'morning' );
 trl_check( 'watchdog: disarm without a queued retry does nothing', [] === $GLOBALS['UNSCHEDULED_EVENTS'] );
 
-$src = (string) file_get_contents( dirname( __DIR__ ) . '/presshub-ai-editor.php' );
+// Normalise CRLF so the multi-line source search below also passes on a
+// Windows checkout with core.autocrlf=true.
+$src = str_replace( "\r\n", "\n", (string) file_get_contents( dirname( __DIR__ ) . '/presshub-ai-editor.php' ) );
 $step_fn = substr( $src, (int) strpos( $src, 'function presshub_ai_run_podcast_audio_step(' ) );
 $arm     = strpos( $step_fn, 'presshub_ai_arm_synthesis_watchdog( $date, $edition );' );
 $disarm  = strpos( $step_fn, 'presshub_ai_disarm_synthesis_watchdog( $date, $edition );', (int) $arm );

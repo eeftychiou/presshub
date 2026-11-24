@@ -1,0 +1,4 @@
+neutral: news background
+serious: emotional piano
+upbeat: upbeat happy
+urgent: breaking news

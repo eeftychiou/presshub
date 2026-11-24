@@ -1,5 +1,5 @@
 import { parseFacebookStories, splitFacebookPayload } from '../src/trending/facebook-parser';
-import { parseTrendingBody, trimTrending, TrendingPost, TrendingPlan } from '../src/trending/scanner';
+import { parseTrendingBody, trimTrending, TrendingPost, TrendingPlan, warmUpUrl } from '../src/trending/scanner';
 import { TrendingClient } from '../src/trending/trending-client';
 import { parseTikTokItemList, parseXGraphql, toWirePost } from '../src/monitor/parsers';
 
@@ -315,5 +315,14 @@ describe('Thumbnails', () => {
     expect(t.thumbnail).toBe('https://p16-sign.tiktokcdn.com/c.jpeg');
     expect(toWirePost(t)).not.toHaveProperty('thumbnail');
     expect(parseTrendingBody('tiktok', JSON.stringify({ itemList: [item] }))[0].thumbnail).toBe('https://p16-sign.tiktokcdn.com/c.jpeg');
+  });
+});
+
+
+describe('Trending warm-up', () => {
+  it('opens the TikTok home page first, and nothing extra elsewhere', () => {
+    expect(warmUpUrl('tiktok')).toBe('https://www.tiktok.com/');
+    expect(warmUpUrl('x')).toBeUndefined();
+    expect(warmUpUrl('facebook')).toBeUndefined();
   });
 });

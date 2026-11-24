@@ -189,6 +189,13 @@ class PressHub_AI_Press_Release_Inbox {
                 return $out;
             }
             $health['raw_links_count'] = count( $uids );
+            if ( count( $uids ) > (int) $c['max_messages'] ) {
+                // Design principle: a limit that leaves content out says so.
+                self::log( 'info', 'Press release inbox: the per-check message limit left messages for the next check.', [
+                    'messages' => count( $uids ),
+                    'limit'    => (int) $c['max_messages'],
+                ] );
+            }
             $uids                      = array_slice( $uids, 0, (int) $c['max_messages'] );
             $meta                      = $this->client->fetch_meta( $uids );
             $meta                      = is_wp_error( $meta ) ? [] : $meta;

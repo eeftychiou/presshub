@@ -18,9 +18,16 @@ require_once __DIR__ . '/class-api-client.php';
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-podcast-producer.php';
 require_once __DIR__ . '/class-markdown.php';
+require_once __DIR__ . '/class-podcast-timeline.php';
 require_once __DIR__ . '/class-token-logger.php';
 
 class PressHub_AI_Audio_Synthesizer {
+
+    /**
+     * Errors synthesize_speech_via_gemini() returns before it writes its own
+     * Usage & logs row; every other Gemini result is already logged there.
+     */
+    const GEMINI_UNLOGGED_ERRORS = [ 'no_gemini_key', 'missing_tts_voice', 'missing_tts_model', 'decode_failed' ];
 
     /** Option key for audio synthesis engine ('gemini' or 'google_cloud'). */
     const OPTION_ENGINE = 'presshub_ai_briefing_tts_engine';
@@ -74,6 +81,62 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
+     * Set by synthesize_script_audio(): the run stops after stitching and returns the
+     * audio and its timeline instead of saving a file and a podcast post.
+     *
+     * @var array|null [ 'language' => English name of the language, 'voices' => overrides ]
+     */
+    private $audio_only = null;
+
+    /**
+     * Voices a script in another language (an English or Turkish translation of the
+     * Greek podcast) with the podcast's voice settings, and returns the stitched audio
+     * without saving anything: no snapshot file, no Media Library item, no post.
+     *
+     * The delivery style is the podcast's style with "Greek" replaced by $language, and
+     * $voices (presenter_1, presenter_2, presenter_3) replace the podcast's voices where
+     * they are not empty. Honors set_live_call_deadline(), so a long translation resumes
+     * from the turn cache like the Greek episode.
+     *
+     * @param string $script   Script with the same speaker and topic markers as the Greek one.
+     * @param string $date     Briefing date (Y-m-d), for the turn cache.
+     * @param string $edition  morning | noon, for the TTS call record.
+     * @param string $language English name of the language, e.g. "English", "Turkish".
+     * @param array  $voices   Optional voice overrides keyed presenter_1..presenter_3.
+     * @return array|WP_Error [ audio, ext, timeline_topics, timeline_opts, turns_count, topic_count, engine, voices ]
+     */
+    public function synthesize_script_audio( string $script, string $date, string $edition, string $language, array $voices = [], ?PressHub_AI_API_Client $api_client = null ) {
+        if ( '' === trim( $script ) ) {
+            return new WP_Error( 'empty_script', __( 'The translated podcast script is empty.', 'presshub-ai-editor' ) );
+        }
+        $this->audio_only = [ 'language' => $language, 'voices' => $voices ];
+        try {
+            return $this->synthesize_podcast_run( $date, $script, 'noon' === $edition ? 'noon' : 'morning', $api_client, 0 );
+        } finally {
+            $this->audio_only = null;
+            if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                PressHub_AI_TTS_Call_Recorder::end_session();
+            }
+        }
+    }
+
+    /**
+     * Delivery style text for another language: the style's instruction with "Greek"
+     * replaced by $language, or the custom instruction with the language added.
+     */
+    public function style_for_language( string $style, string $language ): string {
+        $styles = $this->get_available_styles();
+        $text   = ( isset( $styles[ $style ] ) && '' !== $styles[ $style ]['instruction'] ) ? $styles[ $style ]['instruction'] : $style;
+        if ( '' === trim( $text ) ) {
+            $text = $styles['formal']['instruction'];
+        }
+        if ( false !== stripos( $text, 'Greek' ) ) {
+            return str_ireplace( 'Greek', $language, $text );
+        }
+        return rtrim( $text, " \t\n:." ) . '. Speak in ' . $language . ':';
+    }
+
+    /**
      * Constructor registers excerpt filter hooks.
      */
     public function __construct() {
@@ -86,6 +149,9 @@ class PressHub_AI_Audio_Synthesizer {
     public static function register_hooks(): void {
         if ( function_exists( 'add_filter' ) ) {
             add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_podcast_excerpt' ], 20, 2 );
+        }
+        if ( function_exists( 'add_action' ) ) {
+            add_action( 'save_post', [ __CLASS__, 'forget_brief_lead' ], 10, 1 );
         }
     }
 
@@ -113,6 +179,13 @@ class PressHub_AI_Audio_Synthesizer {
             return (string) $excerpt;
         }
 
+        // The lead story text, when there is one, is what the card shows
+        // (2.63.0). post_excerpt itself is left to the SEO description.
+        $lead = self::podcast_lead_excerpt( $post );
+        if ( '' !== $lead ) {
+            return $lead;
+        }
+
         $include_text = class_exists( 'PressHub_AI_Settings_Storage' )
             ? PressHub_AI_Settings_Storage::get_briefing_podcast_include_text()
             : false;
@@ -131,6 +204,178 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         return (string) $excerpt;
+    }
+
+    /** Meta key holding the lead story text shown on a podcast post (2.63.0). */
+    const META_LEAD = '_presshub_podcast_lead';
+
+    /** Most words the lead story text keeps. */
+    const LEAD_MAX_WORDS = 60;
+
+    /** How long a looked-up lead for an older podcast post is cached, in seconds. */
+    const LEAD_CACHE_TTL = 900;
+
+    /** Leads looked up in this request, by "date|edition". */
+    private static $lead_cache = [];
+
+    /** Whether lead story text is on (the setting, then the filter). */
+    public static function lead_enabled( string $date, string $edition ): bool {
+        $on = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_podcast_lead_enabled() : true;
+        return (bool) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_podcast_lead_enabled', $on, $date, $edition ) : $on );
+    }
+
+    /**
+     * The card text of a podcast post: its saved lead story text, else (an
+     * older post, or a brief published after the podcast) the lead of that
+     * day's published brief, cached per request and in a short transient.
+     * '' when the feature is off or there is no published brief.
+     */
+    public static function podcast_lead_excerpt( $post ): string {
+        $post_id = is_object( $post ) ? (int) ( $post->ID ?? 0 ) : 0;
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) ) {
+            return '';
+        }
+        $date    = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
+        $edition = 'noon' === get_post_meta( $post_id, '_presshub_briefing_edition', true ) ? 'noon' : 'morning';
+        if ( ! self::lead_enabled( $date, $edition ) ) {
+            return '';
+        }
+        $lead = trim( (string) get_post_meta( $post_id, self::META_LEAD, true ) );
+        if ( '' !== $lead || '' === $date ) {
+            return $lead;
+        }
+        $key = $date . '|' . $edition;
+        if ( ! array_key_exists( $key, self::$lead_cache ) ) {
+            $transient = 'presshub_ai_podcast_lead_' . str_replace( '-', '', $date ) . '_' . $edition;
+            $cached    = function_exists( 'get_transient' ) ? get_transient( $transient ) : false;
+            if ( is_array( $cached ) && isset( $cached['text'] ) ) {
+                self::$lead_cache[ $key ] = (string) $cached['text'];
+            } else {
+                self::$lead_cache[ $key ] = ( new self() )->lead_story_text( $date, $edition );
+                if ( function_exists( 'set_transient' ) ) {
+                    set_transient( $transient, [ 'text' => self::$lead_cache[ $key ] ], self::LEAD_CACHE_TTL );
+                }
+            }
+        }
+        return self::$lead_cache[ $key ];
+    }
+
+    /**
+     * A written brief was saved (published, edited, held): drop the cached
+     * lead of its date and edition so podcast cards pick up the change.
+     */
+    public static function forget_brief_lead( $post_id ): void {
+        $post_id = (int) $post_id;
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) || 'text' !== get_post_meta( $post_id, '_presshub_briefing_type', true ) ) {
+            return;
+        }
+        $date    = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
+        $edition = 'noon' === get_post_meta( $post_id, '_presshub_briefing_edition', true ) ? 'noon' : 'morning';
+        if ( '' === $date ) {
+            return;
+        }
+        unset( self::$lead_cache[ $date . '|' . $edition ] );
+        if ( function_exists( 'delete_transient' ) ) {
+            delete_transient( 'presshub_ai_podcast_lead_' . str_replace( '-', '', $date ) . '_' . $edition );
+        }
+    }
+
+    /** Forget the leads looked up in this request (tests). */
+    public static function reset_lead_cache(): void {
+        self::$lead_cache = [];
+    }
+
+    /**
+     * The lead story of that day's published written brief as plain text:
+     * the paragraphs before its first heading, cut to whole sentences of at
+     * most LEAD_MAX_WORDS words, else the brief's excerpt. '' when the
+     * feature is off or the brief is missing or not published (a draft,
+     * scheduled or QA-held brief never shows).
+     */
+    public function lead_story_text( string $date, string $edition ): string {
+        if ( ! self::lead_enabled( $date, $edition ) ) {
+            return '';
+        }
+        $brief = $this->find_brief_post( $date, $edition, [ 'publish' ] );
+        if ( ! $brief || 'publish' !== (string) ( $brief->post_status ?? '' ) ) {
+            return '';
+        }
+        $content = (string) ( $brief->post_content ?? '' );
+        $parts   = preg_split( '/<h[1-6][\s>]/i', $content, 2 );
+        $text    = self::plain_text( is_array( $parts ) ? (string) ( $parts[0] ?? '' ) : '' );
+        if ( '' === $text ) {
+            $text = self::plain_text( (string) ( $brief->post_excerpt ?? '' ) );
+        }
+        $text = self::cut_to_sentences( $text, self::LEAD_MAX_WORDS );
+        if ( function_exists( 'apply_filters' ) ) {
+            // A filter's own text is cleaned like the brief's (no tags, trimmed).
+            $filtered = (string) apply_filters( 'presshub_ai_podcast_lead_text', $text, $date, $edition );
+            $text     = $filtered === $text ? $text : self::plain_text( $filtered );
+        }
+        return $text;
+    }
+
+    /** The lead story paragraph for the post body, or '' for no text. */
+    public function lead_story_html( string $lead ): string {
+        if ( '' === trim( $lead ) ) {
+            return '';
+        }
+        return "<!-- wp:paragraph {\"className\":\"presshub-podcast-lead\"} -->\n"
+            . '<p class="presshub-podcast-lead">' . esc_html( $lead ) . "</p>\n"
+            . '<!-- /wp:paragraph -->';
+    }
+
+    /** HTML to one line of plain text (no tags, entities decoded, spaces collapsed). '' on invalid UTF-8. */
+    private static function plain_text( string $html ): string {
+        $html = (string) preg_replace( '/<!--.*?-->/s', ' ', $html );
+        $html = (string) preg_replace( '#</(p|div|li|blockquote|figcaption)>#i', '$0 ', $html );
+        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $html ) : strip_tags( $html );
+        $text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+        return trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+    }
+
+    /**
+     * Whole sentences from the start of $text up to $max_words words. A
+     * sentence ends at . ! ? ; ; (Greek question mark) or …, with any closing
+     * quote or bracket, before a space and a capital letter, digit or opening
+     * quote; abbreviations such as "κ.", "π.χ." or "Δρ." do not end one. A
+     * first sentence longer than the limit is cut at a word with an ellipsis.
+     */
+    public static function cut_to_sentences( string $text, int $max_words ): string {
+        $text = trim( $text );
+        if ( '' === $text || $max_words < 1 ) {
+            return '';
+        }
+        $pieces = preg_split( '/(?<=[.!?;\x{037E}…])(?:["»”’\')\]]*)\K\s+(?=["«“‘(\[]?[\p{Lu}\p{N}])/u', $text, -1, PREG_SPLIT_NO_EMPTY );
+        if ( ! is_array( $pieces ) ) {
+            return '';
+        }
+        // Join pieces that end in an abbreviation back to the next one.
+        $sentences = [];
+        foreach ( $pieces as $piece ) {
+            $last = count( $sentences ) - 1;
+            if ( $last >= 0 && preg_match( '/(?:^|[\s(«"])(?:\p{L}|\p{L}\.\p{L}|κκ|κα|Δρ|Dr|Mr|Mrs|Ms|St|Αγ|Αρχ|Καθ|Prof|σελ|αρ|βλ)\.$/u', $sentences[ $last ] ) ) {
+                $sentences[ $last ] .= ' ' . $piece;
+            } else {
+                $sentences[] = $piece;
+            }
+        }
+        $out   = [];
+        $words = 0;
+        foreach ( $sentences as $sentence ) {
+            $split = preg_split( '/\s+/u', trim( $sentence ), -1, PREG_SPLIT_NO_EMPTY );
+            $n     = is_array( $split ) ? count( $split ) : 0;
+            if ( $words + $n > $max_words ) {
+                break;
+            }
+            $out[]  = trim( $sentence );
+            $words += $n;
+        }
+        if ( empty( $out ) ) {
+            $first = preg_split( '/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY );
+            return is_array( $first ) ? implode( ' ', array_slice( $first, 0, $max_words ) ) . '…' : '';
+        }
+        return implode( ' ', $out );
     }
 
     /**
@@ -232,8 +477,13 @@ class PressHub_AI_Audio_Synthesizer {
      *         carries `name`, `label`, `gender`, `type`, and (for
      *         manifest-loaded voices) `language`, `engine_version`.
      */
-    public function get_available_voices( string $engine = 'gemini' ): array {
+    public function get_available_voices( string $engine = 'gemini', string $language = '' ): array {
         $engine = '' === trim( $engine ) ? 'gemini' : trim( $engine );
+        // Google Cloud voices speak one language each: the Greek podcast's lists show the
+        // el-GR ones, an English or Turkish podcast's its own (`language` "en", "tr").
+        if ( '' === $language && 'google_cloud' === $engine ) {
+            $language = 'el';
+        }
 
         // Backward-compat shim: legacy callers pass 'gemini' to mean
         // the canonical Gemini 2.5 catalog. Map that to the new
@@ -252,7 +502,14 @@ class PressHub_AI_Audio_Synthesizer {
             return [ 'female' => [], 'male' => [] ];
         }
 
-        return $this->group_voices_by_gender( $engine_slice['voices'] ?? [] );
+        $voices = (array) ( $engine_slice['voices'] ?? [] );
+        if ( '' !== $language ) {
+            $prefix = strtolower( $language ) . '-';
+            $voices = array_filter( $voices, static function ( $v ) use ( $prefix ) {
+                return ! is_array( $v ) || ! isset( $v['language'] ) || str_starts_with( strtolower( (string) $v['language'] ), $prefix );
+            } );
+        }
+        return $this->group_voices_by_gender( $voices );
     }
 
     /**
@@ -376,18 +633,17 @@ class PressHub_AI_Audio_Synthesizer {
             return $manifest_slice;
         }
 
-        $api_key = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_api_key() : '';
-        if ( '' === $api_key && class_exists( 'PressHub_AI_Provider_Store' ) ) {
-            $all_providers = PressHub_AI_Provider_Store::get_all( true );
-            foreach ( $all_providers as $p ) {
-                if ( ( $p['type'] ?? '' ) === 'gemini' && ! empty( $p['api_key'] ) ) {
-                    $api_key = (string) $p['api_key'];
-                    break;
-                }
+        // #237: the Speech provider chosen in AI models first, then any Gemini provider in Connections.
+        $api_key = '';
+        if ( class_exists( 'PressHub_AI_Provider_Store' ) && class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            $chosen = PressHub_AI_Settings_Storage::get_briefing_podcast_tts_provider();
+            $record = '' !== $chosen ? PressHub_AI_Provider_Store::get( $chosen ) : null;
+            if ( is_array( $record ) && 'gemini' === ( $record['type'] ?? '' ) && false === strpos( (string) ( $record['api_key'] ?? '' ), '•' ) ) {
+                $api_key = (string) ( $record['api_key'] ?? '' );
             }
         }
-        if ( '' === $api_key ) {
-            $api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
+        if ( '' === $api_key && class_exists( 'PressHub_AI_API_Client' ) ) {
+            $api_key = PressHub_AI_API_Client::lookup_provider_key_by_type( 'gemini' );
         }
         if ( '' === $api_key ) {
             return $manifest_slice;
@@ -736,9 +992,12 @@ class PressHub_AI_Audio_Synthesizer {
      * @param PressHub_AI_API_Client|null $api_client  Optional API client.
      * @param string                       $style       Delivery style instruction or preset.
      * @param string                       $date        Optional briefing date (YYYY-MM-DD) for disk caching.
+     * @param array|null                   $speakers    2.74.0: two speakers for a labelled two-voice request
+     *                                                  ([ [ 'speaker' => label, 'voice' => name ], x2 ]). $text then
+     *                                                  holds "label: line" lines and $voice_model is only logged.
      * @return string|WP_Error Binary audio string or WP_Error on failure.
      */
-    public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null, string $style = 'formal', string $date = '' ) {
+    public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null, string $style = 'formal', string $date = '', ?array $speakers = null ) {
         if ( null === $api_client ) {
             $api_client = new PressHub_AI_API_Client( 'tts' );
         }
@@ -765,8 +1024,16 @@ class PressHub_AI_Audio_Synthesizer {
         $model_id = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : '';
         $payload_mode = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured';
 
-        // Deterministic cache key
-        $cache_key = hash( 'sha256', implode( '|', [ $engine, $model_id, trim( $voice_model ), $style, number_format( $speed, 2 ), number_format( $pitch, 1 ), $payload_mode, trim( $text ) ] ) );
+        $two_voices = 'google_cloud' !== $engine && is_array( $speakers ) && 2 === count( $speakers );
+        $voice_key  = trim( $voice_model );
+        if ( $two_voices ) {
+            $voice_key = 'two_voices:' . implode( ',', array_map( static function ( $sp ) {
+                return (string) ( $sp['speaker'] ?? '' ) . '=' . (string) ( $sp['voice'] ?? '' );
+            }, $speakers ) );
+        }
+
+        // Deterministic cache key (a single-voice turn keeps the key it always had).
+        $cache_key = hash( 'sha256', implode( '|', [ $engine, $model_id, $voice_key, $style, number_format( $speed, 2 ), number_format( $pitch, 1 ), $payload_mode, trim( $text ) ] ) );
 
         $cache_file = '';
         if ( '' !== $date ) {
@@ -821,13 +1088,26 @@ class PressHub_AI_Audio_Synthesizer {
         if ( 'google_cloud' === $engine ) {
             $result = $api_client->synthesize_speech_with_options( $text, $voice_model, $speed, $pitch );
         } else {
-            $result = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style, null, $speed, $pitch );
+            $speaker_configs = null;
+            if ( $two_voices ) {
+                $speaker_configs = [];
+                foreach ( $speakers as $sp ) {
+                    $speaker_configs[] = [ 'speaker' => (string) ( $sp['speaker'] ?? '' ), 'voice' => (string) ( $sp['voice'] ?? '' ), 'labelled' => true ];
+                }
+            }
+            $result = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style, $speaker_configs, $speed, $pitch );
         }
 
         $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         $char_count  = mb_strlen( $text );
 
-        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+        // synthesize_speech_via_gemini() logs every request it sends (with the
+        // model it used), so a Gemini turn is logged here only when it stopped
+        // before that log line: a missing key, voice or model, or audio that
+        // could not be decoded. Google Cloud TTS does not log itself.
+        $logged_by_client = 'google_cloud' !== $engine
+            && ! ( is_wp_error( $result ) && in_array( $result->get_error_code(), self::GEMINI_UNLOGGED_ERRORS, true ) );
+        if ( ! $logged_by_client && class_exists( 'PressHub_AI_Token_Logger' ) ) {
             if ( is_wp_error( $result ) ) {
                 PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', $engine, $voice_model, $char_count, $duration_ms, 'error', $result->get_error_message() );
             } else {
@@ -844,6 +1124,399 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         return $result;
+    }
+
+    /**
+     * Errors after which a joined request is not tried again turn by turn: they would
+     * fail the same way (or, for the time budget, the next step resumes).
+     */
+    const NO_PER_TURN_FALLBACK = [ 'synthesis_time_budget', 'tts_daily_quota_exceeded', 'no_gemini_key', 'missing_tts_model', 'missing_tts_voice' ];
+
+    /**
+     * A joined request whose audio is shorter than its text at this many characters per
+     * second was cut short (speech runs at about 14); its turns are voiced one by one.
+     */
+    const JOINED_MAX_CHARS_PER_SECOND = 40;
+
+    /**
+     * 2.76.1: whether Gemini accepts the labelled two-voice request. False since Gemini started
+     * rejecting it (see plan_speech_requests()); tests switch it on to keep the joined path covered.
+     */
+    public static $two_voice_requests_accepted = false;
+
+    /**
+     * Label of a host in a two-voice request: the host's name when it is a plain name
+     * (letters, digits, spaces, dots, hyphens; up to 40 characters), else SpeakerN.
+     *
+     * @param string[] $names Host names, presenter 1 first.
+     * @return string[] Two distinct labels.
+     */
+    public static function two_voice_labels( array $names ): array {
+        $labels = [];
+        foreach ( [ 0, 1 ] as $i ) {
+            $name = trim( (string) preg_replace( '/\s+/u', ' ', (string) ( $names[ $i ] ?? '' ) ) );
+            $labels[ $i ] = ( '' !== $name && preg_match( '/^\p{L}[\p{L}\p{N} .\-]{0,39}$/u', $name ) ) ? $name : 'Speaker' . ( $i + 1 );
+        }
+        if ( mb_strtolower( $labels[0] ) === mb_strtolower( $labels[1] ) ) {
+            $labels = [ 'Speaker1', 'Speaker2' ];
+        }
+        return $labels;
+    }
+
+    /**
+     * Plans the speech requests for a list of turns (2.74.0).
+     *
+     * per_turn: one request per turn, as before. same_voice: back-to-back turns with
+     * the same voice share a request. two_voices: back-to-back turns share a request
+     * whatever the voice, the lines labelled with the host's name so Gemini picks the
+     * voice of each line; only with two hosts and two different voices on Gemini,
+     * otherwise it plans like same_voice. A request holds at most $max_chars characters
+     * of text; a longer turn is a request of its own. Google Cloud TTS is always per turn.
+     *
+     * @param array    $turns      [ [ 'speaker' => string, 'text' => string ], ... ]
+     * @param string   $mode       per_turn | same_voice | two_voices.
+     * @param int      $max_chars  Most characters of text in a joined request.
+     * @param callable $voice_of   fn( string $speaker ): string voice name.
+     * @param int      $host_count 1, 2 or 3.
+     * @param string   $engine     gemini | google_cloud.
+     * @param string[] $labels     Two-voice labels for presenter 1 and 2 (two_voice_labels()).
+     * @param string[] $two_voices The voices of presenter 1 and 2.
+     * @return array [ [ 'turns' => int[], 'text' => string, 'voice' => string, 'speakers' => array|null ], ... ]
+     */
+    public static function plan_speech_requests( array $turns, string $mode, int $max_chars, callable $voice_of, int $host_count, string $engine, array $labels = [], array $two_voices = [] ): array {
+        $turns  = array_values( $turns );
+        $voices = [];
+        foreach ( $turns as $i => $t ) {
+            $voices[ $i ] = (string) $voice_of( (string) ( $t['speaker'] ?? '' ) );
+        }
+        if ( 'google_cloud' === $engine || ! in_array( $mode, [ 'same_voice', 'two_voices' ], true ) ) {
+            $mode = 'per_turn';
+        }
+        $v1 = trim( (string) ( $two_voices[0] ?? '' ) );
+        $v2 = trim( (string) ( $two_voices[1] ?? '' ) );
+        if ( 'two_voices' === $mode && ( 2 !== $host_count || '' === $v1 || '' === $v2 || $v1 === $v2 ) ) {
+            $mode = 'same_voice';
+        }
+        // 2.76.1: Gemini now rejects the labelled two-voice request ("Multi-speaker generation
+        // requests must specify speech_metadata.speaker for each text part"), so every joined
+        // request failed and was voiced again turn by turn: more requests, not fewer. Per-part
+        // speakers are what caused the 4.18 voice drift, so two_voices plans like same_voice
+        // (single-voice requests only) until a labelled request Gemini accepts is proven live.
+        if ( 'two_voices' === $mode && ! self::$two_voice_requests_accepted ) {
+            $mode = 'same_voice';
+        }
+        $labels   = array_values( $labels );
+        $label_of = [ $v1 => (string) ( $labels[0] ?? 'Speaker1' ), $v2 => (string) ( $labels[1] ?? 'Speaker2' ) ];
+        $flat     = static function ( string $text ): string {
+            return trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+        };
+
+        $groups  = [];
+        $current = [];
+        $flush   = static function () use ( &$groups, &$current ) {
+            if ( ! empty( $current ) ) {
+                $groups[] = $current;
+                $current  = [];
+            }
+        };
+        foreach ( $turns as $i => $t ) {
+            if ( 'per_turn' === $mode || empty( $current ) ) {
+                $flush();
+                $current = [ $i ];
+                continue;
+            }
+            $prev_voice = $voices[ end( $current ) ];
+            $fits_voice = 'two_voices' === $mode
+                ? ( isset( $label_of[ $voices[ $i ] ] ) && isset( $label_of[ $prev_voice ] ) )
+                : ( $voices[ $i ] === $prev_voice );
+            $chars = 0;
+            foreach ( array_merge( $current, [ $i ] ) as $j ) {
+                $chars += mb_strlen( $flat( (string) ( $turns[ $j ]['text'] ?? '' ) ) ) + 2;
+            }
+            if ( $fits_voice && $chars <= $max_chars ) {
+                $current[] = $i;
+            } else {
+                $flush();
+                $current = [ $i ];
+            }
+        }
+        $flush();
+
+        $plan = [];
+        foreach ( $groups as $g ) {
+            $group_voices = array_values( array_unique( array_map( static function ( $j ) use ( $voices ) {
+                return $voices[ $j ];
+            }, $g ) ) );
+            if ( 1 === count( $g ) ) {
+                $plan[] = [ 'turns' => $g, 'text' => (string) ( $turns[ $g[0] ]['text'] ?? '' ), 'voice' => $voices[ $g[0] ], 'speakers' => null ];
+            } elseif ( 1 === count( $group_voices ) ) {
+                $plan[] = [
+                    'turns'    => $g,
+                    'text'     => implode( "\n\n", array_map( static function ( $j ) use ( $turns, $flat ) {
+                        return $flat( (string) ( $turns[ $j ]['text'] ?? '' ) );
+                    }, $g ) ),
+                    'voice'    => $group_voices[0],
+                    'speakers' => null,
+                ];
+            } else {
+                $plan[] = [
+                    'turns'    => $g,
+                    'text'     => implode( "\n", array_map( static function ( $j ) use ( $turns, $flat, $voices, $label_of ) {
+                        return $label_of[ $voices[ $j ] ] . ': ' . $flat( (string) ( $turns[ $j ]['text'] ?? '' ) );
+                    }, $g ) ),
+                    'voice'    => $v1,
+                    'speakers' => [
+                        [ 'speaker' => $label_of[ $v1 ], 'voice' => $v1 ],
+                        [ 'speaker' => $label_of[ $v2 ], 'voice' => $v2 ],
+                    ],
+                ];
+            }
+        }
+        return $plan;
+    }
+
+    /**
+     * Splits the length of a joined request between its turns, by text length, so
+     * that the turns plus the turn pauses the timeline adds between them last as
+     * long as the request's audio.
+     *
+     * @param float    $seconds       Length of the request's audio.
+     * @param string[] $texts         The turns' texts.
+     * @param int      $turn_pause_ms Pause the timeline puts between turns.
+     * @return float[]
+     */
+    public static function split_request_seconds( float $seconds, array $texts, int $turn_pause_ms ): array {
+        $n = count( $texts );
+        if ( $n <= 1 ) {
+            return [ $seconds ];
+        }
+        $available = max( 0.0, $seconds - ( $n - 1 ) * max( 0, $turn_pause_ms ) / 1000 );
+        $lengths   = array_map( static function ( $t ) {
+            return max( 1, mb_strlen( trim( (string) $t ) ) );
+        }, array_values( $texts ) );
+        $total = array_sum( $lengths );
+        return array_map( static function ( $len ) use ( $available, $total ) {
+            return $available * $len / $total;
+        }, $lengths );
+    }
+
+    /**
+     * Voices a list of turns with the planned requests (plan_speech_requests()) and
+     * returns the audio chunks to stitch with the turn pause and each turn's timeline
+     * entry. A joined request that fails (other than NO_PER_TURN_FALLBACK) or comes
+     * back too short is voiced again turn by turn.
+     *
+     * @param array $turns Parsed turns.
+     * @param array $ctx   voice_of (callable), mode, max_chars, host_count, engine, labels,
+     *                     two_voices, speed, pitch, style, date, api_client, turn_pause_ms,
+     *                     request_delay_ms, is_test_env, timeline_mp3.
+     * @return array|WP_Error [ 'chunks' => string[], 'turns' => timeline turns, 'requests' => int ]
+     */
+    private function synthesize_turn_list( array $turns, array $ctx ) {
+        $turns    = array_values( $turns );
+        $plan     = self::plan_speech_requests( $turns, (string) $ctx['mode'], (int) $ctx['max_chars'], $ctx['voice_of'], (int) $ctx['host_count'], (string) $ctx['engine'], (array) $ctx['labels'], (array) $ctx['two_voices'] );
+        $chunks   = [];
+        $tl_turns = [];
+        $mp3      = ! empty( $ctx['timeline_mp3'] );
+        $live     = 0;
+        $delay    = function ( bool $more ) use ( $ctx ) {
+            if ( ! $this->last_turn_was_cache_hit && (int) $ctx['request_delay_ms'] > 0 && empty( $ctx['is_test_env'] ) && $more ) {
+                usleep( (int) $ctx['request_delay_ms'] * 1000 );
+            }
+        };
+        $one_turn = function ( int $j, bool $more ) use ( $turns, $ctx, $mp3, &$chunks, &$tl_turns, &$live, $delay ) {
+            $t     = $turns[ $j ];
+            $voice = (string) ( $ctx['voice_of'] )( (string) ( $t['speaker'] ?? '' ) );
+            $audio = $this->synthesize_turn( (string) ( $t['text'] ?? '' ), $voice, (float) $ctx['speed'], (float) $ctx['pitch'], $ctx['api_client'], (string) $ctx['style'], (string) $ctx['date'] );
+            if ( is_wp_error( $audio ) ) {
+                return $audio;
+            }
+            $live      += $this->last_turn_was_cache_hit ? 0 : 1;
+            $chunks[]   = $audio;
+            $tl_turns[] = [
+                'speaker' => (string) ( $t['speaker'] ?? '' ),
+                'text'    => (string) ( $t['text'] ?? '' ),
+                'seconds' => PressHub_AI_Podcast_Timeline::turn_seconds( (string) $audio, (string) ( $t['text'] ?? '' ), $mp3 ),
+            ];
+            self::touch_run_locks();
+            $delay( $more );
+            return true;
+        };
+
+        foreach ( $plan as $k => $request ) {
+            $more = $k + 1 < count( $plan );
+            if ( 1 === count( $request['turns'] ) ) {
+                $ok = $one_turn( (int) $request['turns'][0], $more );
+                if ( is_wp_error( $ok ) ) {
+                    return $ok;
+                }
+                continue;
+            }
+
+            $audio = $this->synthesize_turn( (string) $request['text'], (string) $request['voice'], (float) $ctx['speed'], (float) $ctx['pitch'], $ctx['api_client'], (string) $ctx['style'], (string) $ctx['date'], $request['speakers'] );
+            $why   = '';
+            if ( is_wp_error( $audio ) ) {
+                if ( in_array( $audio->get_error_code(), self::NO_PER_TURN_FALLBACK, true ) ) {
+                    return $audio;
+                }
+                $why = $audio->get_error_message();
+            } else {
+                $live    += $this->last_turn_was_cache_hit ? 0 : 1;
+                $seconds = PressHub_AI_Podcast_Timeline::turn_seconds( (string) $audio, (string) $request['text'], $mp3 );
+                if ( ! $mp3 && $seconds * self::JOINED_MAX_CHARS_PER_SECOND < mb_strlen( (string) $request['text'] ) ) {
+                    $why = sprintf( 'audio too short (%.1f s for %d characters)', $seconds, mb_strlen( (string) $request['text'] ) );
+                }
+            }
+            if ( '' !== $why ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( '[LogosAI Synthesizer] Joined speech request (%d turns) not usable: %s. Voicing its turns one by one.', count( $request['turns'] ), $why ) );
+                }
+                foreach ( $request['turns'] as $n => $j ) {
+                    $ok = $one_turn( (int) $j, $more || $n + 1 < count( $request['turns'] ) );
+                    if ( is_wp_error( $ok ) ) {
+                        return $ok;
+                    }
+                }
+                continue;
+            }
+
+            $texts  = array_map( static function ( $j ) use ( $turns ) {
+                return (string) ( $turns[ $j ]['text'] ?? '' );
+            }, $request['turns'] );
+            $shares = self::split_request_seconds( $seconds, $texts, (int) $ctx['turn_pause_ms'] );
+            foreach ( $request['turns'] as $n => $j ) {
+                $tl_turns[] = [
+                    'speaker' => (string) ( $turns[ $j ]['speaker'] ?? '' ),
+                    'text'    => (string) ( $turns[ $j ]['text'] ?? '' ),
+                    'seconds' => (float) $shares[ $n ],
+                ];
+            }
+            $chunks[] = $audio;
+            self::touch_run_locks();
+            $delay( $more );
+        }
+        return [ 'chunks' => $chunks, 'turns' => $tl_turns, 'requests' => $live ];
+    }
+
+    /** Seconds after its last sign of life that an audio run's lock is taken as left by a dead process. */
+    const RUN_LOCK_TTL = 600;
+
+    /** Locks this process holds: option name => token. */
+    private static $held_run_locks = [];
+
+    /** Option holding the audio run lock of one edition. */
+    public static function run_lock_name( string $date, string $edition ): string {
+        return 'presshub_ai_audio_run_lock_' . preg_replace( '/[^0-9A-Za-z_\-]/', '', $date ) . '_' . ( 'noon' === $edition ? 'noon' : 'morning' );
+    }
+
+    /**
+     * Takes the audio lock of one edition, so only one audio job voices it at a time
+     * (19/11/2026: two jobs started together and sent the same turns twice). True when
+     * this process holds it (also when it already did), false when another live job
+     * does. A lock untouched for RUN_LOCK_TTL seconds is taken over.
+     */
+    public static function acquire_run_lock( string $date, string $edition ): bool {
+        $name = self::run_lock_name( $date, $edition );
+        if ( isset( self::$held_run_locks[ $name ] ) ) {
+            return true;
+        }
+        $token = time() . '.' . bin2hex( random_bytes( 4 ) );
+        for ( $try = 0; $try < 2; $try++ ) {
+            if ( self::insert_lock( $name, $token ) ) {
+                self::$held_run_locks[ $name ] = $token;
+                return true;
+            }
+            $current = self::read_lock( $name );
+            if ( null !== $current && time() - (int) $current < self::RUN_LOCK_TTL ) {
+                return false;
+            }
+            self::delete_lock( $name, $current );
+        }
+        return false;
+    }
+
+    /** Releases a lock taken by acquire_run_lock(). */
+    public static function release_run_lock( string $date, string $edition ): void {
+        $name = self::run_lock_name( $date, $edition );
+        if ( isset( self::$held_run_locks[ $name ] ) ) {
+            self::delete_lock( $name, self::$held_run_locks[ $name ] );
+            unset( self::$held_run_locks[ $name ] );
+        }
+    }
+
+    /** Whether this process holds the lock of one edition. */
+    public static function holds_run_lock( string $date, string $edition ): bool {
+        return isset( self::$held_run_locks[ self::run_lock_name( $date, $edition ) ] );
+    }
+
+    /** Renews the locks this process holds (called after every speech request). */
+    public static function touch_run_locks(): void {
+        foreach ( self::$held_run_locks as $name => $token ) {
+            $new = time() . '.' . substr( (string) $token, (int) strpos( (string) $token, '.' ) + 1 );
+            if ( self::update_lock( $name, (string) $token, $new ) ) {
+                self::$held_run_locks[ $name ] = $new;
+            }
+        }
+    }
+
+    /** The database, when it can run the atomic lock queries. */
+    private static function lock_db() {
+        global $wpdb;
+        return ( is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) && method_exists( $wpdb, 'get_var' ) ) ? $wpdb : null;
+    }
+
+    /** Lock rows when there is no database (unit tests without WordPress options). */
+    private static $memory_locks = [];
+
+    private static function insert_lock( string $name, string $token ): bool {
+        $db = self::lock_db();
+        if ( $db ) {
+            return 1 === (int) $db->query( $db->prepare( "INSERT IGNORE INTO {$db->options} (option_name, option_value, autoload) VALUES (%s, %s, 'off')", $name, $token ) );
+        }
+        if ( isset( self::$memory_locks[ $name ] ) ) {
+            return false;
+        }
+        self::$memory_locks[ $name ] = $token;
+        return true;
+    }
+
+    private static function read_lock( string $name ): ?string {
+        $db = self::lock_db();
+        if ( $db ) {
+            $val = $db->get_var( $db->prepare( "SELECT option_value FROM {$db->options} WHERE option_name = %s", $name ) );
+            return null === $val ? null : (string) $val;
+        }
+        return self::$memory_locks[ $name ] ?? null;
+    }
+
+    private static function update_lock( string $name, string $old, string $new ): bool {
+        $db = self::lock_db();
+        if ( $db ) {
+            return 1 === (int) $db->query( $db->prepare( "UPDATE {$db->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $new, $name, $old ) );
+        }
+        if ( ( self::$memory_locks[ $name ] ?? null ) !== $old ) {
+            return false;
+        }
+        self::$memory_locks[ $name ] = $new;
+        return true;
+    }
+
+    private static function delete_lock( string $name, ?string $token ): void {
+        $db = self::lock_db();
+        if ( $db ) {
+            if ( null === $token ) {
+                $db->query( $db->prepare( "DELETE FROM {$db->options} WHERE option_name = %s", $name ) );
+            } else {
+                $db->query( $db->prepare( "DELETE FROM {$db->options} WHERE option_name = %s AND option_value = %s", $name, $token ) );
+            }
+            if ( function_exists( 'wp_cache_delete' ) ) {
+                wp_cache_delete( $name, 'options' );
+            }
+            return;
+        }
+        if ( null === $token || ( self::$memory_locks[ $name ] ?? null ) === $token ) {
+            unset( self::$memory_locks[ $name ] );
+        }
     }
 
     /**
@@ -1100,13 +1773,13 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /** The written brief post for this date and edition, or null. */
-    private function find_brief_post( string $date, string $edition ) {
+    private function find_brief_post( string $date, string $edition, array $statuses = [ 'publish', 'future', 'pending', 'draft' ] ) {
         if ( '' === $date || ! function_exists( 'get_posts' ) ) {
             return null;
         }
         $posts = get_posts( [
             'post_type'        => 'post',
-            'post_status'      => [ 'publish', 'future', 'pending', 'draft' ],
+            'post_status'      => $statuses,
             'numberposts'      => 1,
             'suppress_filters' => true,
             'meta_query'       => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded lookup of the plugin's own posts by meta key.
@@ -1249,7 +1922,13 @@ class PressHub_AI_Audio_Synthesizer {
             ? PressHub_AI_Settings_Storage::get_briefing_podcast_include_text()
             : 0;
 
-        $post_content = "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
+        // Lead story text first, so the post opens with the day's top story;
+        // the excerpt filter shows the same text on the home page (2.63.0).
+        $lead      = $this->lead_story_text( $date, $edition );
+        $lead_html = $this->lead_story_html( $lead );
+
+        $post_content = ( '' !== $lead_html ? $lead_html . "\n\n" : '' )
+            . "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
             . "<figure class=\"wp-block-audio\"><audio controls src=\"" . esc_url_raw( $audio_url ) . "\"></audio></figure>\n"
             . "<!-- /wp:audio -->";
 
@@ -1280,6 +1959,7 @@ class PressHub_AI_Audio_Synthesizer {
                 '_presshub_audio_attachment_id' => $attachment_id,
                 '_presshub_audio_url'           => $audio_url,
                 '_presshub_podcast_script'      => $transcript,
+                self::META_LEAD                 => $lead,
             ],
         ];
 
@@ -1295,6 +1975,11 @@ class PressHub_AI_Audio_Synthesizer {
         if ( ! empty( $post_category ) ) {
             $postarr['post_category'] = $post_category;
         }
+
+        // QA gate: a podcast set to publish is saved as pending and released
+        // by the gate once its tags, excerpt and image are in place.
+        require_once __DIR__ . '/class-publish-gate.php';
+        $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'podcast' );
 
         $post_id = wp_insert_post( $postarr, true );
 
@@ -1315,6 +2000,7 @@ class PressHub_AI_Audio_Synthesizer {
         update_post_meta( $post_id, '_presshub_audio_attachment_id', $attachment_id );
         update_post_meta( $post_id, '_presshub_audio_url', $audio_url );
         update_post_meta( $post_id, '_presshub_podcast_script', $transcript );
+        update_post_meta( $post_id, self::META_LEAD, $lead );
 
         // Assign featured image: auto-generate or from configured pool (with collision avoidance)
         $img_source     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source() : 'pool';
@@ -1323,7 +2009,9 @@ class PressHub_AI_Audio_Synthesizer {
         if ( 'auto_generate' === $img_source && class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
             try {
                 $client     = new PressHub_AI_API_Client();
-                $gen_prompt = $client->analyze_article_for_image_prompt( PressHub_AI_SEO::clean_text( $transcript ), $title );
+                require_once __DIR__ . '/class-image-prompt-templates.php';
+                $img_tpl    = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_briefing_edition_image_template( 'podcast', $edition ), 'briefing_podcast_' . $edition );
+                $gen_prompt = $client->analyze_article_for_image_prompt( PressHub_AI_SEO::clean_text( $transcript ), $title, $img_tpl['template'], $img_tpl['id'] );
                 if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
                     $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );
                     if ( ! is_wp_error( $img_res ) && ! empty( $img_res['id'] ) ) {
@@ -1357,6 +2045,10 @@ class PressHub_AI_Audio_Synthesizer {
             PressHub_AI_SEO::auto_optimize_post( $post_id, $title, $transcript, 'podcast' );
         }
 
+        // QA gate on the show notes and the spoken script (editorial and
+        // legal) and the post (measured SEO checks), then the configured status.
+        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning' );
+
         return $post_id;
     }
 
@@ -1379,7 +2071,13 @@ class PressHub_AI_Audio_Synthesizer {
             ? PressHub_AI_Settings_Storage::get_briefing_podcast_include_text()
             : 0;
 
-        $post_content = "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
+        // Lead story text first, so the post opens with the day's top story;
+        // the excerpt filter shows the same text on the home page (2.63.0).
+        $lead      = $this->lead_story_text( $date, $edition );
+        $lead_html = $this->lead_story_html( $lead );
+
+        $post_content = ( '' !== $lead_html ? $lead_html . "\n\n" : '' )
+            . "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
             . "<figure class=\"wp-block-audio\"><audio controls src=\"" . esc_url_raw( $audio_url ) . "\"></audio></figure>\n"
             . "<!-- /wp:audio -->";
 
@@ -1430,6 +2128,7 @@ class PressHub_AI_Audio_Synthesizer {
         update_post_meta( $post_id, '_presshub_audio_attachment_id', $attachment_id );
         update_post_meta( $post_id, '_presshub_audio_url', $audio_url );
         update_post_meta( $post_id, '_presshub_podcast_script', $script );
+        update_post_meta( $post_id, self::META_LEAD, $lead );
 
         // If post lacks a featured image, assign one (auto-generate or from pool with collision avoidance)
         if ( function_exists( 'has_post_thumbnail' ) && ! has_post_thumbnail( $post_id ) ) {
@@ -1439,7 +2138,9 @@ class PressHub_AI_Audio_Synthesizer {
             if ( 'auto_generate' === $img_source && class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
                 try {
                     $client     = new PressHub_AI_API_Client();
-                    $gen_prompt = $client->analyze_article_for_image_prompt( PressHub_AI_SEO::clean_text( $script ), get_the_title( $post_id ) );
+                    require_once __DIR__ . '/class-image-prompt-templates.php';
+                    $img_tpl    = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_briefing_edition_image_template( 'podcast', $edition ), 'briefing_podcast_' . $edition );
+                    $gen_prompt = $client->analyze_article_for_image_prompt( PressHub_AI_SEO::clean_text( $script ), get_the_title( $post_id ), $img_tpl['template'], $img_tpl['id'] );
                     if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
                         $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );
                         if ( ! is_wp_error( $img_res ) && ! empty( $img_res['id'] ) ) {
@@ -1468,6 +2169,11 @@ class PressHub_AI_Audio_Synthesizer {
                 }
             }
         }
+
+        // QA gate on the new script: a held podcast is released when it now
+        // passes, and a live one that now fails goes back to Pending Review.
+        require_once __DIR__ . '/class-publish-gate.php';
+        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning' );
 
         return $post_id;
     }
@@ -1588,11 +2294,26 @@ class PressHub_AI_Audio_Synthesizer {
         // Issue #154: one run-level row per synthesis (start, end, status, edition,
         // turns), so the Briefing Hub audio card shows the whole run rather than
         // the last TTS turn. The per-turn podcast_audio rows still feed TTS stats.
+        // 2.74.0 - one audio job per edition at a time. A second job stops here,
+        // before any speech request and without a run row on the audio card.
+        $lock_date    = '' !== $date ? $date : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
+        $lock_edition = self::resolve_run_edition( $custom_script, $edition_or_client );
+        $had_lock     = self::holds_run_lock( $lock_date, $lock_edition );
+        if ( ! self::acquire_run_lock( $lock_date, $lock_edition ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Podcast audio not started: another audio job is already voicing this edition.', [ 'date' => $lock_date, 'edition' => $lock_edition ] );
+            }
+            return new WP_Error( 'synthesis_in_progress', __( 'The audio of this edition is already being made by another job. Try again when it has finished.', 'presshub-ai-editor' ) );
+        }
+
         $run_started    = microtime( true );
         $run_started_at = function_exists( 'current_time' ) ? (string) current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
         $result         = null;
         try {
             $result = $this->synthesize_podcast_run( $date, $custom_script, $edition_or_client, $api_client, $existing_post_id );
+            if ( is_array( $result ) && ! empty( $result['success'] ) && ! empty( $result['post_id'] ) ) {
+                self::start_languages( $result );
+            }
             return $result;
         } catch ( \Throwable $e ) {
             // Keep the exception's message for the audio card, then let it through.
@@ -1603,6 +2324,28 @@ class PressHub_AI_Audio_Synthesizer {
                 PressHub_AI_TTS_Call_Recorder::end_session();
             }
             self::log_audio_run( $result, $date, $custom_script, $edition_or_client, $run_started, $run_started_at );
+            if ( ! $had_lock ) {
+                self::release_run_lock( $lock_date, $lock_edition );
+            }
+        }
+    }
+
+    /**
+     * Starts the English and Turkish versions (those turned on) of a Greek podcast just
+     * voiced, by any path: the cron step, the watchdog retry, the Hub's re-run or a
+     * corrected script. A language whose Greek script did not change keeps its
+     * translation. A problem here never counts as a failed Greek synthesis.
+     */
+    private static function start_languages( array $result ): void {
+        if ( ! class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+            return;
+        }
+        try {
+            PressHub_AI_Podcast_Translations::start( (string) ( $result['date'] ?? '' ), 'noon' === ( $result['edition'] ?? '' ) ? 'noon' : 'morning', (int) $result['post_id'] );
+        } catch ( \Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast languages could not start: ' . $t->getMessage(), [ 'date' => (string) ( $result['date'] ?? '' ), 'edition' => (string) ( $result['edition'] ?? '' ) ] );
+            }
         }
     }
 
@@ -1728,8 +2471,14 @@ class PressHub_AI_Audio_Synthesizer {
         // Issue #140 - every TTS call below is appended to the podcast_script record that
         // produced this script (tts_calls_json). Without one, the calls go to a tts_test record.
         if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
-            $tts_parent_id = (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
-            PressHub_AI_TTS_Call_Recorder::begin_session( $tts_parent_id, [ 'origin' => 'podcast_synthesis', 'date' => $date, 'edition' => $edition ] );
+            // A translation's calls go to a record of their own (a tts_test record carrying
+            // the origin and language), never over the Greek podcast's calls.
+            $tts_parent_id = null !== $this->audio_only ? 0 : (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
+            $tts_context   = [ 'origin' => null !== $this->audio_only ? 'podcast_translation' : 'podcast_synthesis', 'date' => $date, 'edition' => $edition ];
+            if ( null !== $this->audio_only ) {
+                $tts_context['language'] = (string) $this->audio_only['language'];
+            }
+            PressHub_AI_TTS_Call_Recorder::begin_session( $tts_parent_id, $tts_context );
         }
 
         $engine         = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : (string) get_option( self::OPTION_ENGINE, 'gemini' );
@@ -1739,6 +2488,12 @@ class PressHub_AI_Audio_Synthesizer {
         $presenter_1_voice = $this->get_voice_for_speaker( 'presenter_1' );
         $presenter_2_voice = $this->get_voice_for_speaker( 'presenter_2' );
         $presenter_3_voice = $this->get_voice_for_speaker( 'presenter_3' );
+        if ( null !== $this->audio_only ) {
+            $overrides         = (array) $this->audio_only['voices'];
+            $presenter_1_voice = '' !== trim( (string) ( $overrides['presenter_1'] ?? '' ) ) ? trim( (string) $overrides['presenter_1'] ) : $presenter_1_voice;
+            $presenter_2_voice = '' !== trim( (string) ( $overrides['presenter_2'] ?? '' ) ) ? trim( (string) $overrides['presenter_2'] ) : $presenter_2_voice;
+            $presenter_3_voice = '' !== trim( (string) ( $overrides['presenter_3'] ?? '' ) ) ? trim( (string) $overrides['presenter_3'] ) : $presenter_3_voice;
+        }
         $female_voice      = $presenter_1_voice;
         $male_voice        = $presenter_2_voice;
         $tertiary_voice    = $presenter_3_voice;
@@ -1748,6 +2503,9 @@ class PressHub_AI_Audio_Synthesizer {
         $style_key      = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_style() : (string) get_option( self::OPTION_STYLE, 'formal' );
         $custom_style   = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_custom_style() : (string) get_option( self::OPTION_CUSTOM_STYLE, '' );
         $used_style     = ( 'custom' === $style_key && ! empty( $custom_style ) ) ? $custom_style : $style_key;
+        if ( null !== $this->audio_only ) {
+            $used_style = $this->style_for_language( $used_style, (string) $this->audio_only['language'] );
+        }
 
         $turn_pause_ms    = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_turn_pause_ms() : 250;
         $topic_pause_ms   = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_topic_pause_ms() : 600;
@@ -1786,6 +2544,31 @@ class PressHub_AI_Audio_Synthesizer {
         };
 
         // 1. Topic-Based Audio Synthesis (Splits generation by topic to eliminate neural voice drift)
+        // Turn lengths for the episode's caption timeline (PressHub_AI_Podcast_Timeline).
+        $timeline_topics = [];
+        $timeline_opts   = [];
+        $timeline_mp3    = ( 'google_cloud' === $engine );
+
+        // 2.74.0 - how turns become speech requests (temporary quota saver).
+        $speech_ctx = [
+            'voice_of'         => $resolve_turn_voice,
+            'mode'             => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_request_mode() : 'per_turn',
+            'max_chars'        => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_request_max_chars() : 1500,
+            'host_count'       => (int) $host_count,
+            'engine'           => (string) $engine,
+            'labels'           => self::two_voice_labels( [ $female_host, $male_host ] ),
+            'two_voices'       => [ (string) $presenter_1_voice, (string) $presenter_2_voice ],
+            'speed'            => $speed,
+            'pitch'            => $pitch,
+            'style'            => $used_style,
+            'date'             => $date,
+            'api_client'       => $api_client,
+            'turn_pause_ms'    => $turn_pause_ms,
+            'request_delay_ms' => $request_delay_ms,
+            'is_test_env'      => $is_test_env,
+            'timeline_mp3'     => $timeline_mp3,
+        ];
+
         if ( $split_by_topic ) {
             $topics = $producer->parse_script_topics( $script, $female_host, $male_host, $tertiary_host );
 
@@ -1856,21 +2639,14 @@ class PressHub_AI_Audio_Synthesizer {
                         }
                     }
 
-                    // Unified Turn-by-Turn Synthesis for ALL host counts (1, 2, and 3 hosts)
-                    $chunk_wavs = [];
-                    foreach ( $topic_turns as $turn_idx => $t ) {
-                        $t_voice  = $resolve_turn_voice( (string) ( $t['speaker'] ?? '' ) );
-                        $turn_res = $this->synthesize_turn( $t['text'], $t_voice, $speed, $pitch, $api_client, $used_style, $date );
-                        if ( is_wp_error( $turn_res ) ) {
-                            return $turn_res;
-                        }
-                        $chunk_wavs[] = $turn_res;
-
-                        // Throttle between turns if live call was made and not in unit tests
-                        if ( ! $this->last_turn_was_cache_hit && $request_delay_ms > 0 && ! $is_test_env && ( $turn_idx + 1 < count( $topic_turns ) ) ) {
-                            usleep( $request_delay_ms * 1000 );
-                        }
+                    // Turn-by-turn synthesis for all host counts; 2.74.0 can join
+                    // turns into fewer requests (presshub_ai_briefing_tts_request_mode).
+                    $voiced = $this->synthesize_turn_list( $topic_turns, $speech_ctx );
+                    if ( is_wp_error( $voiced ) ) {
+                        return $voiced;
                     }
+                    $chunk_wavs = $voiced['chunks'];
+                    $tl_turns   = $voiced['turns'];
 
                     if ( 'google_cloud' === $engine ) {
                         $topic_audio = $this->stitch_audio_chunks( $chunk_wavs, $turn_pause_ms );
@@ -1882,7 +2658,8 @@ class PressHub_AI_Audio_Synthesizer {
                         return $topic_audio;
                     }
 
-                    $topic_wavs[] = $topic_audio;
+                    $topic_wavs[]      = $topic_audio;
+                    $timeline_topics[] = [ 'title' => (string) ( $topic['title'] ?? '' ), 'turns' => $tl_turns ];
                 }
 
                 if ( ! empty( $topic_wavs ) ) {
@@ -1893,6 +2670,17 @@ class PressHub_AI_Audio_Synthesizer {
                     $intro_pcm = $this->get_sfx_pcm( $intro_sfx_setting );
                     $trans_pcm = $this->get_sfx_pcm( $trans_sfx_setting );
                     $outro_pcm = $this->get_sfx_pcm( $outro_sfx_setting );
+
+                    // Gaps as stitched below: MP3 topics are joined by the pause alone.
+                    $timeline_opts = [
+                        'turn_pause_ms'      => $turn_pause_ms,
+                        'topic_pause_ms'     => $topic_pause_ms,
+                        'transition_seconds' => ( ! $timeline_mp3 && count( $topic_wavs ) > 1 && '' !== (string) $trans_pcm ) ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $trans_pcm ) : 0.0,
+                        'intro_seconds'      => '' !== (string) $intro_pcm ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $intro_pcm ) : 0.0,
+                        'outro_seconds'      => '' !== (string) $outro_pcm ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $outro_pcm ) : 0.0,
+                        'host_count'         => (int) $host_count,
+                        'estimated'          => $timeline_mp3,
+                    ];
 
                     // 1. Stitch topics together with Topic Transition SFX between them
                     if ( count( $topic_wavs ) > 1 ) {
@@ -1972,23 +2760,26 @@ class PressHub_AI_Audio_Synthesizer {
             $turn_wavs   = [];
             $start_time  = microtime( true );
             $char_count  = 0;
+            $tl_turns    = [];
 
-            foreach ( $turns as $turn_idx => $turn ) {
-                $turn_voice  = $resolve_turn_voice( (string) ( $turn['speaker'] ?? '' ) );
+            foreach ( $turns as $turn ) {
                 $char_count += mb_strlen( (string) ( $turn['text'] ?? '' ) );
-                $turn_res    = $this->synthesize_turn( $turn['text'], $turn_voice, $speed, $pitch, $api_client, $used_style, $date );
-                if ( is_wp_error( $turn_res ) ) {
-                    return $turn_res;
-                }
-                $turn_wavs[] = $turn_res;
-
-                // Throttle between turns if live call was made and not in unit tests
-                if ( ! $this->last_turn_was_cache_hit && $request_delay_ms > 0 && ! $is_test_env && ( $turn_idx + 1 < count( $turns ) ) ) {
-                    usleep( $request_delay_ms * 1000 );
-                }
             }
+            $voiced = $this->synthesize_turn_list( $turns, $speech_ctx );
+            if ( is_wp_error( $voiced ) ) {
+                return $voiced;
+            }
+            $turn_wavs = $voiced['chunks'];
+            $tl_turns  = $voiced['turns'];
 
-            $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+            $duration_ms     = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+            $timeline_topics = [ [ 'title' => '', 'turns' => $tl_turns ] ];
+            $timeline_opts   = [
+                'turn_pause_ms'  => $turn_pause_ms,
+                'topic_pause_ms' => $topic_pause_ms,
+                'host_count'     => (int) $host_count,
+                'estimated'      => $timeline_mp3,
+            ];
             if ( 'google_cloud' === $engine ) {
                 $stitched_audio = $this->stitch_audio_chunks( $turn_wavs, $turn_pause_ms );
             } else {
@@ -2051,6 +2842,24 @@ class PressHub_AI_Audio_Synthesizer {
             );
         }
 
+        // A translation: hand back the audio and its timeline; the caller stores them.
+        if ( null !== $this->audio_only ) {
+            return [
+                'audio'           => $stitched_audio,
+                'ext'             => ( strlen( $stitched_audio ) >= 4 && 'RIFF' === substr( $stitched_audio, 0, 4 ) ) ? '.wav' : '.mp3',
+                'timeline_topics' => $timeline_topics,
+                'timeline_opts'   => $timeline_opts,
+                'turns_count'     => count( $turns ),
+                'topic_count'     => ! empty( $topics ) ? count( $topics ) : 0,
+                'engine'          => (string) $engine,
+                'voices'          => [
+                    'presenter_1' => (string) $presenter_1_voice,
+                    'presenter_2' => $host_count >= 2 ? (string) $presenter_2_voice : '',
+                    'presenter_3' => $host_count >= 3 ? (string) $presenter_3_voice : '',
+                ],
+            ];
+        }
+
         // Save copy to daily briefing storage
         $harvester = new PressHub_AI_News_Harvester();
         $snapshot_dir = $harvester->get_snapshot_dir( $date );
@@ -2090,6 +2899,39 @@ class PressHub_AI_Audio_Synthesizer {
         }
         if ( is_wp_error( $post_id ) ) {
             return $post_id;
+        }
+
+        // Caption timeline of the episode, for its YouTube video. Never breaks synthesis.
+        if ( function_exists( 'update_post_meta' ) && (int) $post_id > 0 ) {
+            try {
+                $timeline = PressHub_AI_Podcast_Timeline::build( $timeline_topics, $timeline_opts );
+                if ( PressHub_AI_Podcast_Timeline::is_valid( $timeline ) ) {
+                    // update_post_meta() is false both on a failed write and when the value is
+                    // unchanged; only a stored value that differs counts as a failure.
+                    if ( false === update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, $timeline )
+                        && get_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, true ) != $timeline ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual
+                        throw new \RuntimeException( 'the timeline could not be written to the post' );
+                    }
+                    if ( function_exists( 'delete_post_meta' ) ) {
+                        delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY );
+                    }
+                } else {
+                    if ( function_exists( 'delete_post_meta' ) ) {
+                        delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY );
+                    }
+                    update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, 'no spoken turn had audio and text to time' );
+                }
+            } catch ( \Throwable $e ) {
+                // An earlier timeline belongs to the earlier audio: never keep it with new audio.
+                if ( function_exists( 'delete_post_meta' ) ) {
+                    delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY );
+                }
+                // Marked, so the episode is not taken for one made before 2.54.0.
+                update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, substr( $e->getMessage(), 0, 300 ) );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Podcast timeline could not be saved: ' . $e->getMessage() );
+                }
+            }
         }
 
         // Host-count gating for saved voices
@@ -2200,6 +3042,12 @@ class PressHub_AI_Audio_Synthesizer {
             update_post_meta( (int) $post_id, '_presshub_audio_topic_count', (int) $topic_count_v );
             update_post_meta( (int) $post_id, '_presshub_audio_attempted_at', (string) $podcast_audio_attempted_at );
             update_post_meta( (int) $post_id, '_presshub_audio_completed_at', (string) $completed_at_v );
+        }
+
+        // A WAV episode is converted to MP3 by the worker (32 MB → about 5 MB for 11 minutes),
+        // queued once all of the WAV's meta is saved.
+        if ( class_exists( 'PressHub_AI_Podcast_Mp3' ) && (int) $post_id > 0 && '.wav' === $ext ) {
+            PressHub_AI_Podcast_Mp3::queue( (int) $post_id, $attachment_id, $audio_url );
         }
 
         $podcast_audio_completed_at = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );

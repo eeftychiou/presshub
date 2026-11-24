@@ -4,6 +4,7 @@ import { PressHubPoller } from './poller';
 import { WorkerLogger } from './logger';
 import { SocialMonitor } from './monitor/monitor-client';
 import { TrendingClient } from './trending/trending-client';
+import { Mp3Converter } from './media/mp3-converter';
 
 export { WorkerLogger } from './logger';
 
@@ -48,7 +49,10 @@ export function startServer() {
         : new SocialMonitor({ wpUrl: WP_URL, workerSecret: SECRET }),
       trending: process.env.PRESSHUB_TRENDING_DISABLED === 'true'
         ? undefined
-        : new TrendingClient({ wpUrl: WP_URL, workerSecret: SECRET })
+        : new TrendingClient({ wpUrl: WP_URL, workerSecret: SECRET }),
+      mp3: process.env.PRESSHUB_MP3_DISABLED === 'true'
+        ? undefined
+        : new Mp3Converter({ wpUrl: WP_URL, workerSecret: SECRET })
     });
     activePoller.start();
   } else {

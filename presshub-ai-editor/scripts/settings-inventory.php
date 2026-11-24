@@ -24,6 +24,7 @@ if ( ! function_exists( '__' ) ) {
 }
 
 require_once dirname( __DIR__ ) . '/includes/class-settings-registry.php';
+require_once dirname( __DIR__ ) . '/includes/class-settings-cleanup.php';
 
 /**
  * Builds the inventory markdown from the declared registry.
@@ -63,7 +64,7 @@ function presshub_settings_inventory_markdown(): string {
         $md .= sprintf( "| %s | %d | %d | %d |\n", '' === $slug ? '**Not in a section**' : PressHub_Settings_Sections::label( $slug ) . ' (`' . $slug . '`)', $counts[ $slug ]['total'] ?? 0, $counts[ $slug ]['hidden'] ?? 0, $counts[ $slug ]['secret'] ?? 0 );
     }
     $md .= sprintf( "| **Total** | **%d** | | |\n\n", count( $all ) );
-    $md .= sprintf( "**Scheduled for removal:** %d option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).\n\n", count( $unused ) );
+    $md .= sprintf( "**Scheduled for removal:** %d option(s). **Removed by the clean-up (#237):** %d option(s); both lists are at the end.\n\n", count( $unused ), count( PressHub_Settings_Cleanup::REMOVED ) );
 
     foreach ( $sections as $slug ) {
         $rows = $by_section[ $slug ] ?? [];
@@ -93,7 +94,7 @@ function presshub_settings_inventory_markdown(): string {
                 $notes[] = '**unused**';
             }
             if ( ! empty( $e['depends_on'] ) ) {
-                $notes[] = 'needs `' . $e['depends_on'] . '` on';
+                $notes[] = 'needs `' . implode( '` or `', (array) $e['depends_on'] ) . '` on';
             }
             if ( ! empty( $e['aliases'] ) && is_array( $e['aliases'] ) ) {
                 $notes[] = 'was: ' . str_replace( [ '|', "\n" ], [ '\\|', ' ' ], implode( '; ', $e['aliases'] ) );
@@ -118,6 +119,29 @@ function presshub_settings_inventory_markdown(): string {
             $md .= sprintf( "| `%s` | %s / %s | %s |\n", $key, $e['page'], $e['tab'], str_replace( '|', '\\|', (string) ( $e['unused_reason'] ?? '' ) ) );
         }
     }
+
+    // #237: what the clean-up deleted, and the evidence that nothing read it.
+    $evidence = [
+        'github'          => 'Plugin updates read `presshub_ai_github_token` only; `get_github_token()` in Social storage had no caller. On upgrade the value is copied into `presshub_ai_github_token` when that one is empty.',
+        'x_oauth1'        => 'No code read the X OAuth1 consumer key, consumer secret or access secret; posting to X uses the bearer token, the access token or the worker.',
+        'podcast_prompts' => '`resolve_podcast_prompt()` reads only the per-style options (`…_prompt_N_<style>`); the bare names were used as a prefix string, never read. Not shown on any section since #246.',
+        'legacy_api_key'    => 'Superseded by the per-provider keys in Connections. Read only as a fallback when a provider record had no key; on presshub.cy it was the same key as the main Gemini provider. On upgrade it is copied into a provider of the `presshub_ai_provider` type when none of that type has a key; a different key is kept unread for one release.',
+        'legacy_gemini_key' => 'Never registered or shown; read only as a fallback after the Gemini provider record. Same upgrade rule (copied into the Gemini provider when it has no key).',
+        'legacy_speech_key' => 'Speech resolves the provider chosen for Speech in AI models first (`resolve_gemini_api_key()`), then any Gemini provider; the separate key was a later fallback. On presshub.cy it was the same key as the "Google Gemini (3.8 Speech)" provider. Same upgrade rule.',
+        // #309 (E1): registered but never shown.
+        'flat_provider'     => 'Never shown since the Provider Store; read only as fallbacks when a provider record had no value or no provider was configured. Each provider in Connections has its own model and tuning, and AI models picks the provider per task. Read once more by `PressHub_AI_Provider_Store::migrate_legacy_options()` (run before the delete) for sites that never migrated.',
+        'provider_headers'  => 'Never shown; read as a fallback header when the provider record set none. On upgrade it is copied into the `OpenAI-Organization` / `anthropic-version` header of every provider of that type that sets none.',
+        'morning_prefix'    => 'Never shown; read only when `presshub_ai_briefing_podcast_title_prefix` was not set. On upgrade it is copied there in that case.',
+        'morning_pool'      => 'Never shown; read only while the Morning pool was empty. On upgrade it is copied into an empty Morning pool.',
+        'social_switches'   => 'Never shown; kept in step with `presshub_social_enabled_platforms`, which they could override. On upgrade they are folded into the list (on adds the platform, off removes it).',
+    ];
+    $md .= sprintf( "\n## Removed in %s (#237)\n\n", implode( ' and ', PressHub_Settings_Cleanup::RELEASES ) );
+    $md .= "Deleted on the first admin request after the upgrade, after a copy of all settings (no secrets) was saved; the report is on PressHub → Usage & logs. Reading one fires `_doing_it_wrong()` for one release.\n\n";
+    $md .= "| Option | Removed in | Evidence it was unused |\n|---|---|---|\n";
+    foreach ( PressHub_Settings_Cleanup::REMOVED as $key => $meta ) {
+        $note = isset( $meta['key_type'] ) || false === strpos( $key, '_remove_' ) ? ( $evidence[ $meta['group'] ] ?? '' ) : 'The "Remove stored key" flag of the key above.';
+        $md  .= sprintf( "| `%s` | %s | %s |\n", $key, PressHub_Settings_Cleanup::RELEASES[ $meta['since'] ], $note );
+    }
     return $md;
 }
 
@@ -137,6 +161,7 @@ function presshub_settings_inventory_filters( array $all ): string {
         'presshub_ai_stakeholders_budgets'           => 'presshub_ai_stakeholders_budgets',
         'presshub_ai_editorial_agenda_budgets'       => 'presshub_ai_editorial_agenda_budgets',
         'presshub_ai_podcast_show_notes_enabled'     => 'presshub_ai_podcast_show_notes_enabled',
+        'presshub_ai_podcast_lead_enabled'           => 'presshub_ai_podcast_lead_enabled',
         'presshub_social_trending_max_per_account'   => 'presshub_ai_social_trending_max_per_account',
         'presshub_social_trending_share_after_hour'  => 'presshub_ai_social_trending_share_after_hour',
         'presshub_ai_debug_prompts'                  => 'presshub_ai_debug_prompts',

@@ -61,7 +61,16 @@ class PressHub_Social_AI_Copywriter {
             return $article_data;
         }
 
-        return self::generate_from_data( $article_data, $platform, $force_ai );
+        $res = self::generate_from_data( $article_data, $platform, $force_ai );
+        self::forget_cuts();
+        return $res;
+    }
+
+    /** The post's cuts were recorded with its calls (or no call ran): drop them. */
+    private static function forget_cuts(): void {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_copy_' );
+        }
     }
 
     /**
@@ -86,6 +95,7 @@ class PressHub_Social_AI_Copywriter {
                     : [] );
         }
         if ( empty( $platforms ) ) {
+            self::forget_cuts();
             return [];
         }
 
@@ -104,6 +114,7 @@ class PressHub_Social_AI_Copywriter {
                 $results[ $platform ] = $res;
             }
         }
+        self::forget_cuts();
 
         if ( empty( $results ) && ! empty( $errors ) ) {
             $first_err = reset( $errors );
@@ -595,6 +606,11 @@ class PressHub_Social_AI_Copywriter {
      * @return array|WP_Error Article metadata array or WP_Error.
      */
     public static function build_article_data( int $post_id ) {
+        // The cuts of this post's text are noted for every platform's call
+        // (social_copy_*); an earlier post's notes go first.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_copy_' );
+        }
         $post = get_post( $post_id );
         if ( ! is_object( $post ) ) {
             $msg = sprintf( __( 'Post ID %d not found.', 'presshub-social-autopost' ), $post_id );
@@ -616,7 +632,10 @@ class PressHub_Social_AI_Copywriter {
         // Clean plain text content clamped to 3000 chars for context.
         $content = wp_strip_all_tags( function_exists( 'strip_shortcodes' ) ? strip_shortcodes( $raw_content ) : $raw_content );
         $content = preg_replace( '/\s+/', ' ', $content );
-        $content = mb_substr( trim( $content ), 0, 3000, 'UTF-8' );
+        $content = trim( $content );
+        $content = class_exists( 'PressHub_AI_Knowledge_Cuts' )
+            ? PressHub_AI_Knowledge_Cuts::clip_material( 'social_copy_', $content, 3000, __( 'Post text', 'presshub-ai-editor' ) )
+            : mb_substr( $content, 0, 3000, 'UTF-8' );
 
         // Podcast script / dialogue ingestion:
         // When content is short (< 300 chars), or post is marked as podcast/briefing,
@@ -710,7 +729,13 @@ class PressHub_Social_AI_Copywriter {
                 $cleaned = self::clean_podcast_script( $podcast_script );
                 if ( '' !== $cleaned ) {
                     if ( mb_strlen( $cleaned, 'UTF-8' ) > mb_strlen( $content, 'UTF-8' ) || $is_podcast || '' === trim( $content ) ) {
-                        $content = mb_substr( $cleaned, 0, 4000, 'UTF-8' );
+                        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                            // The script replaces the post text, so the post text's cut is not sent.
+                            PressHub_AI_Knowledge_Cuts::forget_material( 'social_copy_', __( 'Post text', 'presshub-ai-editor' ) );
+                            $content = PressHub_AI_Knowledge_Cuts::clip_material( 'social_copy_', $cleaned, 4000, __( 'Podcast script', 'presshub-ai-editor' ) );
+                        } else {
+                            $content = mb_substr( $cleaned, 0, 4000, 'UTF-8' );
+                        }
                     }
                     if ( '' === trim( $excerpt ) || mb_strlen( $excerpt, 'UTF-8' ) < 40 || false !== strpos( $excerpt, 'TOPIC' ) || false !== strpos( $excerpt, 'SPEAKER_' ) ) {
                         $excerpt = function_exists( 'wp_trim_words' ) ? wp_trim_words( $cleaned, 50, '...' ) : mb_substr( $cleaned, 0, 250, 'UTF-8' );
