@@ -20,10 +20,14 @@ class PressHub_AI_QA_Reviewer {
      * Evaluate raw content using the AI Scorecard.
      *
      * @param string $content Article text content.
-     * @param string $context Evaluation context: 'post' (default) or 'briefing'.
-     * @return array [ 'passed' => bool, 'score' => int, 'feedback' => string, 'libel_risk' => string, 'legal_concerns' => string, 'error' => string|null ]
+     * @param string      $context  Evaluation context: 'post' (default) or 'briefing'.
+     * @param int         $post_id  Post the review belongs to (generation record link).
+     * @param string|null $template Prompt template to use instead of the context's
+     *                              QA prompt (the publish gate fills its SEO placeholders first).
+     * @return array [ 'passed' => bool, 'score' => int, 'feedback' => string, 'libel_risk' => string,
+     *                 'legal_concerns' => string, 'error' => string|null, 'raw' => array (the decoded reply) ]
      */
-    public static function evaluate_content( string $content, string $context = 'post', int $post_id = 0 ): array {
+    public static function evaluate_content( string $content, string $context = 'post', int $post_id = 0, ?string $template = null ): array {
         if ( '' === trim( $content ) ) {
             return [
                 'passed'         => false,
@@ -32,13 +36,16 @@ class PressHub_AI_QA_Reviewer {
                 'libel_risk'     => 'Low',
                 'legal_concerns' => 'None identified',
                 'error'          => 'empty_content',
+                'raw'            => [],
             ];
         }
 
         $min_score = PressHub_AI_Settings_Storage::get_qa_min_score();
-        $template  = ( 'briefing' === $context )
-            ? PressHub_AI_Settings_Storage::get_qa_briefing_prompt()
-            : PressHub_AI_Settings_Storage::get_qa_article_prompt();
+        if ( null === $template ) {
+            $template = ( 'briefing' === $context )
+                ? PressHub_AI_Settings_Storage::get_qa_briefing_prompt()
+                : PressHub_AI_Settings_Storage::get_qa_article_prompt();
+        }
 
         $api       = new PressHub_AI_API_Client( 'qa' );
         $scorecard = $api->generate_scorecard( $content, $template, $post_id );
@@ -57,6 +64,7 @@ class PressHub_AI_QA_Reviewer {
                 'libel_risk'     => 'Low',
                 'legal_concerns' => 'None identified',
                 'error'          => $scorecard->get_error_code(),
+                'raw'            => [],
             ];
         }
 
@@ -93,6 +101,7 @@ class PressHub_AI_QA_Reviewer {
             'libel_risk'     => $libel_risk,
             'legal_concerns' => $legal_concerns,
             'error'          => null,
+            'raw'            => $scorecard,
         ];
     }
 
@@ -179,10 +188,18 @@ class PressHub_AI_QA_Reviewer {
             return false;
         }
 
-        // Deduplication via hash
-        $content_hash = (string) get_post_meta( $post_id, self::META_CONTENT_HASH, true );
+        // Deduplication via hash: the gate's input hash, else the content hash.
+        $content_hash = (string) ( $scorecard['content_hash'] ?? '' );
+        if ( '' === $content_hash ) {
+            $content_hash = (string) get_post_meta( $post_id, self::META_CONTENT_HASH, true );
+        }
         if ( '' === $content_hash ) {
             $content_hash = md5( trim( (string) $post->post_content ) );
+        }
+        // A gate alert also keys on the verdict, so a real result still goes
+        // out after an earlier "review could not run" email for the same text.
+        if ( isset( $scorecard['checks'] ) ) {
+            $content_hash .= '|' . (string) ( $scorecard['verdict'] ?? '' );
         }
         $already_notified = (string) get_post_meta( $post_id, self::META_NOTIFIED_HASH, true );
         if ( $already_notified === $content_hash ) {
@@ -223,7 +240,9 @@ class PressHub_AI_QA_Reviewer {
             $legal_section = sprintf( "\nLegal Concerns:\n%s\n", $legal_concerns );
         }
 
-        if ( 'briefing' === $context ) {
+        if ( isset( $scorecard['checks'] ) && is_array( $scorecard['checks'] ) ) {
+            list( $subject, $body ) = self::gate_email( $scorecard, $context, $site_name, $post_title, $author_name, $edit_url, $post_id, 'publish' === (string) ( $post->post_status ?? '' ) );
+        } elseif ( 'briefing' === $context ) {
             $subject = sprintf( '[%s] Daily Briefing QA Review Failed (Score: %d/%d)', $site_name, $score, $min_score );
             $intro   = __( 'The automated Daily Briefing article failed the AI Editorial QA Review and has been held in Pending Review status.', 'presshub-ai-editor' );
         } else {
@@ -232,29 +251,31 @@ class PressHub_AI_QA_Reviewer {
             $intro   = sprintf( __( 'An article submitted by %s failed the AI Editorial QA Review and was blocked from immediate publication.', 'presshub-ai-editor' ), $author_name );
         }
 
-        $body = sprintf(
-            "%s\n\n" .
-            "--------------------------------------------------\n" .
-            "Article: %s\n" .
-            "Author: %s\n" .
-            "Score: %d / 100 (Minimum required: %d)\n" .
-            "%s" .
-            "Status: Pending Review\n" .
-            "--------------------------------------------------\n\n" .
-            "AI Editorial Critique:\n%s\n" .
-            "%s\n" .
-            "Review and edit the post here:\n%s\n\n" .
-            "--\nPressHub AI Editorial Co-Pilot",
-            $intro,
-            $post_title,
-            $author_name,
-            $score,
-            $min_score,
-            $libel_section,
-            $feedback,
-            $legal_section,
-            $edit_url
-        );
+        if ( ! isset( $body ) ) {
+            $body = sprintf(
+                "%s\n\n" .
+                "--------------------------------------------------\n" .
+                "Article: %s\n" .
+                "Author: %s\n" .
+                "Score: %d / 100 (Minimum required: %d)\n" .
+                "%s" .
+                "Status: Pending Review\n" .
+                "--------------------------------------------------\n\n" .
+                "AI Editorial Critique:\n%s\n" .
+                "%s\n" .
+                "Review and edit the post here:\n%s\n\n" .
+                "--\nPressHub AI Editorial Co-Pilot",
+                $intro,
+                $post_title,
+                $author_name,
+                $score,
+                $min_score,
+                $libel_section,
+                $feedback,
+                $legal_section,
+                $edit_url
+            );
+        }
 
         $headers = [ 'Content-Type: text/plain; charset=UTF-8' ];
 
@@ -286,5 +307,100 @@ class PressHub_AI_QA_Reviewer {
         }
 
         return (bool) $sent;
+    }
+
+    /**
+     * Subject and body of a publish gate alert: one block per failed check.
+     *
+     * @return array{0:string,1:string}
+     */
+    private static function gate_email( array $gate, string $context, string $site_name, string $post_title, string $author_name, string $edit_url, int $post_id, bool $published = true ): array {
+        $checks  = (array) $gate['checks'];
+        $verdict = (string) ( $gate['verdict'] ?? 'hold' );
+        $held    = in_array( $verdict, [ 'hold', 'error' ], true );
+        $failed  = [];
+        $blocks  = [];
+
+        $ed = (array) ( $checks['editorial'] ?? [] );
+        if ( 'error' === $verdict || 'error' === ( $ed['result'] ?? '' ) ) {
+            $failed[] = __( 'review could not run', 'presshub-ai-editor' );
+            $blocks[] = sprintf( "The QA review could not run (%s), so the post was held until someone reviews it.\n%s", (string) ( $ed['error'] ?? $gate['error'] ?? 'error' ), (string) ( $ed['feedback'] ?? '' ) );
+        }
+        if ( 'fail' === ( $ed['result'] ?? '' ) ) {
+            $failed[] = sprintf( 'editorial %d/%d', (int) $ed['score'], (int) $ed['threshold'] );
+            $blocks[] = sprintf( "EDITORIAL: %d / 100 (minimum %d)\n%s", (int) $ed['score'], (int) $ed['threshold'], (string) ( $ed['feedback'] ?? '' ) );
+        }
+
+        $lg = (array) ( $checks['legal'] ?? [] );
+        if ( 'fail' === ( $lg['result'] ?? '' ) ) {
+            $failed[] = sprintf( 'legal %s', (string) ( $lg['risk'] ?? '' ) );
+            $lines    = [ sprintf( 'LEGAL: %s risk (fails at %s)', (string) ( $lg['risk'] ?? '' ), 'medium' === ( $lg['fail_risk'] ?? 'high' ) ? 'Medium' : 'High' ) ];
+            if ( '' !== (string) ( $lg['concerns'] ?? '' ) ) {
+                $lines[] = (string) $lg['concerns'];
+            }
+            foreach ( (array) ( $lg['issues'] ?? [] ) as $i => $issue ) {
+                $lines[] = sprintf( "%d. [%s, %s] \"%s\"\n   Fix: %s", $i + 1, (string) $issue['severity'], str_replace( '_', ' ', (string) $issue['type'] ), (string) $issue['quote'], (string) $issue['fix'] );
+            }
+            $blocks[] = implode( "\n", $lines );
+        }
+
+        $seo = (array) ( $checks['seo'] ?? [] );
+        if ( 'fail' === ( $seo['result'] ?? '' ) ) {
+            $failed[] = sprintf( 'SEO %d/%d', (int) $seo['score'], (int) $seo['threshold'] );
+            $lines    = [ sprintf( 'SEO: %d / 100 (minimum %d)', (int) $seo['score'], (int) $seo['threshold'] ) ];
+            foreach ( (array) ( $seo['hard_fail'] ?? [] ) as $key ) {
+                $lines[] = 'title' === $key ? '- The post has no headline.' : '- The post has no featured image.';
+            }
+            foreach ( (array) ( $seo['review']['checks'] ?? [] ) as $c ) {
+                if ( 'fail' === ( $c['status'] ?? '' ) && ! in_array( $c['key'] ?? '', (array) ( $seo['hard_fail'] ?? [] ), true ) ) {
+                    $lines[] = sprintf( '- %s: %s', (string) $c['label'], (string) $c['detail'] );
+                }
+            }
+            foreach ( (array) ( $seo['review']['suggestions'] ?? [] ) as $tip ) {
+                $lines[] = '- ' . (string) $tip;
+            }
+            $blocks[] = implode( "\n", $lines );
+        }
+
+        $whats = [
+            'briefing' => __( 'Daily Briefing', 'presshub-ai-editor' ),
+            'podcast'  => __( 'Podcast', 'presshub-ai-editor' ),
+            'trending' => __( 'Trending roundup', 'presshub-ai-editor' ),
+        ];
+        $what = $whats[ $context ] ?? __( 'Article', 'presshub-ai-editor' );
+        $subject = sprintf(
+            '[%s] %s %s: %s (%s)',
+            $site_name,
+            $what,
+            $held ? __( 'held by the QA gate', 'presshub-ai-editor' ) : ( $published ? __( 'published with QA warnings', 'presshub-ai-editor' ) : __( 'has QA warnings', 'presshub-ai-editor' ) ),
+            $post_title,
+            implode( ', ', $failed )
+        );
+        $status = $held
+            ? __( 'Held in Pending Review', 'presshub-ai-editor' )
+            : ( $published
+                ? __( 'Published; please review the warnings below', 'presshub-ai-editor' )
+                : __( 'Not published yet; please review the warnings below before publishing', 'presshub-ai-editor' ) );
+        $reviews_url = function_exists( 'admin_url' ) ? admin_url( 'admin.php?page=presshub-ai-qa-reviews&post_id=' . $post_id ) : '';
+        $override    = $held && function_exists( 'admin_url' )
+            ? "\n\n" . __( 'Publish anyway (editors and admins, with a reason):', 'presshub-ai-editor' ) . "\n" . admin_url( 'admin.php?page=presshub-ai-qa-reviews&override=' . $post_id )
+            : '';
+
+        $body = sprintf(
+            "%s\n\n--------------------------------------------------\nArticle: %s\nAuthor: %s\nStatus: %s\n--------------------------------------------------\n\n%s\n\nReview and edit the post here:\n%s\n\nAll QA reviews of this post:\n%s%s\n\n--\nPressHub QA gate",
+            $held
+                ? __( 'This post did not pass the QA gate and was not published.', 'presshub-ai-editor' )
+                : ( $published
+                    ? __( 'This post was published, but some QA checks failed.', 'presshub-ai-editor' )
+                    : __( 'Some QA checks failed on this post. It can still be published.', 'presshub-ai-editor' ) ),
+            $post_title,
+            $author_name,
+            $status,
+            implode( "\n\n", $blocks ),
+            $edit_url,
+            $reviews_url,
+            $override
+        );
+        return [ $subject, $body ];
     }
 }

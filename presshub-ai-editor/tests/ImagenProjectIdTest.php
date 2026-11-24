@@ -108,7 +108,7 @@ class ImagenProjectIdTest
         $GLOBALS['CAPTURED_REQUESTS'] = [];
         // Provide a google cloud api key so URL building has something to embed.
         $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'test-key';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
     }
 
     private static function collect_registered_settings(): array {

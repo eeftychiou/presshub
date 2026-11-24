@@ -208,6 +208,10 @@ if ( [ 'a', 'b' ] !== ( PressHub_Settings_Registry::expand_bracket_keys( [ 'x[]'
 if ( [ 'a' ] !== ( PressHub_Settings_Registry::expand_bracket_keys( [ 'x[]' => 'a' ] )['x'] ?? null ) ) {
     $failures[] = 'expand_bracket_keys() should still accept a single "option[]" value.';
 }
+$two = PressHub_Settings_Registry::expand_bracket_keys( [ 'v[en][presenter_1]' => 'Kore', 'v[en][presenter_2]' => 'Puck', 'v[tr][presenter_1]' => 'Leda' ] );
+if ( [ 'en' => [ 'presenter_1' => 'Kore', 'presenter_2' => 'Puck' ], 'tr' => [ 'presenter_1' => 'Leda' ] ] !== ( $two['v'] ?? null ) || count( $two ) !== 1 ) {
+    $failures[] = 'expand_bracket_keys() must fold two-level keys such as "v[en][presenter_1]"; got ' . var_export( $two, true );
+}
 $js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/admin.js' );
 if ( 2 !== substr_count( $js, '= collectSettingsPayload($' ) || false === strpos( $js, "if (/\\[\\]$/.test(name))" ) ) {
     $failures[] = 'Both settings saves in admin.js should use collectSettingsPayload(), which posts "option[]" fields as lists.';
@@ -319,7 +323,8 @@ if ( null === $r || false !== $r['success'] ) {
 // ---------------------------------------------------------------------
 // 8. No inline styles in the settings renderers.
 // ---------------------------------------------------------------------
-foreach ( [ 'class-settings-render.php', 'class-social-settings-render.php' ] as $file ) {
+// #309 (E6): the same renderers as the CI grep.
+foreach ( [ 'class-settings-render.php', 'class-social-settings-render.php', 'class-social-settings.php', 'class-model-tasks.php', 'class-secret-field.php', 'class-setup-check.php', 'class-connection-status.php', 'class-settings-cleanup.php', 'class-log-exposure-check.php' ] as $file ) {
     $src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/' . $file );
     if ( preg_match_all( '/(?<![-\w])style\s*=/', $src, $m ) ) {
         $failures[] = "{$file} has " . count( $m[0] ) . ' inline style= attribute(s); use a class in assets/css/settings.css.';

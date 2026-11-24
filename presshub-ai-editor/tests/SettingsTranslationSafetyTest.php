@@ -31,16 +31,26 @@ class SettingsTranslationSafetyTest
     public static function run(): void {
         $failures = [];
 
-        $render_file = __DIR__ . '/../includes/class-settings-render.php';
-        if ( ! is_readable( $render_file ) ) {
-            echo "SettingsTranslationSafetyTest: FAIL — class-settings-render.php not readable.\n";
-            exit( 1 );
-        }
-
-        $source   = file_get_contents( $render_file );
-        $bad_tags = self::find_raw_html_tags_in_translations( $source );
-
-        if ( ! empty( $bad_tags ) ) {
+        // #309 (E8): every settings renderer, not only the AI one.
+        $files = [
+            'class-settings-render.php',
+            'class-social-settings-render.php',
+            'class-social-settings.php',
+            'class-model-tasks.php',
+            'class-secret-field.php',
+            'class-setup-check.php',
+            'class-connection-status.php',
+            'class-settings-cleanup.php',
+            'class-log-exposure-check.php',
+        ];
+        foreach ( $files as $file ) {
+            $render_file = __DIR__ . '/../includes/' . $file;
+            if ( ! is_readable( $render_file ) ) {
+                $failures[] = "{$file} is not readable.";
+                continue;
+            }
+            $source   = file_get_contents( $render_file );
+            $bad_tags = self::find_raw_html_tags_in_translations( $source );
             foreach ( $bad_tags as $hit ) {
                 $failures[] = sprintf(
                     'Raw <%s> tag found in translatable string at %s:%d — content: "%s"',

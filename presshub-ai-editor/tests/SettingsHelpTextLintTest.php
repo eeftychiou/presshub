@@ -19,6 +19,8 @@ if ( ! function_exists( 'apply_filters' ) ) {
     }
 }
 require_once __DIR__ . '/../includes/class-settings-registry.php';
+require_once __DIR__ . '/../includes/class-capabilities.php';
+require_once __DIR__ . '/../includes/class-settings-sections.php';
 
 class SettingsHelpTextLintTest {
 
@@ -39,12 +41,13 @@ class SettingsHelpTextLintTest {
                 $failures[] = "{$key} is numeric but declares no unit.";
             }
             $label = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $e['label'] ) ) : strtolower( trim( (string) $e['label'] ) );
-            $labels[ $e['page'] ][ $label ][] = $key;
+            // #309 (E8): labels are unique within a section of the one Settings page.
+            $labels[ PressHub_Settings_Sections::section_of( (string) $key, $e ) ][ $label ][] = $key;
         }
         foreach ( $labels as $page => $by_label ) {
             foreach ( $by_label as $label => $keys ) {
                 if ( count( $keys ) > 1 ) {
-                    $failures[] = "Page {$page}: label \"{$label}\" is shared by " . implode( ', ', $keys ) . '.';
+                    $failures[] = "Section {$page}: label \"{$label}\" is shared by " . implode( ', ', $keys ) . '.';
                 }
             }
         }

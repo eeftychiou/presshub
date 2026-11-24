@@ -44,6 +44,35 @@ if ( ! function_exists( 'get_posts' ) ) {
     }
 }
 
+// --- Multisite stubs (#309 E7): one options store per site. ---
+if ( ! function_exists( 'is_multisite' ) ) {
+    function is_multisite() {
+        return ! empty( $GLOBALS['MULTISITE'] );
+    }
+}
+if ( ! function_exists( 'get_sites' ) ) {
+    function get_sites( $args = [] ) {
+        return array_keys( $GLOBALS['SITE_STORES'] ?? [] );
+    }
+}
+if ( ! function_exists( 'switch_to_blog' ) ) {
+    function switch_to_blog( $site_id ) {
+        $current = $GLOBALS['CURRENT_SITE'] ?? 1;
+        $GLOBALS['SITE_STORES'][ $current ] = $GLOBALS['OPTIONS_STORE'] ?? [];
+        $GLOBALS['SWITCHED_TO'][]            = (int) $site_id;
+        $GLOBALS['CURRENT_SITE']             = (int) $site_id;
+        $GLOBALS['OPTIONS_STORE']            = $GLOBALS['SITE_STORES'][ (int) $site_id ] ?? [];
+        return true;
+    }
+}
+if ( ! function_exists( 'restore_current_blog' ) ) {
+    function restore_current_blog() {
+        $current = $GLOBALS['CURRENT_SITE'] ?? 1;
+        $GLOBALS['SITE_STORES'][ $current ] = $GLOBALS['OPTIONS_STORE'] ?? [];
+        return true;
+    }
+}
+
 // --- Extra stubs needed to load the main plugin file in the harness ---
 if ( ! function_exists( 'plugin_dir_path' ) ) {
     function plugin_dir_path( $file ) {
@@ -150,6 +179,15 @@ class UninstallTest
             'presshub_ai_research_retention_days'       => 30,
             'presshub_ai_default_presets'               => [ [ 'slug' => 'wire', 'name' => 'Wire' ] ],
             'presshub_ai_migrated_models'               => 1,
+            // #309 (E7): registry settings not in the old list, Social settings, stores and secrets.
+            'presshub_ai_log_level'                     => 'INFO',
+            'presshub_ai_qa_min_score'                  => 80,
+            'presshub_social_ai_temperature'            => 0.7,
+            'presshub_social_worker_secret'             => 'worker-secret',
+            'presshub_ai_configured_providers'          => [ [ 'id' => 'gemini', 'api_key' => 'k' ] ],
+            'presshub_ai_role_presets'                  => [ 'editor' => 'wire' ],
+            'presshub_social_youtube_refresh_token'     => 'yt-refresh',
+            'presshub_social_tiktok_shorts_music_library' => [ 'neutral' => [] ],
             'unrelated_option'                          => 'must-survive',
         ];
         $GLOBALS['USER_META_STORE'] = [
@@ -174,7 +212,7 @@ class UninstallTest
         self::run_uninstall();
 
         foreach ( $GLOBALS['OPTIONS_STORE'] as $key => $_ ) {
-            if ( 0 === strpos( $key, 'presshub_ai_' ) ) {
+            if ( 0 === strpos( $key, 'presshub_ai_' ) || 0 === strpos( $key, 'presshub_social_' ) ) {
                 $failures[] = "Uninstall should delete option {$key}; remaining: " . json_encode( array_keys( $GLOBALS['OPTIONS_STORE'] ) );
             }
         }
@@ -308,6 +346,41 @@ class UninstallTest
             $failures[] = 'Research posts must still be deleted on the bulk path; got: ' . json_encode( $deleted );
         }
         unset( $GLOBALS['wpdb'] );
+
+        // --- Case 7 (#309 E7): on multisite, every site's options go. ---
+        self::reset_stores();
+        $GLOBALS['MULTISITE']        = true;
+        $GLOBALS['SITE_STORES']      = [
+            1 => [ 'presshub_ai_log_level' => 'INFO', 'unrelated_option' => 'keep' ],
+            2 => [ 'presshub_social_ai_temperature' => 0.5, 'presshub_ai_configured_providers' => [], 'unrelated_option' => 'keep' ],
+        ];
+        $GLOBALS['SWITCHED_TO']      = [];
+        $GLOBALS['CURRENT_SITE']     = 1;
+        $GLOBALS['USERS']            = [];
+        $GLOBALS['GET_POSTS_RESULT'] = [];
+        $GLOBALS['OPTIONS_STORE']    = $GLOBALS['SITE_STORES'][1];
+        self::run_uninstall();
+        $GLOBALS['SITE_STORES'][ $GLOBALS['CURRENT_SITE'] ] = $GLOBALS['OPTIONS_STORE'];
+        if ( [ 1, 2 ] !== $GLOBALS['SWITCHED_TO'] ) {
+            $failures[] = 'On multisite, uninstall should switch to every site; got ' . json_encode( $GLOBALS['SWITCHED_TO'] );
+        }
+        $research_queries = array_filter( (array) $GLOBALS['GET_POSTS_ARGS'], static function ( $a ) {
+            return 'presshub_research' === ( $a['post_type'] ?? '' );
+        } );
+        if ( count( $research_queries ) < 2 ) {
+            $failures[] = 'On multisite, research posts should be removed on every site; got ' . count( $research_queries ) . ' queries.';
+        }
+        foreach ( $GLOBALS['SITE_STORES'] as $site => $store ) {
+            foreach ( array_keys( $store ) as $key ) {
+                if ( 0 === strpos( (string) $key, 'presshub_' ) ) {
+                    $failures[] = "On multisite, site {$site} still has {$key}.";
+                }
+            }
+            if ( ( $store['unrelated_option'] ?? null ) !== 'keep' ) {
+                $failures[] = "On multisite, site {$site} lost an unrelated option.";
+            }
+        }
+        $GLOBALS['MULTISITE'] = false;
 
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );

@@ -5,8 +5,9 @@
  * the per-tab save. #236 moved the five model settings among them into their
  * rows of the AI models table; the podcast preset stays in Daily Briefing.
  *
- * Also checks the registry's "rendered" flag against the real AI settings
- * page: every AI option the registry says is rendered has a field there.
+ * Also checks the registry's "rendered" flag against the real Settings page:
+ * every AI and Social option the registry says is rendered has a field there,
+ * and no active option is unrendered (#309 E1, rule 2.6).
  */
 
 require_once __DIR__ . '/wp-action-wrapper.php';
@@ -134,16 +135,33 @@ class SettingsHiddenSurfacedTest {
         // 4. The registry's "rendered" flag matches the page for every AI option.
         $GLOBALS['OPTIONS_STORE'] = [
             // Make conditionally shown fields appear (remove-key boxes need a stored key).
-            'presshub_ai_api_key' => 'AIzaSyEXAMPLEKEY000000000000000003kQ',
+            'presshub_ai_google_cloud_api_key' => 'AIzaSyEXAMPLEKEY000000000000000003kQ',
         ];
         $html = self::render_page();
-        foreach ( PressHub_Settings_Registry::for_page( 'ai' ) as $key => $e ) {
-            if ( empty( $e['rendered'] ) || ! empty( $e['removes'] ) ) {
-                continue;
+        $shown = 0;
+        foreach ( [ 'ai', 'social' ] as $settings_page ) {
+            foreach ( PressHub_Settings_Registry::for_page( $settings_page ) as $key => $e ) {
+                if ( ! empty( $e['removes'] ) ) {
+                    continue; // A "Remove stored key" box, shown only while a key is stored.
+                }
+                // #309 (E1), principle 2.6: an active setting has a field. One
+                // that is not shown either gets one or is removed through the
+                // settings clean-up; there are no hidden active options.
+                if ( 'active' === ( $e['status'] ?? '' ) && empty( $e['rendered'] ) ) {
+                    $failures[] = "{$key} is active but not rendered: give it a field or remove it through PressHub_Settings_Cleanup (rule 2.6).";
+                    continue;
+                }
+                if ( empty( $e['rendered'] ) ) {
+                    continue;
+                }
+                ++$shown;
+                if ( false === strpos( $html, 'name="' . $key . '"' ) && false === strpos( $html, 'name="' . $key . '[' ) ) {
+                    $failures[] = "{$key} is declared rendered but has no field on the Settings page ({$settings_page}).";
+                }
             }
-            if ( false === strpos( $html, 'name="' . $key . '"' ) && false === strpos( $html, 'name="' . $key . '[' ) ) {
-                $failures[] = "{$key} is declared rendered but has no field on the AI settings page.";
-            }
+        }
+        if ( $shown < 250 ) {
+            $failures[] = "Expected every setting of both pages to be checked; only {$shown} were.";
         }
 
         // 5. The registry's "checkbox" flag matches the page, so unticking a box

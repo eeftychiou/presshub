@@ -120,8 +120,8 @@ class SettingsPhase2LayoutTest {
                 $failures[] = "{$key} should be on Shorts & Reels.";
             }
         }
-        if ( 6 !== count( $ids( 'presshub_social_shorts_prompts', 'presshub_social_shorts_prompts_sec' ) ) ) {
-            $failures[] = 'All six Shorts prompts should be in the collapsed Shorts prompts block.';
+        if ( 8 !== count( $ids( 'presshub_social_shorts_prompts', 'presshub_social_shorts_prompts_sec' ) ) ) {
+            $failures[] = 'All eight Shorts prompts (with the photo slide sound searches and the daily brief prompt) should be in the collapsed Shorts prompts block.';
         }
         foreach ( PressHub_Settings_Registry::for_page( 'social' ) as $key => $e ) {
             if ( 0 === strpos( $key, 'presshub_social_tiktok_shorts_' ) && 'shorts' !== $e['tab'] ) {
@@ -147,17 +147,31 @@ class SettingsPhase2LayoutTest {
         if ( [] !== $render->shorts_unmet_requirements() ) {
             $failures[] = 'With everything ready, no requirement should be listed.';
         }
-        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_mode' => 'push', 'presshub_social_tiktok_shorts_enabled' => 0, 'presshub_social_instagram_shorts_enabled' => 0, 'presshub_social_tiktok_article_shorts_enabled' => 1 ];
+        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_mode' => 'push', 'presshub_social_tiktok_shorts_enabled' => 0, 'presshub_social_instagram_shorts_enabled' => 0, 'presshub_social_tiktok_article_shorts_enabled' => 1, 'presshub_social_tiktok_slides_enabled' => 0 ];
         if ( [] !== $render->shorts_unmet_requirements() ) {
-            $failures[] = 'With Shorts and Reels off, no notice.';
+            $failures[] = 'With Shorts, Reels and photo slides off, no notice.';
+        }
+        // Photo slides alone (on by default) still need Pull mode and the TikTok automation engine (#333 review).
+        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_mode' => 'push', 'presshub_social_engine_tiktok' => 'api', 'presshub_social_enabled_platforms' => [ 'tiktok' ] ];
+        $slide_issues = $render->shorts_unmet_requirements();
+        if ( 2 !== count( $slide_issues ) || false === strpos( $slide_issues[1]['text'] ?? '', 'photo slides' ) ) {
+            $failures[] = 'Photo slides alone should list Push mode and the TikTok engine; got ' . count( $slide_issues );
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_social_enabled_platforms'] = [ 'facebook' ];
+        if ( [] !== $render->shorts_unmet_requirements() ) {
+            $failures[] = 'Photo slides should not raise a notice when TikTok is not posted to.';
         }
 
         // 5. Search index.
         $index = PressHub_Settings_Registry::search_index();
         $keys  = array_column( $index, 'key' );
         foreach ( $index as $row ) {
-            if ( PressHub_Settings_Registry::is_secret( $row['key'] ) || PressHub_Settings_Registry::is_unused( $row['key'] ) ) {
+            if ( PressHub_Settings_Registry::is_unused( $row['key'] ) ) {
                 $failures[] = "Search index must not include {$row['key']}.";
+            }
+            // #309 (E3): secrets are in the index by label only, never with a default.
+            if ( PressHub_Settings_Registry::is_secret( $row['key'] ) && ( empty( $row['secret'] ) || array_key_exists( 'default', $row ) ) ) {
+                $failures[] = "Secret {$row['key']} must be in the index by label only.";
             }
         }
         if ( ! in_array( 'presshub_ai_briefing_host_female', $keys, true ) || ! in_array( 'presshub_social_tiktok_shorts_count', $keys, true ) ) {

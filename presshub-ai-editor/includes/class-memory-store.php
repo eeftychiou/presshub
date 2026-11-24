@@ -22,6 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/class-audit-logger.php';
 require_once __DIR__ . '/class-settings-storage.php';
+require_once __DIR__ . '/class-fact-checks.php';
 
 class PressHub_AI_Memory_Store {
 
@@ -162,7 +163,8 @@ class PressHub_AI_Memory_Store {
      *     }
      *   ],
      *   "podcast": { "opening_line": "...", "closing_line": "..." },
-     *   "narrative": "weekly rollups only: compact background narrative"
+     *   "narrative": "weekly rollups only: compact background narrative",
+     *   "fact_checks": [ optional, daily digests: { "claim", "verdict", "checked_by", "finding", "match": [], "source_url" } ]
      * }
      *
      * @param array|string $content
@@ -333,6 +335,16 @@ class PressHub_AI_Memory_Store {
             sort( $missing );
             if ( ! empty( $missing ) ) {
                 $result['missing_dates'] = $missing;
+            }
+        }
+
+        // Optional (2.80.0, PressHub_AI_Fact_Checks): claims a fact-checker found false, as the
+        // briefing reported them. Kept only when non-empty, so existing content stays
+        // byte-identical.
+        if ( isset( $content['fact_checks'] ) && class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            $fact_checks = PressHub_AI_Fact_Checks::normalize_list( $content['fact_checks'] );
+            if ( ! empty( $fact_checks ) ) {
+                $result['fact_checks'] = $fact_checks;
             }
         }
 

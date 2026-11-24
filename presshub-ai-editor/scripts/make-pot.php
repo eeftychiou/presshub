@@ -40,7 +40,21 @@ if ( PHP_SAPI !== 'cli' ) {
 const DOMAIN       = 'presshub-ai-editor';
 const PLUGIN_ROOT  = __DIR__ . '/..';
 const OUT_DIR      = PLUGIN_ROOT . '/languages';
-const OUT_FILE     = OUT_DIR . '/' . DOMAIN . '.pot';
+// PRESSHUB_POT_OUT writes elsewhere (SettingsRegistryStringsTest checks extraction without touching the catalogue).
+define( 'OUT_FILE', getenv( 'PRESSHUB_POT_OUT' ) ? (string) getenv( 'PRESSHUB_POT_OUT' ) : OUT_DIR . '/' . DOMAIN . '.pot' );
+
+/** A PHP or JS string literal, with escaped quotes and backslashes (#309 E10). */
+const LIT = "(?:'(?:\\\\.|[^'\\\\])*'|\"(?:\\\\.|[^\"\\\\])*\")";
+
+/** The value of a literal matched by LIT. */
+function presshub_pot_literal( string $lit ): string {
+    $q    = $lit[0];
+    $body = substr( $lit, 1, -1 );
+    if ( "'" === $q ) {
+        return str_replace( [ "\\\\", "\\'" ], [ "\\", "'" ], $body );
+    }
+    return stripcslashes( $body );
+}
 
 // ---------------------------------------------------------------------------
 // 1. Collect translatable strings from PHP + JS source.
@@ -102,8 +116,9 @@ foreach ( $php_sources as $file ) {
     $contents = file_get_contents( $file );
     $rel      = str_replace( PLUGIN_ROOT . '/', '', $file );
     // Strip line comments (// ...) and block comments (/* ... */) so a
-    // developer comment in source never lands in the catalogue.
-    $stripped = preg_replace( '#//[^\n]*#', '', $contents );
+    // developer comment in source never lands in the catalogue. The "//" of
+    // a URL (http://) is not a comment.
+    $stripped = preg_replace( '#(?<!:)//[^\n]*#', '', $contents );
     $stripped = preg_replace( '#/\*.*?\*/#s', '', $stripped );
     // Match the four WP i18n call shapes we actually use:
     //   __( 'foo', 'presshub-ai-editor' )
@@ -121,9 +136,9 @@ foreach ( $php_sources as $file ) {
     foreach ( $lines as $line_no => $line ) {
         $line_no += 1;
         // _n( 'one', 'many', $n, 'presshub-ai-editor' ) — capture plural.
-        if ( preg_match( "/_n\s*\(\s*((?:'[^']*'|\"[^\"]*\"))\s*,\s*((?:'[^']*'|\"[^\"]*\"))\s*,\s*[^,]+,\s*['\"]" . preg_quote( DOMAIN, '/' ) . "['\"]\s*\)/u", $line, $m ) ) {
-            $singular = trim( $m[1], "'\"" );
-            $plural   = trim( $m[2], "'\"" );
+        if ( preg_match( "/_n\s*\(\s*(" . LIT . ")\s*,\s*(" . LIT . ")\s*,\s*[^,]+,\s*['\"]" . preg_quote( DOMAIN, '/' ) . "['\"]\s*\)/u", $line, $m ) ) {
+            $singular = presshub_pot_literal( $m[1] );
+            $plural   = presshub_pot_literal( $m[2] );
             $add( $singular, '', $rel . ':' . $line_no );
             // Record plural form on the entry just added.
             $key = "\0" . $singular;
@@ -131,15 +146,15 @@ foreach ( $php_sources as $file ) {
             continue;
         }
         // _x( 'foo', 'context', 'presshub-ai-editor' ) — with context.
-        if ( preg_match( "/(?:_x|esc_html_x)\s*\(\s*((?:'[^']*'|\"[^\"]*\"))\s*,\s*((?:'[^']*'|\"[^\"]*\"))\s*,\s*['\"]" . preg_quote( DOMAIN, '/' ) . "['\"]\s*\)/u", $line, $m ) ) {
-            $msgid   = stripcslashes( trim( $m[1], "'\"" ) );
-            $context = stripcslashes( trim( $m[2], "'\"" ) );
+        if ( preg_match( "/(?:_x|esc_html_x)\s*\(\s*(" . LIT . ")\s*,\s*(" . LIT . ")\s*,\s*['\"]" . preg_quote( DOMAIN, '/' ) . "['\"]\s*\)/u", $line, $m ) ) {
+            $msgid   = presshub_pot_literal( $m[1] );
+            $context = presshub_pot_literal( $m[2] );
             $add( $msgid, $context, $rel . ':' . $line_no );
             continue;
         }
         // __( 'foo', 'presshub-ai-editor' ) and esc_*__ variants — no context.
-        if ( preg_match( "/(?:\besc_html_|\besc_attr_)?\b__\s*\(\s*((?:'[^']*'|\"[^\"]*\"))\s*,\s*['\"]" . preg_quote( DOMAIN, '/' ) . "['\"]\s*\)/u", $line, $m ) ) {
-            $msgid = stripcslashes( trim( $m[1], "'\"" ) );
+        if ( preg_match( "/(?:\besc_html_|\besc_attr_)?\b__\s*\(\s*(" . LIT . ")\s*,\s*['\"]" . preg_quote( DOMAIN, '/' ) . "['\"]\s*\)/u", $line, $m ) ) {
+            $msgid = presshub_pot_literal( $m[1] );
             if ( '' === $msgid ) {
                 continue;
             }
@@ -161,8 +176,8 @@ foreach ( $js_files as $file ) {
     foreach ( $lines as $line_no => $line ) {
         $line_no += 1;
         // wp.i18n.__( 'foo', 'presshub-ai-editor' ) / __( 'foo', 'presshub-ai-editor' )
-        if ( preg_match( "/(?:wp\.i18n\.)?__\s*\(\s*((?:'[^']*'|\"[^\"]*\"))\s*,\s*['\"]" . preg_quote( DOMAIN, '/' ) . "['\"]\s*\)/u", $line, $m ) ) {
-            $msgid = stripcslashes( trim( $m[1], "'\"" ) );
+        if ( preg_match( "/(?:wp\.i18n\.)?__\s*\(\s*(" . LIT . ")\s*,\s*['\"]" . preg_quote( DOMAIN, '/' ) . "['\"]\s*\)/u", $line, $m ) ) {
+            $msgid = presshub_pot_literal( $m[1] );
             $add( $msgid, '', $rel . ':' . $line_no );
         }
     }

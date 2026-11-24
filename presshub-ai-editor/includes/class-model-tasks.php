@@ -156,7 +156,7 @@ class PressHub_Model_Tasks {
             ],
             'social_copy'      => [
                 'label'     => __( 'Social copy', 'presshub-ai-editor' ),
-                'used_for'  => __( 'Social post captions', 'presshub-ai-editor' ),
+                'used_for'  => __( 'Social post captions and story tags', 'presshub-ai-editor' ),
                 'kind'      => PressHub_Model_Catalog::TEXT,
                 'provider'  => 'presshub_social_ai_provider',
                 'providers' => 'text',

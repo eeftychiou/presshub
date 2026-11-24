@@ -585,6 +585,14 @@ class PressHub_AI_Memory_Editor {
         }
 
         $html .= self::build_preview( $today );
+        if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            if ( isset( $query['fact_check_removed'] ) ) {
+                $html .= '1' === (string) $query['fact_check_removed']
+                    ? '<div class="notice notice-success inline"><p>' . esc_html__( 'Fact check removed from memory.', 'presshub-ai-editor' ) . '</p></div>'
+                    : '<div class="notice notice-error inline"><p>' . esc_html__( 'The fact check could not be removed. It may already be gone.', 'presshub-ai-editor' ) . '</p></div>';
+            }
+            $html .= PressHub_AI_Fact_Checks::build_section( $today );
+        }
         $html .= self::build_timeline( $from, $today );
         return $html . '</div>';
     }

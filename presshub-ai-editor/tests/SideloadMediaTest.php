@@ -120,7 +120,7 @@ class SideloadMediaTest
         // and return ['id','url'] without leaving tmp files.
         self::reset_world();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'test-gc-key';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-ai-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-ai-key' );
         self::stub_media_handle_sideload( 777 );
         $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
             // Provide a base64-encoded JPEG-like payload.

@@ -191,7 +191,7 @@ class AudioSynthesizerVoicesTest {
         //    network.
         // ==================================================================
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key'] = 'sk-test-gemini-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'sk-test-gemini-key', [ 'gemini' ] );
 
         $call_count = 0;
         $GLOBALS['GET_RESPONSE_FILTER'] = function ( $url, $args ) use ( &$call_count ) {
@@ -251,15 +251,20 @@ class AudioSynthesizerVoicesTest {
         //    not throw, not return WP_Error, not return an empty array.
         // ==================================================================
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key'] = 'sk-test-gemini-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'sk-test-gemini-key', [ 'gemini' ] );
 
-        $GLOBALS['GET_RESPONSE_FILTER'] = function ( $url, $args ) {
+        $discovery_calls = 0;
+        $GLOBALS['GET_RESPONSE_FILTER'] = function ( $url, $args ) use ( &$discovery_calls ) {
+            ++$discovery_calls;
             return new WP_Error( 'http_500', 'simulated upstream failure' );
         };
 
         $synth = new PressHub_AI_Audio_Synthesizer();
         if ( method_exists( $synth, 'get_voice_catalog' ) ) {
             $catalog = $synth->get_voice_catalog( 'gemini-2.5' );
+            if ( 0 === $discovery_calls ) {
+                $failures[] = 'get_voice_catalog() should try discovery with the Gemini provider key from Connections.';
+            }
             if ( ! is_array( $catalog ) ) {
                 $failures[] = 'get_voice_catalog() must return an array (never WP_Error or null) so the UI never breaks.';
             } elseif ( ! isset( $catalog['female']['Kore'] ) ) {

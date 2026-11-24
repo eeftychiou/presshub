@@ -11,6 +11,7 @@ import { connectOrLaunchChrome, ChromeConnection } from '../automation/browser-h
 import { getReaderSessionsDir, getSessionsDir } from '../automation/session-manager';
 import { WorkerLogger } from '../logger';
 import { challengeBackoffUntil, clearChallenge, isChallengeError, recordChallenge } from '../automation/challenge-backoff';
+import { warmUp } from '../automation/warm-up';
 import { MonitorPlatform, parseTikTokItemList, parseXGraphql, ScannedPost } from './parsers';
 import { FacebookPost, parseFacebookStories, splitFacebookPayload } from '../trending/facebook-parser';
 
@@ -323,6 +324,10 @@ export const browserScan: ScanFn = async (plan: ScanPlan) => {
         skipCdp: true,
         storageState: resolveReaderSession(platform)
       });
+      // Start on the home page, like a person, before the monitored profiles (TikTok).
+      if (await warmUp(connections[platform] as ChromeConnection, platform)) {
+        WorkerLogger.info('Social Monitor', `${platform} home page opened before the profiles.`);
+      }
     }
     return connections[platform] as ChromeConnection;
   };

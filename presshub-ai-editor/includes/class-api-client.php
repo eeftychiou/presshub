@@ -126,14 +126,12 @@ class PressHub_AI_API_Client {
             }
         }
 
+        // #309 (E1): only Connections; the old flat provider options are gone.
         if ( '' === $provider ) {
-            $provider = (string) get_option( 'presshub_ai_provider', 'openai' );
-        }
-        if ( '' === $model ) {
-            $model = (string) get_option( 'presshub_ai_model_' . $provider, 'default' );
+            $provider = 'openai';
         }
         if ( $max_tokens <= 0 ) {
-            $max_tokens = (int) get_option( 'presshub_ai_max_tokens_' . $provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
+            $max_tokens = PressHub_AI_Provider_Defaults::default_max_tokens();
         }
 
         return 'provider=' . $provider
@@ -246,14 +244,14 @@ class PressHub_AI_API_Client {
             }
         }
 
-        // 4. Fallback to legacy global provider options
+        // 4. No provider in Connections: the OpenAI defaults (#309 E1: the
+        // old presshub_ai_provider option is gone).
         if ( null === $provider_record ) {
             $from_store      = false;
-            $legacy_type     = (string) get_option( 'presshub_ai_provider', 'openai' );
-            $provider_record = PressHub_AI_Provider_Store::get_default_provider_record( $legacy_type );
-            $provider_record['id'] = $legacy_type;
-            $provider_record['api_key'] = (string) get_option( 'presshub_ai_api_key', '' );
-            $provider_source = 'legacy_fallback:presshub_ai_provider';
+            $provider_record = PressHub_AI_Provider_Store::get_default_provider_record( 'openai' );
+            $provider_record['id'] = 'openai';
+            $provider_record['api_key'] = self::lookup_provider_key_by_type( (string) ( $provider_record['type'] ?? 'openai' ) );
+            $provider_source = 'class_defaults:no_provider';
         }
 
         $type        = $provider_record['type'] ?? 'openai';
@@ -263,19 +261,17 @@ class PressHub_AI_API_Client {
         $headers     = $provider_record['headers'] ?? [];
         $api_key     = $provider_record['api_key'] ?? '';
 
-        // API Key fallback from legacy options if empty
+        // API key fallback (#237: only Connections; the legacy key options are not read).
         if ( empty( $api_key ) ) {
-            if ( 'gemini' === $type ) {
-                $api_key = (string) get_option( 'presshub_ai_gemini_api_key', get_option( 'presshub_ai_api_key', '' ) );
-            } elseif ( 'google_cloud_tts' === $type ) {
-                $api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', get_option( 'presshub_ai_briefing_tts_api_key', '' ) );
+            if ( 'google_cloud_tts' === $type ) {
+                $api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             } else {
-                $api_key = (string) get_option( 'presshub_ai_api_key', '' );
+                $api_key = self::lookup_provider_key_by_type( (string) $type );
             }
         }
 
         // 5. Model resolution:
-        // Module override -> Specific provider ID override -> Provider record default model -> Legacy per-type option -> Legacy global option -> Provider defaults class
+        // Module override -> Specific provider ID override -> Provider record default model -> Provider defaults class
         $model        = '';
         $model_source = '';
         if ( 'tts' === $module || 'podcast_tts' === $module ) {
@@ -317,22 +313,6 @@ class PressHub_AI_API_Client {
             if ( '' === $model && $from_store && ! empty( $provider_record['default_model'] ) ) {
                 $model        = $provider_record['default_model'];
                 $model_source = "provider_store_default:{$provider_id}";
-            }
-
-            if ( '' === $model ) {
-                $opt_type_model = (string) get_option( 'presshub_ai_model_' . $type, '' );
-                if ( '' !== $opt_type_model ) {
-                    $model        = $opt_type_model;
-                    $model_source = "legacy_type_option:presshub_ai_model_{$type}";
-                }
-            }
-
-            if ( '' === $model ) {
-                $opt_global_model = (string) get_option( 'presshub_ai_model', '' );
-                if ( '' !== $opt_global_model ) {
-                    $model        = $opt_global_model;
-                    $model_source = 'legacy_global_option:presshub_ai_model';
-                }
             }
 
             if ( '' === $model ) {
@@ -396,18 +376,13 @@ class PressHub_AI_API_Client {
             $timeout = PressHub_AI_Provider_Defaults::default_timeout( $type );
         }
 
-        // 9. Standard header additions
-        if ( 'openai' === $type && empty( $headers['OpenAI-Organization'] ) ) {
-            $org = (string) get_option( 'presshub_ai_openai_org', '' );
-            if ( '' !== $org ) {
-                $headers['OpenAI-Organization'] = $org;
-            }
+        // 9. Standard headers (#309 E1: the OpenAI organization and the
+        // Anthropic API version live on the provider in Connections).
+        if ( ! is_array( $headers ) ) {
+            $headers = [];
         }
         if ( 'anthropic' === $type && empty( $headers['anthropic-version'] ) ) {
-            $version = (string) get_option( 'presshub_ai_anthropic_version', '2023-06-01' );
-            if ( '' !== $version ) {
-                $headers['anthropic-version'] = $version;
-            }
+            $headers['anthropic-version'] = self::DEFAULT_ANTHROPIC_VERSION;
         }
 
         return [
@@ -465,100 +440,70 @@ class PressHub_AI_API_Client {
         }
 
         // No explicit module / ID supplied — Issue #44: route through the
-        // Provider Store's first enabled entry, but ONLY when the legacy
-        // global options are also empty. That way:
-        //   * Fresh installs that have migrated to the Provider Store get
-        //     the active provider instead of falling through to defaults.
-        //   * Existing installs (and tests) that still configure the legacy
-        //     `presshub_ai_provider` / `presshub_ai_api_key` options keep
-        //     their existing behavior — we never silently override an
-        //     operator's existing configuration.
+        // Provider Store's first enabled entry (#309 E1: the old
+        // presshub_ai_provider option no longer takes precedence; it is gone).
         if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
-            $has_legacy_provider = (bool) get_option( 'presshub_ai_provider', '' );
-            $has_legacy_api_key  = (bool) get_option( 'presshub_ai_api_key', '' );
-            if ( ! $has_legacy_provider && ! $has_legacy_api_key ) {
-                $enabled = PressHub_AI_Provider_Store::get_all( true );
-                if ( ! empty( $enabled ) && is_array( $enabled ) ) {
-                    $first_prov = $enabled[0];
-                    if ( empty( $first_prov['provider_source'] ) ) {
-                        $first_prov['provider_source'] = 'store_fallback:first_enabled_provider';
-                    }
-                    if ( empty( $first_prov['model_source'] ) ) {
-                        $first_prov['model_source'] = 'provider_store_default:' . ( $first_prov['id'] ?? $first_prov['type'] );
-                    }
-                    $this->set_provider_config( $first_prov );
-
-                    // Issue #43 defence-in-depth: `set_provider_config()`
-                    // only sets $this->google_cloud_api_key when the
-                    // provider type is 'google_cloud_tts'. When the first
-                    // enabled Provider Store record is Gemini (e.g. one
-                    // seeded from the deprecated gcloud key), the gcloud
-                    // key is parked in $this->api_key and
-                    // $this->gemini_api_key — but synthesize_speech_with_options()
-                    // reads $this->google_cloud_api_key. Mirror the
-                    // cross-cutting hydration that `set_module()` performs
-                    // so legacy TTS handlers keep working when the
-                    // constructor's no-arg branch is taken.
-                    if ( empty( $this->google_cloud_api_key ) ) {
-                        $gemini_key = self::lookup_provider_key_by_type( 'gemini' );
-                        if ( '' !== $gemini_key ) {
-                            $this->google_cloud_api_key = $gemini_key;
-                        }
-                    }
-                    if ( empty( $this->google_cloud_api_key ) ) {
-                        $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-                        if ( empty( $this->google_cloud_api_key ) ) {
-                            $this->google_cloud_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-                        }
-                    }
-                    if ( empty( $this->briefing_tts_api_key ) ) {
-                        $this->briefing_tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-                        if ( empty( $this->briefing_tts_api_key ) ) {
-                            $this->briefing_tts_api_key = $this->gemini_api_key;
-                        }
-                    }
-                    return;
+            $enabled = PressHub_AI_Provider_Store::get_all( true );
+            if ( ! empty( $enabled ) && is_array( $enabled ) ) {
+                $first_prov = $enabled[0];
+                if ( empty( $first_prov['provider_source'] ) ) {
+                    $first_prov['provider_source'] = 'store_fallback:first_enabled_provider';
                 }
+                if ( empty( $first_prov['model_source'] ) ) {
+                    $first_prov['model_source'] = 'provider_store_default:' . ( $first_prov['id'] ?? $first_prov['type'] );
+                }
+                $this->set_provider_config( $first_prov );
+
+                // Issue #43 defence-in-depth: `set_provider_config()`
+                // only sets $this->google_cloud_api_key when the
+                // provider type is 'google_cloud_tts'. When the first
+                // enabled Provider Store record is Gemini (e.g. one
+                // seeded from the deprecated gcloud key), the gcloud
+                // key is parked in $this->api_key and
+                // $this->gemini_api_key — but synthesize_speech_with_options()
+                // reads $this->google_cloud_api_key. Mirror the
+                // cross-cutting hydration that `set_module()` performs
+                // so legacy TTS handlers keep working when the
+                // constructor's no-arg branch is taken.
+                if ( empty( $this->google_cloud_api_key ) ) {
+                    $gemini_key = self::lookup_provider_key_by_type( 'gemini' );
+                    if ( '' !== $gemini_key ) {
+                        $this->google_cloud_api_key = $gemini_key;
+                    }
+                }
+                if ( empty( $this->google_cloud_api_key ) ) {
+                    $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
+                }
+                if ( empty( $this->briefing_tts_api_key ) ) {
+                    $this->briefing_tts_api_key = $this->gemini_api_key;
+                }
+                return;
             }
         }
 
-        // Legacy / default single-provider options fallback
+        // A provider type named by the caller, or the OpenAI defaults (#309 E1:
+        // the old flat provider options are gone; Connections holds the rest).
         $this->provider = ( is_string( $module_or_provider ) && ! empty( $module_or_provider ) )
             ? $module_or_provider
-            : get_option( 'presshub_ai_provider', 'openai' );
+            : 'openai';
 
-        $this->provider_source = 'legacy_fallback:presshub_ai_provider';
-        $opt_prov_model        = (string) get_option( 'presshub_ai_model_' . $this->provider, '' );
-        if ( '' !== $opt_prov_model ) {
-            $this->model_source = 'legacy_type_option:presshub_ai_model_' . $this->provider;
-        } elseif ( '' !== (string) get_option( 'presshub_ai_model', '' ) ) {
-            $this->model_source = 'legacy_global_option:presshub_ai_model';
-        } else {
-            $this->model_source = 'class_defaults:PressHub_AI_Provider_Defaults';
-        }
+        $this->provider_source = 'class_defaults:no_provider';
+        $this->model_source    = 'class_defaults:PressHub_AI_Provider_Defaults';
 
-        $this->api_key = get_option( 'presshub_ai_api_key' );
+        // #237: keys come from Connections only (the provider of this type).
+        $this->api_key              = self::lookup_provider_key_by_type( (string) $this->provider );
         $this->google_cloud_api_key = get_option( 'presshub_ai_google_cloud_api_key' );
-
-        $gemini_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-        if ( empty( $gemini_key ) ) {
-            $gemini_key = (string) get_option( 'presshub_ai_api_key', '' );
-        }
-        $this->gemini_api_key = $gemini_key;
-
-        $briefing_tts_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-        if ( empty( $briefing_tts_key ) ) {
-            $briefing_tts_key = $this->gemini_api_key;
-        }
-        $this->briefing_tts_api_key = $briefing_tts_key;
+        $this->gemini_api_key       = self::lookup_provider_key_by_type( 'gemini' );
+        $this->briefing_tts_api_key = $this->gemini_api_key;
 
         $this->model       = $this->resolve_model( $this->provider );
-        $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $this->provider, PressHub_AI_Provider_Defaults::default_temperature() );
-        $this->max_tokens  = (int) get_option( 'presshub_ai_max_tokens_' . $this->provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
-        $this->timeout     = (int) get_option( 'presshub_ai_timeout_' . $this->provider, PressHub_AI_Provider_Defaults::default_timeout( $this->provider ) );
+        $this->temperature = PressHub_AI_Provider_Defaults::default_temperature();
+        $this->max_tokens  = PressHub_AI_Provider_Defaults::default_max_tokens();
+        $this->timeout     = PressHub_AI_Provider_Defaults::default_timeout( $this->provider );
 
         $configured = PressHub_AI_Provider_Store::get( $this->provider );
         if ( $configured ) {
+            $this->provider_source = 'provider_store:' . $this->provider;
             $this->base_url = $configured['base_url'] ?? '';
             $this->headers  = $configured['headers'] ?? [];
             if ( ! empty( $configured['api_key'] ) ) {
@@ -659,27 +604,12 @@ class PressHub_AI_API_Client {
         }
         if ( empty( $this->google_cloud_api_key ) ) {
             $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-            if ( empty( $this->google_cloud_api_key ) ) {
-                $this->google_cloud_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-            }
         }
         if ( empty( $this->gemini_api_key ) ) {
-            $gemini_key = self::lookup_provider_key_by_type( 'gemini' );
-            if ( '' !== $gemini_key ) {
-                $this->gemini_api_key = $gemini_key;
-            }
-        }
-        if ( empty( $this->gemini_api_key ) ) {
-            $this->gemini_api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-            if ( empty( $this->gemini_api_key ) ) {
-                $this->gemini_api_key = (string) get_option( 'presshub_ai_api_key', '' );
-            }
+            $this->gemini_api_key = self::lookup_provider_key_by_type( 'gemini' );
         }
         if ( empty( $this->briefing_tts_api_key ) ) {
-            $this->briefing_tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-            if ( empty( $this->briefing_tts_api_key ) ) {
-                $this->briefing_tts_api_key = $this->gemini_api_key;
-            }
+            $this->briefing_tts_api_key = $this->gemini_api_key;
         }
         return $this;
     }
@@ -717,17 +647,10 @@ class PressHub_AI_API_Client {
             }
         }
 
-        // If still empty, fall back to global options.
+        // If still empty, another Connections provider of the same type (#237:
+        // the legacy key options are no longer read).
         if ( empty( $this->api_key ) || false !== strpos( $this->api_key, '•' ) ) {
-            if ( 'gemini' === $this->provider ) {
-                $this->api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-                if ( empty( $this->api_key ) ) {
-                    $this->api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-                }
-            }
-            if ( empty( $this->api_key ) ) {
-                $this->api_key = (string) get_option( 'presshub_ai_api_key', '' );
-            }
+            $this->api_key = self::lookup_provider_key_by_type( (string) $this->provider );
         }
 
         $this->model           = ! empty( $config['model'] ) ? $config['model'] : ( $config['default_model'] ?? '' );
@@ -912,23 +835,25 @@ class PressHub_AI_API_Client {
         return $this->current_action ?: 'coauthor_draft';
     }
 
+    /** anthropic-version header when the provider in Connections sets none. */
+    const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
+
+    /** The anthropic-version of the current provider (#309 E1). */
+    private function anthropic_version(): string {
+        $version = is_array( $this->headers ) ? trim( (string) ( $this->headers['anthropic-version'] ?? '' ) ) : '';
+        return '' !== $version ? $version : self::DEFAULT_ANTHROPIC_VERSION;
+    }
+
     /**
-     * Resolve the model for a provider: per-provider option first, then the
-     * legacy global option, then the provider default.
+     * The provider's default model (#309 E1: the old per-provider model
+     * options are gone; a provider's model is set in Connections).
      *
      * A leading 'models/' path fragment is stripped (Low-17) so users can
      * paste full model paths like 'models/gemini-2.0-flash' without the
      * request URL ending up as '/models/models/gemini-2.0-flash:...'.
      */
     private function resolve_model( $provider ): string {
-        $model = (string) get_option( 'presshub_ai_model_' . $provider, '' );
-        if ( '' === $model ) {
-            $model = (string) get_option( 'presshub_ai_model', '' );
-        }
-        if ( '' === $model ) {
-            $model = PressHub_AI_Provider_Defaults::default_model( $provider );
-        }
-        return preg_replace( '#^models/#', '', $model );
+        return preg_replace( '#^models/#', '', PressHub_AI_Provider_Defaults::default_model( $provider ) );
     }
 
     /**
@@ -958,10 +883,12 @@ class PressHub_AI_API_Client {
                     $provider = 'openai';
                 }
                 $this->provider    = $provider;
+                // #237: no Connections provider of this type, so no key.
+                $this->api_key     = self::lookup_provider_key_by_type( $provider );
                 $this->model       = $this->resolve_model( $provider );
-                $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $provider, PressHub_AI_Provider_Defaults::default_temperature() );
-                $this->max_tokens  = (int) get_option( 'presshub_ai_max_tokens_' . $provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
-                $this->timeout     = (int) get_option( 'presshub_ai_timeout_' . $provider, PressHub_AI_Provider_Defaults::default_timeout( $provider ) );
+                $this->temperature = PressHub_AI_Provider_Defaults::default_temperature();
+                $this->max_tokens  = PressHub_AI_Provider_Defaults::default_max_tokens();
+                $this->timeout     = PressHub_AI_Provider_Defaults::default_timeout( $provider );
             }
         }
 
@@ -1025,7 +952,7 @@ class PressHub_AI_API_Client {
         // URL sourcing (2026-08-16): models cannot browse URLs — fetch and
         // extract each source URL server-side so the article text actually
         // reaches the model (presshub_ai_fetch_urls option / filter).
-        $sources = PressHub_AI_URL_Fetcher::process_sources( $sources );
+        $sources = PressHub_AI_URL_Fetcher::process_sources( $sources, $this->get_action() );
 
         $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions
             . "\n\nFormat the draft as clean HTML for a WordPress post: use <h2> for section headings, <p> for paragraphs and <strong> for emphasis. Do NOT use Markdown syntax (no **, ## or *), and do NOT wrap the output in code fences.";
@@ -1035,6 +962,9 @@ class PressHub_AI_API_Client {
         $this->suppress_provider_prompt_log = true;
         $result = $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
         $this->suppress_provider_prompt_log = false;
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( $this->get_action() ); // taken by the call, or the call never ran
+        }
 
         // Issue #140 - generation record with the raw provider response (before Markdown conversion).
         self::finish_generation_record(
@@ -1243,6 +1173,10 @@ class PressHub_AI_API_Client {
     public function analyze_article_for_image_prompt( string $content, string $title = '', string $template = '', string $template_id = '' ) {
         $this->current_action = 'generate_image_prompt';
         $client = new self( 'image_prompt' );
+        // The call runs on $client, so the action goes there too. Without it the
+        // call ran as coauthor_draft and got the co-author's full policy fiches
+        // and agenda instead of the image prompt's short agenda.
+        $client->set_action( 'generate_image_prompt' );
 
         if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
             require_once __DIR__ . '/class-image-prompt-templates.php';
@@ -1268,7 +1202,10 @@ class PressHub_AI_API_Client {
 
         // Strip HTML and clamp excessively long text to protect token budgets
         $clean_content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
-        if ( mb_strlen( $clean_content ) > 8000 ) {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // Always called, so a text that fits drops an earlier note.
+            $clean_content = PressHub_AI_Knowledge_Cuts::clip_material( 'generate_image_prompt', $clean_content, 8000, __( 'Article text', 'presshub-ai-editor' ), '...' );
+        } elseif ( mb_strlen( $clean_content ) > 8000 ) {
             $clean_content = mb_substr( $clean_content, 0, 8000 ) . '...';
         }
 
@@ -1276,6 +1213,9 @@ class PressHub_AI_API_Client {
         $sys_prompt  = PressHub_AI_Image_Prompt_Templates::system_prompt_for( '' === $template_id ? PressHub_AI_Image_Prompt_Templates::DEFAULT_ID : $template_id );
 
         $result = $client->call_provider( $sys_prompt, $user_prompt, false, [], 0.3 );
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'generate_image_prompt' ); // taken by the call, or the call never ran
+        }
         if ( is_wp_error( $result ) ) {
             return $result;
         }
@@ -1298,6 +1238,8 @@ class PressHub_AI_API_Client {
      * @param array  $context      Optional article context for the Media Library metadata:
      *                             ['title' => string, 'content' => string]. When omitted it is
      *                             read from $post_id (post text, or the podcast script).
+     *                             'ai_metadata' => false skips the metadata LLM call and builds
+     *                             it from 'description' (the image's own plan text) instead.
      * @return array|WP_Error Array with 'id', 'url', 'prompt' on success, WP_Error on failure.
      */
     public function generate_featured_image( string $prompt, string $aspect_ratio = '', int $post_id = 0, array $context = [] ) {
@@ -1560,12 +1502,23 @@ class PressHub_AI_API_Client {
         // descriptive filename) so it can be found and reused later.
         $article_title   = (string) ( $context['title'] ?? '' );
         $article_content = (string) ( $context['content'] ?? '' );
-        if ( ( '' === trim( $article_title ) || '' === trim( $article_content ) ) && $post_id > 0 ) {
+        $plan_meta       = isset( $context['ai_metadata'] ) && false === $context['ai_metadata'];
+        // Plan-described images only need the title, so they skip the lookup when they have one.
+        if ( ( '' === trim( $article_title ) || ( ! $plan_meta && '' === trim( $article_content ) ) ) && $post_id > 0 ) {
             $post_ctx        = PressHub_AI_SEO::article_context_for_post( $post_id );
             $article_title   = '' !== trim( $article_title ) ? $article_title : $post_ctx['title'];
             $article_content = '' !== trim( $article_content ) ? $article_content : $post_ctx['content'];
         }
-        $media_meta = PressHub_AI_SEO::generate_image_metadata( $prompt, $article_title, PressHub_AI_SEO::clean_text( $article_content ), $post_id );
+        // Social post images and TikTok short frames are described by the AI plan
+        // that asked for them, so they pass 'ai_metadata' => false and get the
+        // deterministic metadata from that description: one LLM call less per image.
+        if ( $plan_meta ) {
+            $described  = trim( (string) ( $context['description'] ?? '' ) );
+            $media_meta = PressHub_AI_SEO::fallback_image_metadata( '' !== $described ? $described : $prompt, $article_title );
+            $media_meta['source'] = 'plan';
+        } else {
+            $media_meta = PressHub_AI_SEO::generate_image_metadata( $prompt, $article_title, PressHub_AI_SEO::clean_text( $article_content ), $post_id );
+        }
         $trace['media_meta_source'] = (string) ( $media_meta['source'] ?? '' );
 
         // Sideload into WordPress Media Library
@@ -2100,17 +2053,11 @@ class PressHub_AI_API_Client {
         } elseif ( ! empty( $provider_record['api_key'] ) ) {
             $tts_api_key = $provider_record['api_key'];
         }
-        if ( empty( $tts_api_key ) && class_exists( 'PressHub_AI_Settings_Storage' ) && method_exists( 'PressHub_AI_Settings_Storage', 'get_briefing_tts_api_key' ) ) {
-            $tts_api_key = (string) PressHub_AI_Settings_Storage::get_briefing_tts_api_key();
-        }
-        if ( empty( $tts_api_key ) ) {
-            $tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-        }
         if ( empty( $tts_api_key ) ) {
             $tts_api_key = ! empty( $this->briefing_tts_api_key ) ? $this->briefing_tts_api_key : $this->gemini_api_key;
         }
         if ( empty( $tts_api_key ) ) {
-            $tts_api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
+            $tts_api_key = self::lookup_provider_key_by_type( 'gemini' );
         }
         return $tts_api_key;
     }
@@ -2176,6 +2123,12 @@ class PressHub_AI_API_Client {
      * @param float  $pitch                     Voice pitch tuning in semitones (default 0.0).
      * @param string $payload_mode              Payload structure mode ('structured', 'hybrid_instruction', 'legacy').
      * @param string $custom_system_instruction Optional custom system instruction template.
+     * @param bool   $labelled_dialogue         2.74.0: send a two-speaker script as one text
+     *                                          with its "Name: line" labels kept (the names
+     *                                          match speakerVoiceConfigs), which is how Gemini
+     *                                          picks the voice of each line. Without it the
+     *                                          labels are stripped into separate parts, which
+     *                                          Gemini does not route by speaker.
      * @return array Complete request body array.
      */
     public static function build_gemini_tts_request_body(
@@ -2187,7 +2140,8 @@ class PressHub_AI_API_Client {
         float $speed = 1.0,
         float $pitch = 0.0,
         string $payload_mode = 'structured',
-        string $custom_system_instruction = ''
+        string $custom_system_instruction = '',
+        bool $labelled_dialogue = false
     ): array {
         $style_instructions = [
             'natural'     => 'Say naturally and clearly in Greek with warm human cadence:',
@@ -2270,7 +2224,15 @@ class PressHub_AI_API_Client {
 
         // Modern modes ('structured', 'hybrid_instruction', 'speech_metadata', 'system_instruction')
         $parts = [];
-        if ( $is_multi_speaker ) {
+        if ( $is_multi_speaker && $labelled_dialogue ) {
+            // One part holding the whole labelled dialogue: Gemini reads the labels to
+            // choose each line's voice and does not speak them.
+            $part = [ 'text' => $clean_text ];
+            if ( 'system_instruction' !== $payload_mode ) {
+                $part['speech_metadata'] = [ 'style' => $composed_style ];
+            }
+            $parts[] = $part;
+        } elseif ( $is_multi_speaker ) {
             $speaker_tags = [ 'Presenter\s*\d+', 'Speaker[_\s]*\d+', 'Host[_\s]*\d+', 'Ομιλητής\s*\d+', 'Παρουσιαστής\s*\d+' ];
             if ( ! empty( $multi_speakers ) ) {
                 foreach ( $multi_speakers as $ms ) {
@@ -2527,7 +2489,7 @@ class PressHub_AI_API_Client {
         if ( empty( $tts_api_key ) ) {
             return new WP_Error(
                 'no_gemini_key',
-                __( 'Google AI Studio Gemini API key is missing. Please configure your Gemini Provider or Speech API Key.', 'presshub-ai-editor' ),
+                __( 'Google AI Studio Gemini API key is missing. Add a key to a Gemini provider in Settings → Connections.', 'presshub-ai-editor' ),
                 [
                     'endpoint_masked' => $masked_url,
                     'headers_masked'  => $headers_masked,
@@ -2694,7 +2656,7 @@ class PressHub_AI_API_Client {
         $tts_api_key = $this->resolve_gemini_api_key();
 
         if ( empty( $tts_api_key ) ) {
-            $err_msg = __( 'Google AI Studio Gemini API key is missing. Please configure your Gemini Provider in the AI Providers tab or enter a Speech API Key in Briefing Settings.', 'presshub-ai-editor' );
+            $err_msg = __( 'Google AI Studio Gemini API key is missing. Add a key to a Gemini provider in Settings → Connections.', 'presshub-ai-editor' );
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error( '[LogosAI Speech] ' . $err_msg );
             }
@@ -2709,11 +2671,15 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'missing_tts_voice', $err_msg );
         }
 
-        $clean_text       = trim( $text );
-        $is_multi_speaker = false;
-        $multi_speakers   = [];
+        $clean_text        = trim( $text );
+        $is_multi_speaker  = false;
+        $multi_speakers    = [];
+        $labelled_dialogue = false;
         if ( ! empty( $speaker_configs ) && is_array( $speaker_configs ) && count( $speaker_configs ) >= 2 ) {
             foreach ( $speaker_configs as $sc ) {
+                if ( ! empty( $sc['labelled'] ) ) {
+                    $labelled_dialogue = true;
+                }
                 if ( ! empty( $sc['speaker'] ) && ! empty( $sc['voice'] ) ) {
                     $multi_speakers[] = [
                         'speaker'     => (string) $sc['speaker'],
@@ -2746,7 +2712,8 @@ class PressHub_AI_API_Client {
             $speed,
             $pitch,
             $payload_mode,
-            $sys_instruction
+            $sys_instruction,
+            $is_multi_speaker && $labelled_dialogue
         );
 
         // Resolve Model cascade
@@ -3155,6 +3122,17 @@ class PressHub_AI_API_Client {
         if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
             $sys_prompt = PressHub_AI_Policy_Fiches::apply( $sys_prompt, $policy_material, $this->get_action() );
         }
+        // Fact checks in the editorial memory (claims, photos or videos found false)
+        // that the material repeats; after the fiches, matched on the same material.
+        if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            $sys_prompt = PressHub_AI_Fact_Checks::apply( $sys_prompt, $policy_material, $this->get_action() );
+        }
+
+        // Material the caller cut to fit its limits (noted with
+        // PressHub_AI_Knowledge_Cuts::clip_material()) belongs to this call.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::start_call( $this->get_action() );
+        }
 
         if ( $this->provider === 'anthropic' ) {
             $result = $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature, $metadata );
@@ -3209,6 +3187,55 @@ class PressHub_AI_API_Client {
         }
 
         return $result;
+    }
+
+    /**
+     * Cache and reasoning token counts from a provider's usage block, for the
+     * token log's metadata. Only non-zero counts are returned, so rows without
+     * caching or thinking stay as they were.
+     *
+     * - Gemini: `cachedContentTokenCount` (implicit or explicit cache hits, part of
+     *   promptTokenCount) and `thoughtsTokenCount` (thinking tokens, billed as
+     *   output but NOT part of candidatesTokenCount).
+     * - OpenAI-compatible: `prompt_tokens_details.cached_tokens` and
+     *   `completion_tokens_details.reasoning_tokens`.
+     * - Anthropic: `cache_read_input_tokens` and `cache_creation_input_tokens`.
+     *
+     * @param string $format 'gemini', 'openai' or 'anthropic'.
+     * @param mixed  $body   Decoded response body.
+     * @return array<string,int>
+     */
+    public static function usage_extras( string $format, $body ): array {
+        if ( ! is_array( $body ) ) {
+            return [];
+        }
+        $map = [];
+        if ( 'gemini' === $format ) {
+            $u   = is_array( $body['usageMetadata'] ?? null ) ? $body['usageMetadata'] : [];
+            $map = [
+                'cached_tokens'   => $u['cachedContentTokenCount'] ?? 0,
+                'thoughts_tokens' => $u['thoughtsTokenCount'] ?? 0,
+            ];
+        } elseif ( 'openai' === $format ) {
+            $u   = is_array( $body['usage'] ?? null ) ? $body['usage'] : [];
+            $map = [
+                'cached_tokens'    => $u['prompt_tokens_details']['cached_tokens'] ?? 0,
+                'reasoning_tokens' => $u['completion_tokens_details']['reasoning_tokens'] ?? 0,
+            ];
+        } elseif ( 'anthropic' === $format ) {
+            $u   = is_array( $body['usage'] ?? null ) ? $body['usage'] : [];
+            $map = [
+                'cached_tokens'         => $u['cache_read_input_tokens'] ?? 0,
+                'cache_creation_tokens' => $u['cache_creation_input_tokens'] ?? 0,
+            ];
+        }
+        $out = [];
+        foreach ( $map as $key => $value ) {
+            if ( is_numeric( $value ) && (int) $value > 0 ) {
+                $out[ $key ] = (int) $value;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -3326,7 +3353,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
+                PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, array_merge( $metadata, self::usage_extras( 'openai', $res_body ) ) );
             }
             return $res_body['choices'][0]['message']['content'];
         }
@@ -3365,9 +3392,9 @@ class PressHub_AI_API_Client {
             'Authorization' => 'Bearer ' . $this->api_key,
             'Content-Type'  => 'application/json'
         ];
-        // P6: optional OpenAI-Organization header for multi-org accounts.
-        $org = get_option( 'presshub_ai_openai_org', '' );
-        if ( ! empty( $org ) ) {
+        // P6: optional OpenAI-Organization header, set on the provider in Connections (#309 E1).
+        $org = is_array( $this->headers ) ? trim( (string) ( $this->headers['OpenAI-Organization'] ?? '' ) ) : '';
+        if ( '' !== $org ) {
             $headers['OpenAI-Organization'] = $org;
         }
 
@@ -3406,7 +3433,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, array_merge( $metadata, self::usage_extras( 'openai', $body ) ) );
             }
             return $body['choices'][0]['message']['content'];
         }
@@ -3448,8 +3475,8 @@ class PressHub_AI_API_Client {
             'text' => $user_prompt
         ];
 
-        // P6: pin the anthropic-version header via settings (default 2023-06-01).
-        $version = (string) get_option( 'presshub_ai_anthropic_version', '2023-06-01' );
+        // P6: the anthropic-version header, set on the provider in Connections (#309 E1).
+        $version = $this->anthropic_version();
 
         $start_time = microtime( true );
         $action     = $this->get_action();
@@ -3498,7 +3525,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, array_merge( $metadata, self::usage_extras( 'anthropic', $body ) ) );
             }
             return $body['content'][0]['text'];
         }
@@ -3623,7 +3650,7 @@ class PressHub_AI_API_Client {
         $extracted_parts = ! empty( $answer_parts ) ? $answer_parts : $any_parts;
         if ( ! empty( $extracted_parts ) ) {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, array_merge( $metadata, self::usage_extras( 'gemini', $body ) ) );
             }
             return implode( '', $extracted_parts );
         }
@@ -3694,13 +3721,9 @@ class PressHub_AI_API_Client {
             }
         }
 
-        // Fallback to global options if still empty
+        // Another Connections provider of the same type if still empty (#237).
         if ( empty( $api_key ) || false !== strpos( $api_key, '•' ) ) {
-            if ( 'gemini' === $type ) {
-                $api_key = (string) get_option( 'presshub_ai_gemini_api_key', get_option( 'presshub_ai_api_key', '' ) );
-            } else {
-                $api_key = (string) get_option( 'presshub_ai_api_key', '' );
-            }
+            $api_key = self::lookup_provider_key_by_type( (string) $type );
         }
 
         if ( empty( $api_key ) && 'ollama_local' !== $type ) {
@@ -3710,7 +3733,7 @@ class PressHub_AI_API_Client {
         $models = [];
 
         if ( 'anthropic' === $type ) {
-            $version = (string) get_option( 'presshub_ai_anthropic_version', '2023-06-01' );
+            $version = $this->anthropic_version();
             $headers = [
                 'x-api-key'         => $api_key,
                 'anthropic-version' => $version,
@@ -3872,12 +3895,6 @@ class PressHub_AI_API_Client {
             ];
             if ( ! empty( $api_key ) ) {
                 $headers['Authorization'] = 'Bearer ' . $api_key;
-            }
-            if ( 'openai' === $type ) {
-                $org = (string) get_option( 'presshub_ai_openai_org', '' );
-                if ( '' !== $org ) {
-                    $headers['OpenAI-Organization'] = $org;
-                }
             }
             if ( ! empty( $this->headers ) && is_array( $this->headers ) ) {
                 $headers = array_merge( $headers, $this->headers );

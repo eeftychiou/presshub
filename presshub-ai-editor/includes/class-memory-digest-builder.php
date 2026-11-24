@@ -122,6 +122,22 @@ class PressHub_AI_Memory_Digest_Builder {
     }
 
     /**
+     * The briefing without its "Διαβάστε επίσης" list (PressHub_AI_Briefing_SEO).
+     * The list links to earlier posts, is added to the post after it is
+     * created, and is not news of the day: leaving it out keeps the digest
+     * source (and its hash) the same, so adding the list does not build the
+     * same edition's digest a second time.
+     */
+    public static function without_related_list( string $html ): string {
+        $class = class_exists( 'PressHub_AI_Briefing_SEO' ) ? PressHub_AI_Briefing_SEO::RELATED_CLASS : 'presshub-briefing-related';
+        // The whitespace in front goes too: add_internal_links() puts the list
+        // before the sources as "\n" . list . "\n", or at the end as "\n" . list,
+        // so removing it with its leading newline gives back the text exactly.
+        $out   = preg_replace( '#\s*<(h2|ul)\b[^>]*\bclass="[^"]*\b' . preg_quote( $class, '#' ) . '\b[^"]*"[^>]*>.*?</\1>#is', '', $html );
+        return is_string( $out ) ? trim( $out ) : $html;
+    }
+
+    /**
      * Strip optional markdown code fences from JSON response text.
      *
      * @param string $raw
@@ -172,7 +188,7 @@ class PressHub_AI_Memory_Digest_Builder {
 
         // Load briefing text from post content (stripped to text) as primary source, snapshot as fallback
         $briefing_text = '';
-        $raw_post_content = trim( (string) ( $post->post_content ?? '' ) );
+        $raw_post_content = self::without_related_list( trim( (string) ( $post->post_content ?? '' ) ) );
         if ( '' !== $raw_post_content ) {
             $briefing_text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $raw_post_content ) : strip_tags( $raw_post_content );
             $briefing_text = trim( $briefing_text );
@@ -462,7 +478,15 @@ class PressHub_AI_Memory_Digest_Builder {
             'attempt'        => $attempt,
         ];
 
-        $raw         = $api_client->call_provider( $sys_prompt, $user_prompt, true, [], null, $metadata );
+        // This call writes its own generation record below, so call_provider()
+        // must not add a second, generic one.
+        $suppressed = $api_client->suppress_provider_prompt_log;
+        $api_client->suppress_provider_prompt_log = true;
+        try {
+            $raw         = $api_client->call_provider( $sys_prompt, $user_prompt, true, [], null, $metadata );
+        } finally {
+            $api_client->suppress_provider_prompt_log = $suppressed;
+        }
         $duration_ms = (int) round( ( microtime( true ) - $t0 ) * 1000 );
 
         $record_id = 0;

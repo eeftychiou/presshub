@@ -3,6 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 require_once __DIR__ . '/class-settings-storage.php';
 require_once __DIR__ . '/class-qa-reviewer.php';
+require_once __DIR__ . '/class-seo.php';
+require_once __DIR__ . '/class-publish-gate.php';
 
 class PressHub_AI_Workflow {
     /**
@@ -16,9 +18,34 @@ class PressHub_AI_Workflow {
      */
     private static $enforcing = false;
 
+    /** Terms and featured image of the REST request being saved, by post id. */
+    private static $rest_state = [];
+
     public function __construct() {
         // Intercept transitions to ensure authors cannot publish without review
         add_action( 'transition_post_status', [ $this, 'enforce_editorial_workflow' ], 10, 3 );
+        add_filter( 'rest_pre_insert_post', [ $this, 'remember_rest_terms' ], 10, 2 );
+        add_action( 'save_post_post', [ $this, 'remember_scheduler' ], 10, 2 );
+    }
+
+    /**
+     * Remember the last person to save a scheduled post. At go-live by cron
+     * the "Check posts editors publish" opt-out looks at them: an author's
+     * edit to a post an editor scheduled is still checked. REST saves do
+     * not always update _edit_last, so it is not relied on.
+     */
+    public function remember_scheduler( $post_id, $post = null ) {
+        $post_id = (int) $post_id;
+        if ( $post_id <= 0 || ! is_object( $post ) || 'future' !== ( $post->post_status ?? '' ) ) {
+            return;
+        }
+        if ( ( function_exists( 'wp_is_post_revision' ) && wp_is_post_revision( $post_id ) ) || ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) ) {
+            return;
+        }
+        $user = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+        if ( $user > 0 ) {
+            update_post_meta( $post_id, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, $user );
+        }
     }
 
     public function enforce_editorial_workflow( $new_status, $old_status, $post ) {
@@ -32,22 +59,28 @@ class PressHub_AI_Workflow {
             return;
         }
 
-        // Automated Daily Briefing Hub posts (text briefing stories & audio podcasts)
-        // are governed by their own settings (presshub_ai_briefing_text_status /
-        // presshub_ai_briefing_podcast_status), not by the co-pilot author scorecard gate.
-        if ( ! empty( get_post_meta( $post->ID, '_presshub_briefing_type', true ) ) ) {
+        // A new post saved through REST had no ID when its terms were
+        // remembered: this first transition is that post's insert.
+        if ( isset( self::$rest_state[0] ) && ! empty( $post->ID ) ) {
+            if ( ! isset( self::$rest_state[ (int) $post->ID ] ) ) {
+                self::$rest_state[ (int) $post->ID ] = self::$rest_state[0];
+            }
+            unset( self::$rest_state[0] );
+        }
+
+        // The gate's own status changes (release(), Publish anyway) are not reviewed again.
+        if ( PressHub_AI_Publish_Gate::is_releasing() ) {
             return;
         }
 
-        // The Trending in Cyprus social roundup is written by the worker / cron
-        // and follows its own "New posts are" setting.
-        if ( ! empty( get_post_meta( $post->ID, '_presshub_social_trending_key', true ) ) ) {
-            return;
-        }
-
-        // Cron and headless flows run without a logged-in user (user 0) where
-        // current_user_can() is unreliable. Never block scheduled/cron publishing.
-        if ( ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
+        // Automated posts (Daily Briefing text and podcast, the Trending
+        // roundup) are reviewed by release() when they are created. A person
+        // publishing one by hand (a held briefing opened from the alert
+        // email) goes through the gate like any other post, in its context,
+        // when that context is checked; cron never re-reviews them.
+        $context   = PressHub_AI_Publish_Gate::context_for_post( $post );
+        $automated = 'post' !== $context;
+        if ( $automated && ! PressHub_AI_Publish_Gate::applies( $context ) ) {
             return;
         }
 
@@ -57,62 +90,128 @@ class PressHub_AI_Workflow {
             return;
         }
 
-        // If an author tries to publish directly, block it if it hasn't passed QA review
-        if ( 'publish' === $new_status && 'publish' !== $old_status ) {
-            // Allow editors/admins to bypass, but not authors
-            if ( ! current_user_can( 'edit_others_posts' ) ) {
-                if ( ! PressHub_AI_Settings_Storage::get_qa_enabled() ) {
+        $goes_live = 'publish' === $new_status && 'publish' !== $old_status;
+        $schedules = 'future' === $new_status && 'future' !== $old_status;
+        if ( ( ! $goes_live && ! $schedules ) || ! PressHub_AI_Settings_Storage::get_qa_enabled() ) {
+            return;
+        }
+
+        $by_cron  = ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON );
+
+        // A scheduled post coming due is published by cron (user 0). It was
+        // reviewed when it was scheduled, and the saved review is reused
+        // unless the post or the gate settings changed since.
+        $due      = $goes_live && 'future' === $old_status;
+        if ( $by_cron && ( ! $due || $automated ) ) {
+            return;
+        }
+
+        // Editors and admins are checked too, unless "Check posts editors publish" is off.
+        // At go-live by cron there is no user: look at who scheduled it, else who last saved it.
+        if ( ! PressHub_AI_Settings_Storage::get_qa_check_editors() ) {
+            if ( $by_cron ) {
+                $last = (int) get_post_meta( $post->ID, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, true );
+                $last = $last > 0 ? $last : (int) get_post_meta( $post->ID, '_edit_last', true );
+                $last = $last > 0 ? $last : (int) ( $post->post_author ?? 0 );
+                if ( $last > 0 && function_exists( 'user_can' ) && user_can( $last, 'edit_others_posts' ) ) {
                     return;
                 }
+            } elseif ( current_user_can( 'edit_others_posts' ) ) {
+                return;
+            }
+        }
 
-                $min_score = PressHub_AI_Settings_Storage::get_qa_min_score();
-                $scorecard = get_post_meta( $post->ID, '_presshub_ai_scorecard', true );
+        // Released with "Publish anyway" and unchanged since.
+        if ( PressHub_AI_Publish_Gate::is_overridden( $post, $context ) ) {
+            return;
+        }
 
-                $content_hash = md5( trim( (string) ( $post->post_content ?? '' ) ) );
-                $cached_hash  = (string) get_post_meta( $post->ID, '_presshub_ai_scorecard_hash', true );
+        if ( $due ) {
+            $trigger = 'scheduled_publish';
+        } elseif ( $schedules ) {
+            $trigger = current_user_can( 'edit_others_posts' ) ? 'editor_schedule' : 'author_schedule';
+        } else {
+            $trigger = current_user_can( 'edit_others_posts' ) ? 'editor_publish' : 'author_publish';
+        }
 
-                $needs_eval = true;
-                if ( is_array( $scorecard ) && isset( $scorecard['score'] ) ) {
-                    if ( '' !== $cached_hash && $cached_hash === $content_hash ) {
-                        $needs_eval = false;
-                    } elseif ( '' === $cached_hash ) {
-                        // Seeded or legacy meta without cached hash
-                        $needs_eval = false;
-                    }
+        $gate = PressHub_AI_Publish_Gate::review_post( $post, $trigger, [
+            'seo_input' => self::seo_input( $post ),
+            'context'   => $context,
+        ] );
+
+        if ( PressHub_AI_Publish_Gate::holds( $gate ) ) {
+            self::$enforcing = true;
+            try {
+                // Remember where it was going, so "Publish anyway" can send it there.
+                update_post_meta( $post->ID, PressHub_AI_Publish_Gate::META_TARGET_STATUS, $new_status );
+                wp_update_post( [
+                    'ID'          => $post->ID,
+                    'post_status' => 'pending',
+                ] );
+                PressHub_AI_Publish_Gate::notify( (int) $post->ID, $gate );
+            } finally {
+                self::$enforcing = false;
+            }
+        } elseif ( 'alert' === ( $gate['verdict'] ?? '' ) ) {
+            PressHub_AI_Publish_Gate::notify( (int) $post->ID, $gate );
+        }
+    }
+
+    /**
+     * Block editor saves set tags, categories and the featured image after
+     * wp_insert_post() has fired transition_post_status, so remember what the
+     * request carries and let the SEO check measure that.
+     *
+     * @param stdClass        $prepared_post
+     * @param WP_REST_Request $request
+     */
+    public function remember_rest_terms( $prepared_post, $request ) {
+        if ( is_object( $prepared_post ) && is_object( $request ) && method_exists( $request, 'get_param' ) ) {
+            $state = [];
+            foreach ( [ 'tags', 'categories', 'featured_media' ] as $key ) {
+                $value = $request->get_param( $key );
+                if ( null !== $value ) {
+                    $state[ $key ] = $value;
                 }
+            }
+            if ( $state ) {
+                // A new post created straight as published has no ID yet: keep it under 0 for its insert.
+                self::$rest_state[ (int) ( $prepared_post->ID ?? 0 ) ] = $state;
+            }
+        }
+        return $prepared_post;
+    }
 
-                $eval_result = null;
-                if ( $needs_eval && class_exists( 'PressHub_AI_QA_Reviewer' ) ) {
-                    $eval_result = PressHub_AI_QA_Reviewer::evaluate_post( $post );
-                    $passed      = (bool) ( $eval_result['passed'] ?? false );
-                } else {
-                    $score       = isset( $scorecard['score'] ) ? (int) $scorecard['score'] : 0;
-                    $passed      = ( $score >= $min_score );
-                    $eval_result = [
-                        'passed'   => $passed,
-                        'score'    => $score,
-                        'feedback' => (string) ( $scorecard['feedback'] ?? '' ),
-                        'error'    => null,
-                    ];
-                }
-
-                if ( ! $passed ) {
-                    self::$enforcing = true;
-                    try {
-                        // Revert to pending
-                        wp_update_post( [
-                            'ID'          => $post->ID,
-                            'post_status' => 'pending',
-                        ] );
-
-                        if ( class_exists( 'PressHub_AI_QA_Reviewer' ) ) {
-                            PressHub_AI_QA_Reviewer::notify_editor_failure( $post->ID, $eval_result, 'post' );
-                        }
-                    } finally {
-                        self::$enforcing = false;
-                    }
+    /** SEO input of the post being published, with the REST request's terms and image. */
+    private static function seo_input( $post ): array {
+        $post_id = (int) ( $post->ID ?? 0 );
+        $input   = class_exists( 'PressHub_AI_SEO' ) ? PressHub_AI_SEO::input_for_post( $post_id ) : [ 'post_id' => $post_id ];
+        foreach ( [ 'title' => 'post_title', 'content' => 'post_content', 'excerpt' => 'post_excerpt' ] as $key => $field ) {
+            if ( isset( $post->$field ) ) {
+                $input[ $key ] = (string) $post->$field;
+            }
+        }
+        $state = self::$rest_state[ $post_id ] ?? [];
+        // One request's terms are used once, never by a later save.
+        unset( self::$rest_state[ $post_id ] );
+        if ( isset( $state['tags'] ) && function_exists( 'get_term' ) ) {
+            $input['tags_from_request'] = true;
+            $input['tags'] = [];
+            foreach ( (array) $state['tags'] as $tid ) {
+                $term = get_term( (int) $tid, 'post_tag' );
+                if ( $term && ! is_wp_error( $term ) && isset( $term->name ) ) {
+                    $input['tags'][] = (string) $term->name;
                 }
             }
         }
+        if ( isset( $state['categories'] ) && function_exists( 'get_cat_name' ) ) {
+            $input['categories'] = array_values( array_filter( array_map( static function ( $cid ) {
+                return (string) get_cat_name( (int) $cid );
+            }, (array) $state['categories'] ) ) );
+        }
+        if ( isset( $state['featured_media'] ) ) {
+            $input['featured_image_id'] = (int) $state['featured_media'];
+        }
+        return $input;
     }
 }

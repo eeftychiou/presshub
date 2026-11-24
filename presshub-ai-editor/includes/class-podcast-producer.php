@@ -1181,6 +1181,12 @@ class PressHub_AI_Podcast_Producer {
             $record_duration = ! empty( $duration )
                 ? $duration
                 : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_target_duration() : '5_min' );
+            // What call_provider() added to the system prompt (editorial agenda,
+            // people and policy fiches): the record keeps the prompt as sent
+            // and lists the fiches, like every other generation record.
+            $gen_injected = method_exists( 'PressHub_AI_Generation_Recorder', 'apply_injected_context' )
+                ? PressHub_AI_Generation_Recorder::apply_injected_context( $prompts['system_prompt'], [] )
+                : [ $prompts['system_prompt'], [] ];
             $record_id = (int) PressHub_AI_Generation_Recorder::record( [
                 'kind'          => 'podcast_script',
                 'briefing_date' => $date,
@@ -1188,7 +1194,7 @@ class PressHub_AI_Podcast_Producer {
                 'status'        => is_wp_error( $response ) ? 'error' : 'success',
                 'error_message' => is_wp_error( $response ) ? $response->get_error_message() : '',
                 'memory'        => $this->last_memory_manifest(),
-                'config'        => PressHub_AI_Generation_Recorder::build_client_config(
+                'config'        => array_merge( PressHub_AI_Generation_Recorder::build_client_config(
                     $api_client,
                     [
                         'preset_id'    => $preset_id,
@@ -1197,9 +1203,9 @@ class PressHub_AI_Podcast_Producer {
                         'duration'     => $record_duration,
                         'style'        => $style,
                     ]
-                ),
+                ), $gen_injected[1] ),
                 'inputs'        => $this->last_input_breakdown() + [ 'selected_article_ids' => $selected_article_ids ],
-                'system_prompt' => $prompts['system_prompt'],
+                'system_prompt' => (string) $gen_injected[0],
                 'user_prompt'   => $prompts['user_prompt'],
                 'response_text' => is_wp_error( $response ) ? '' : (string) $response,
                 'usage'         => $gen_usage,

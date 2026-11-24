@@ -679,6 +679,47 @@ jQuery(document).ready(function($) {
         return 'presshub-score-high';
     }
 
+    // QA gate verdict and the legal issues it found (quote + suggested fix).
+    function renderGateResult(gate) {
+        if (!gate) {
+            return;
+        }
+        var verdicts = {
+            pass: __('QA gate: all checks passed.', 'presshub-ai-editor'),
+            alert: __('QA gate: this post can be published, but the editor will be alerted about the failed checks.', 'presshub-ai-editor'),
+            hold: __('QA gate: this post will be held in Pending Review until the failed checks are fixed.', 'presshub-ai-editor')
+        };
+        var checkNames = {
+            editorial: __('editorial', 'presshub-ai-editor'),
+            legal: __('legal', 'presshub-ai-editor'),
+            seo: __('SEO', 'presshub-ai-editor')
+        };
+        var failed = [];
+        for (var f = 0; f < (gate.failed || []).length; f++) {
+            failed.push(checkNames[gate.failed[f]] || gate.failed[f]);
+        }
+        var html = '<div class="presshub-gate-result">';
+        if (verdicts[gate.verdict]) {
+            html += '<p><strong>' + presshubEsc(verdicts[gate.verdict]) + '</strong>';
+            if (failed.length && 'pass' !== gate.verdict) {
+                html += ' ' + presshubEsc(__('Failed checks: %s.', 'presshub-ai-editor').replace('%s', failed.join(', ')));
+            }
+            html += '</p>';
+        }
+        var issues = (gate.legal && gate.legal.issues) ? gate.legal.issues : [];
+        if (issues.length) {
+            html += '<strong>' + presshubEsc(__('Legal issues:', 'presshub-ai-editor')) + '</strong><ol class="presshub-legal-issues">';
+            for (var i = 0; i < issues.length; i++) {
+                html += '<li><em>' + presshubEsc(issues[i].severity) + '</em>: &ldquo;' +
+                    presshubEsc(issues[i].quote) + '&rdquo;<br />' +
+                    presshubEsc(__('Fix:', 'presshub-ai-editor')) + ' ' + presshubEsc(issues[i].fix) + '</li>';
+            }
+            html += '</ol>';
+        }
+        html += '</div>';
+        $('#presshub-ai-scorecard-results').append(html);
+    }
+
     function renderScorecard(score, feedback, $btn, libelRisk, legalConcerns) {
         var scoreText = __('Score: %s/100', 'presshub-ai-editor')
             .replace('%s', presshubEsc(score));
@@ -880,6 +921,16 @@ jQuery(document).ready(function($) {
                     response.data.legal_concerns
                 );
                 renderSeoReview(response.data.seo || null);
+                renderGateResult(response.data.gate || null);
+                // The QA gate panel at the top of the box shows this review
+                // too: redraw it, and drop the scorecard copy once it does.
+                if (typeof window.presshubQaGatePanelRefresh === 'function') {
+                    window.presshubQaGatePanelRefresh(function(html) {
+                        if (html) {
+                            $('#presshub-ai-scorecard-results').empty();
+                        }
+                    });
+                }
 
                 // ME-8 / F-29: tell the journalist what happened to the
                 // post status, derived from the server response.
@@ -2362,8 +2413,9 @@ jQuery(document).ready(function($) {
             $('#provider-form-temperature').val(providerData.temperature !== undefined ? providerData.temperature : 0.7);
             $('#provider-form-max-tokens').val(providerData.max_tokens !== undefined ? providerData.max_tokens : 20000);
             $('#provider-form-timeout').val(providerData.timeout !== undefined ? providerData.timeout : 300);
-            var headers = providerData.headers ? (typeof providerData.headers === 'object' ? JSON.stringify(providerData.headers) : providerData.headers) : '';
-            $('#provider-form-headers').val(headers);
+            fillProviderHeaderFields(providerData.headers, providerData.type || 'openai');
+            // Opened from the card alone (no record in memory): the headers are unknown.
+            providerHeadersKnown = providerData.headers !== undefined;
             $('#provider-form-enabled').prop('checked', !!providerData.enabled);
 
             var maskedKey = providerData.masked_key || providerData.masked_api_key || (providerData.api_key ? (providerData.api_key.indexOf('•') !== -1 ? providerData.api_key : maskApiKey(providerData.api_key)) : '');
@@ -2384,6 +2436,8 @@ jQuery(document).ready(function($) {
             $('#provider-form-max-tokens').val('20000');
             $('#provider-form-timeout').val('300');
             $('#provider-form-api-key').attr('placeholder', __('Enter API Key', 'presshub-ai-editor'));
+            fillProviderHeaderFields({}, $('#provider-form-type').val());
+            providerHeadersKnown = true;
 
             var firstTmplKey = Object.keys(providerTemplates)[0] || 'openai';
             var tmpl = providerTemplates[firstTmplKey] || {};
@@ -2393,6 +2447,7 @@ jQuery(document).ready(function($) {
             $('#provider-model-manual-wrap').hide();
         }
 
+        toggleProviderHeaderFields();
         $modal.data('presshub-opener', document.activeElement);
         $modal.show().addClass('is-open');
         $('body').addClass('presshub-modal-open');
@@ -2400,6 +2455,91 @@ jQuery(document).ready(function($) {
         providerModalBaseline = getProviderModalSnapshot();
         // Move focus into the dialog (#285 review).
         $modal.find('input, select, textarea, button').filter(':visible:not(:disabled)').not('.presshub-modal-close').first().trigger('focus');
+    }
+
+    // #309 (E1): the OpenAI organization and the Anthropic API version have
+    // their own fields; they are stored in the provider's headers.
+    var providerHeadersKnown = true;
+    // The type the header fields were filled for: only that type's header has
+    // its own field; the same header on any other type stays in the JSON box.
+    var providerHeaderType = '';
+    var PROVIDER_HEADER_FIELDS = {
+        openai: { header: 'OpenAI-Organization', field: '#provider-form-openai-org' },
+        anthropic: { header: 'anthropic-version', field: '#provider-form-anthropic-version' }
+    };
+
+    function fillProviderHeaderFields(headers, type) {
+        var rest = {};
+        if (typeof headers === 'string' && headers.trim()) {
+            try { headers = JSON.parse(headers); } catch (err) { headers = {}; }
+        }
+        if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+            Object.keys(headers).forEach(function(name) { rest[name] = headers[name]; });
+        }
+        providerHeaderType = type || '';
+        Object.keys(PROVIDER_HEADER_FIELDS).forEach(function(fieldType) {
+            var map = PROVIDER_HEADER_FIELDS[fieldType];
+            var value = '';
+            if (fieldType === providerHeaderType) {
+                Object.keys(rest).forEach(function(name) {
+                    if (name.toLowerCase() === map.header.toLowerCase()) {
+                        value = String(rest[name]);
+                        delete rest[name];
+                    }
+                });
+            }
+            $(map.field).val(value);
+        });
+        $('#provider-form-headers').val(Object.keys(rest).length ? JSON.stringify(rest) : '');
+    }
+
+    // The type changed: give the old type's field back to the JSON box, then
+    // take the new type's header out of it.
+    function switchProviderHeaderType(type) {
+        var headers = collectProviderHeaders();
+        if (headers !== null) {
+            fillProviderHeaderFields(headers, type);
+        } else {
+            providerHeaderType = type; // Bad JSON: left as typed; Save reports it.
+        }
+        toggleProviderHeaderFields();
+    }
+
+    function toggleProviderHeaderFields() {
+        var type = $('#provider-form-type').val();
+        $('.presshub-provider-header-field').each(function() {
+            this.hidden = $(this).data('provider-type') !== type;
+        });
+    }
+
+    // The headers to send: the JSON box plus the field of this provider type.
+    // Null when the JSON box is not a JSON object (the caller shows an error).
+    function collectProviderHeaders() {
+        var raw = $('#provider-form-headers').val().trim();
+        var headers = {};
+        if (raw) {
+            try { headers = JSON.parse(raw); } catch (err) { return null; }
+            if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+                return null;
+            }
+        }
+        var map = PROVIDER_HEADER_FIELDS[providerHeaderType];
+        if (map) {
+            Object.keys(headers).forEach(function(name) {
+                if (name.toLowerCase() === map.header.toLowerCase()) {
+                    delete headers[name];
+                }
+            });
+            var value = $(map.field).val().trim();
+            if (value) {
+                headers[map.header] = value;
+            }
+        }
+        return headers;
+    }
+
+    function providerHeadersError($notice) {
+        $notice.html('<div class="notice notice-error"><p>' + presshubEsc(__('Custom HTTP headers must be a JSON object, for example {"HTTP-Referer": "https://mysite.com"}.', 'presshub-ai-editor')) + '</p></div>');
     }
 
     function closeProviderModal() {
@@ -2479,11 +2619,13 @@ jQuery(document).ready(function($) {
         $('#provider-form-temperature').val(tmpl.temperature !== undefined ? tmpl.temperature : 0.7);
         $('#provider-form-max-tokens').val(tmpl.max_tokens !== undefined ? tmpl.max_tokens : 20000);
         $('#provider-form-timeout').val(tmpl.timeout !== undefined ? tmpl.timeout : 300);
+        switchProviderHeaderType($('#provider-form-type').val());
     });
 
     // Provider Type Change Handler
     $(document).on('change', '#provider-form-type', function() {
         var provType = $(this).val();
+        switchProviderHeaderType(provType);
         if (providerTemplates[provType]) {
             var tmpl = providerTemplates[provType];
             if (!$('#provider-form-base-url').val()) {
@@ -2531,8 +2673,12 @@ jQuery(document).ready(function($) {
             type: $('#provider-form-type').val(),
             base_url: $('#provider-form-base-url').val().trim(),
             api_key: $('#provider-form-api-key').val().trim(),
-            headers: $('#provider-form-headers').val().trim()
+            headers: collectProviderHeaders()
         };
+        if (providerData.headers === null) {
+            providerHeadersError($notice);
+            return;
+        }
 
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
@@ -2634,9 +2780,16 @@ jQuery(document).ready(function($) {
             temperature: parseFloat($('#provider-form-temperature').val()) || 0.7,
             max_tokens: parseInt($('#provider-form-max-tokens').val(), 10) || 20000,
             timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
-            headers: $('#provider-form-headers').val().trim(),
+            headers: collectProviderHeaders(),
             enabled: $('#provider-form-enabled').is(':checked') ? 1 : 0
         };
+        if (providerData.headers === null) {
+            providerHeadersError($notice);
+            return;
+        }
+        if (!providerHeadersKnown && $.isEmptyObject(providerData.headers)) {
+            delete providerData.headers; // Keep the saved headers.
+        }
 
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
@@ -2769,8 +2922,12 @@ jQuery(document).ready(function($) {
             api_key: $('#provider-form-api-key').val().trim(),
             default_model: defaultModel,
             timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
-            headers: $('#provider-form-headers').val().trim()
+            headers: collectProviderHeaders()
         };
+        if (providerData.headers === null) {
+            providerHeadersError($notice);
+            return;
+        }
 
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
@@ -4120,17 +4277,11 @@ jQuery(document).ready(function($) {
                 }
 
                 if (res.data && res.data.masks) {
-                    if (res.data.masks.api_key) {
-                        $('#presshub_ai_api_key').attr('placeholder', res.data.masks.api_key);
-                    }
                     if (res.data.masks.google_cloud_key) {
                         $('#presshub_ai_google_cloud_api_key').attr('placeholder', res.data.masks.google_cloud_key);
                     }
                     if (res.data.masks.github_token) {
                         $('#presshub_ai_github_token').attr('placeholder', res.data.masks.github_token);
-                    }
-                    if (res.data.masks.briefing_tts_key) {
-                        $('#presshub_ai_briefing_tts_api_key').attr('placeholder', res.data.masks.briefing_tts_key);
                     }
                 }
             } else {
@@ -4296,17 +4447,11 @@ jQuery(document).ready(function($) {
                 $('#presshub-ai-settings-tabs').before(noticeHtml);
 
                 if (res.data && res.data.masks) {
-                    if (res.data.masks.api_key) {
-                        $('#presshub_ai_api_key').attr('placeholder', res.data.masks.api_key);
-                    }
                     if (res.data.masks.google_cloud_key) {
                         $('#presshub_ai_google_cloud_api_key').attr('placeholder', res.data.masks.google_cloud_key);
                     }
                     if (res.data.masks.github_token) {
                         $('#presshub_ai_github_token').attr('placeholder', res.data.masks.github_token);
-                    }
-                    if (res.data.masks.briefing_tts_key) {
-                        $('#presshub_ai_briefing_tts_api_key').attr('placeholder', res.data.masks.briefing_tts_key);
                     }
                 }
             } else {

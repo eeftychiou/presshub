@@ -247,6 +247,10 @@ class PressHub_Social_Ajax_Handlers {
 
         $secret = wp_generate_password( 32, false );
         update_option( 'presshub_social_worker_secret', $secret );
+        // #309 (E4): audited, never with the secret itself.
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'worker_secret_regenerated', 'setting', 'presshub_social_worker_secret', [ 'masked' => PressHub_Social_Logger::mask_secret( $secret ) ] );
+        }
         require_once __DIR__ . '/class-connection-status.php';
         PressHub_Connection_Status::forget( 'worker' );
         // The worker's last heartbeat was signed with the old secret.
@@ -291,6 +295,9 @@ class PressHub_Social_Ajax_Handlers {
 
         if ( 'worker' === $platform ) {
             $res = PressHub_Social_Worker_Client::check_health();
+        } elseif ( 'youtube' === $platform && class_exists( 'PressHub_Social_YouTube' ) ) {
+            // YouTube is tested against the API: the sign-in lives here, not on the worker.
+            $res = PressHub_Social_YouTube::test_connection();
         } else {
             $engine = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_platform_engine' )
                 ? PressHub_Social_Settings_Storage::get_platform_engine( $platform )
@@ -338,6 +345,13 @@ class PressHub_Social_Ajax_Handlers {
 
         if ( $job_id <= 0 ) {
             wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-ai-editor' ) ], 400 );
+        }
+
+        $existing = PressHub_Social_Queue::get_job( $job_id );
+        if ( is_array( $existing ) && 'youtube' === ( $existing['platform'] ?? '' ) && class_exists( 'PressHub_Social_YouTube' ) && ! PressHub_Social_YouTube::can_retry( $existing ) ) {
+            wp_send_json_error( [ 'message' => 'published' === ( $existing['status'] ?? '' )
+                ? __( 'This video is already on YouTube. Retrying would upload it a second time. Delete it on YouTube first and use Re-post.', 'presshub-social-autopost' )
+                : __( 'This YouTube job is still uploading. Retry is offered once it has been stuck for 3 hours.', 'presshub-social-autopost' ) ], 409 );
         }
 
         $success = PressHub_Social_Queue::retry_job( $job_id );
@@ -501,6 +515,28 @@ class PressHub_Social_Ajax_Handlers {
             ] );
         }
 
+        // An English or Turkish episode's description is its translation's, never the
+        // Greek copywriter's.
+        if ( class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::episode_language( $job ) && class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+            $entry   = PressHub_AI_Podcast_Translations::get_entry( $post_id, PressHub_Social_YouTube::episode_language( $job ) );
+            $caption = trim( (string) ( $entry['description'] ?? '' ) );
+            if ( '' === $caption ) {
+                $caption = trim( (string) ( $entry['title'] ?? '' ) );
+            }
+            if ( '' === $caption ) {
+                wp_send_json_error( [ 'message' => __( 'This episode\'s translation has no description.', 'presshub-social-autopost' ) ], 400 );
+            }
+            PressHub_Social_Queue::update_job_copy( $job_id, $caption );
+            wp_send_json_success( [
+                'message'  => __( 'Translated episode description restored.', 'presshub-social-autopost' ),
+                'job_id'   => $job_id,
+                'post_id'  => $post_id,
+                'platform' => $platform,
+                'new_copy' => $caption,
+                'preview'  => wp_trim_words( $caption, 15 ),
+            ] );
+        }
+
         if ( ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
             wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-ai-editor' ) ], 500 );
         }
@@ -568,7 +604,9 @@ class PressHub_Social_Ajax_Handlers {
 
         // A TikTok short's caption is its own; it is not the post's TikTok copy.
         $is_short = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
-        if ( ! $is_short && ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
+        // Nor is an English or Turkish episode's description the post's (Greek) YouTube copy.
+        $is_lang = class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::episode_language( $job );
+        if ( ! $is_short && ! $is_lang && ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
             update_post_meta( (int) $job['post_id'], '_presshub_social_copy_' . sanitize_key( $job['platform'] ), $post_copy );
         }
 
@@ -609,7 +647,7 @@ class PressHub_Social_Ajax_Handlers {
 
         $dispatch_message = '';
         if ( $dispatch_now ) {
-            $dispatch_result = PressHub_Social_Dispatcher::dispatch_job( $new_job_id );
+            $dispatch_result = PressHub_Social_Dispatcher::dispatch_job( $new_job_id, false );
             if ( is_wp_error( $dispatch_result ) ) {
                 // translators: %s: error message
                 $dispatch_message = sprintf( __( ' (Warning: dispatch encountered: %s)', 'presshub-ai-editor' ), $dispatch_result->get_error_message() );

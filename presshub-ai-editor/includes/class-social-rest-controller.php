@@ -49,6 +49,26 @@ class PressHub_Social_REST_Controller {
 
         register_rest_route(
             self::REST_NAMESPACE,
+            '/worker/youtube/token',
+            [
+                'methods'             => 'POST',
+                'callback'            => [ __CLASS__, 'handle_youtube_token' ],
+                'permission_callback' => [ __CLASS__, 'verify_worker_secret' ],
+            ]
+        );
+
+        register_rest_route(
+            self::REST_NAMESPACE,
+            '/worker/facebook/token',
+            [
+                'methods'             => 'POST',
+                'callback'            => [ __CLASS__, 'handle_facebook_token' ],
+                'permission_callback' => [ __CLASS__, 'verify_worker_secret' ],
+            ]
+        );
+
+        register_rest_route(
+            self::REST_NAMESPACE,
             '/worker/complete',
             [
                 'methods'             => 'POST',
@@ -252,6 +272,40 @@ class PressHub_Social_REST_Controller {
             }
         }
 
+        // YouTube jobs go only to a worker that reported it can upload them, and only
+        // while a channel is connected and the daily quota is not used up: otherwise they wait in the queue (Connections
+        // shows why) instead of failing on the worker. An older worker that sends no
+        // sessions (every platform) never gets them either.
+        $youtube_ok = in_array( 'youtube', $active_platforms, true ) && class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected() && 0 === PressHub_Social_YouTube::paused_until();
+        if ( ! $youtube_ok && in_array( 'youtube', $active_platforms, true ) ) {
+            $active_platforms = array_values( array_diff( $active_platforms, [ 'youtube' ] ) );
+            if ( empty( $active_platforms ) ) {
+                return [ 'ok' => true, 'jobs' => [] ];
+            }
+        } elseif ( empty( $active_platforms ) ) {
+            // No list means every platform but YouTube. Filter in the query, so waiting
+            // YouTube jobs at the front of the queue never crowd out the others.
+            $active_platforms = PressHub_Social_Settings_Storage::ENGINE_PLATFORMS;
+        }
+
+        // Facebook Reels through the Graph API need no browser session, only a worker that
+        // says it can upload them. Facebook link posts are API jobs then, so the only
+        // Facebook jobs such a worker gets without a session are Reels.
+        $capabilities  = self::get_param( $request, 'capabilities' );
+        $reels_api     = is_array( $capabilities ) && in_array( 'facebook_reels_api', $capabilities, true )
+            && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::facebook_reels_via_api();
+        $fb_reels_only = false;
+        // TikTok photo slides go only to a worker that can post them (1.10.0+): an older
+        // worker would post them as a classic TikTok video. They wait in the queue.
+        $slides_ok = is_array( $capabilities ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && in_array( PressHub_Social_TikTok_Shorts::SLIDES_CAPABILITY, $capabilities, true );
+        // X video posts go only to a worker that renders shorts for X (1.12.0+): an older
+        // worker would post an X short as a plain tweet. They wait in the queue.
+        $x_video_ok = is_array( $capabilities ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && in_array( PressHub_Social_TikTok_Shorts::TWITTER_VIDEO_CAPABILITY, $capabilities, true );
+        if ( $reels_api && ! in_array( 'facebook', $active_platforms, true ) ) {
+            $active_platforms[] = 'facebook';
+            $fb_reels_only      = true;
+        }
+
         // A TikTok short is claimed only once its script and audio are prepared in the
         // background, so this request never waits on an LLM or TTS call. Unprepared shorts
         // are passed over (their preparation is rescheduled) and the query looks past them,
@@ -270,8 +324,63 @@ class PressHub_Social_REST_Controller {
                 break;
             }
             foreach ( $batch as $candidate ) {
+                if ( $fb_reels_only && 'facebook' === ( $candidate['platform'] ?? '' ) && ! PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) ) {
+                    // A browser Facebook post, but this worker has no Facebook session.
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                if ( ! $slides_ok && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_slides_job( $candidate ) ) {
+                    if ( 'Waiting' !== substr( (string) ( $candidate['last_error'] ?? '' ), 0, 7 ) ) {
+                        PressHub_Social_Queue::update_job( (int) $candidate['id'], [ 'last_error' => 'Waiting for a worker that can post TikTok photo slides (worker 1.10.0 or later).' ] );
+                    }
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                if ( ! $x_video_ok && 'twitter' === ( $candidate['platform'] ?? '' ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) ) {
+                    if ( 'Waiting' !== substr( (string) ( $candidate['last_error'] ?? '' ), 0, 7 ) ) {
+                        PressHub_Social_Queue::update_job( (int) $candidate['id'], [ 'last_error' => 'Waiting for a worker that can post videos to X (worker 1.12.0 or later).' ] );
+                    }
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                if ( 'youtube' === ( $candidate['platform'] ?? '' ) && ! $youtube_ok ) {
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                // A podcast episode waits (for a while) for its shorts' story images, and
+                // while it is longer than the channel may upload. It is moved later in the
+                // queue with the reason as its note, without using an attempt.
+                $hold = 'youtube' === ( $candidate['platform'] ?? '' ) ? PressHub_Social_YouTube::episode_hold( $candidate ) : null;
+                if ( null !== $hold ) {
+                    PressHub_Social_Queue::update_job( (int) $candidate['id'], [
+                        'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + (int) $hold['delay'] ),
+                        'last_error'   => (string) $hold['note'],
+                    ] );
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                // Social post gate: checked again against what went out since the job was
+                // queued, before anything more is prepared for it; a stopped job is cancelled with the reason as its note.
+                $gate_reason = PressHub_Social_Post_Gate::check_job( $candidate );
+                if ( '' !== $gate_reason ) {
+                    PressHub_Social_Post_Gate::block_job( (int) $candidate['id'], $gate_reason );
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
                 if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) && ! PressHub_Social_TikTok_Shorts::is_ready( $candidate ) ) {
                     PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $candidate['post_id'] ?? 0 ) );
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                // An X video longer than X takes (the two-minute daily brief can be) is not
+                // posted there; the X link post already went out.
+                $too_long = class_exists( 'PressHub_Social_TikTok_Shorts' ) ? PressHub_Social_TikTok_Shorts::too_long_for_twitter( $candidate ) : '';
+                if ( '' !== $too_long ) {
+                    PressHub_Social_Queue::update_job( (int) $candidate['id'], [
+                        'status'     => 'cancelled',
+                        'last_error' => 'Not posted: ' . $too_long,
+                    ] );
+                    PressHub_Social_Logger::warning( sprintf( 'X video job #%d (post #%d) is not posted: %s Shorten the Daily Brief Script Length or raise the short voice speed.', (int) $candidate['id'], (int) ( $candidate['post_id'] ?? 0 ), $too_long ) );
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
@@ -302,7 +411,8 @@ class PressHub_Social_REST_Controller {
         foreach ( $to_claim as $job ) {
             $job_id = (int) $job['id'];
 
-            $is_short = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
+            $is_short  = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
+            $is_slides = $is_short && PressHub_Social_TikTok_Shorts::is_slides_job( $job );
 
             // Atomic: an overlapping claim that already took this job skips it.
             if ( ! PressHub_Social_Queue::claim_for_processing( $job_id ) ) {
@@ -311,6 +421,12 @@ class PressHub_Social_REST_Controller {
 
             // Re-read the row: ready_to_post() may have just released it to the featured image.
             $job = PressHub_Social_Queue::get_job( $job_id ) ?? $job;
+
+            // A held episode's "Waiting…" note no longer applies once it is handed out.
+            if ( ( 'youtube' === ( $job['platform'] ?? '' ) || $is_slides || ( $is_short && 'twitter' === ( $job['platform'] ?? '' ) ) ) && str_starts_with( (string) ( $job['last_error'] ?? '' ), 'Waiting' ) ) {
+                PressHub_Social_Queue::update_job( $job_id, [ 'last_error' => '' ] );
+                $job['last_error'] = '';
+            }
 
             // Every AI post image, for platforms that carry several (X, Facebook).
             if ( class_exists( 'PressHub_Social_Post_Images' ) ) {
@@ -377,8 +493,8 @@ class PressHub_Social_REST_Controller {
                 $job = $short;
             }
 
-            // Resolve audio URL if post has podcast audio attached
-            if ( empty( $job['audio_url'] ) && $post_id > 0 ) {
+            // Resolve audio URL if post has podcast audio attached (never for photo slides)
+            if ( ! $is_slides && empty( $job['audio_url'] ) && $post_id > 0 ) {
                 if ( function_exists( 'get_post_meta' ) ) {
                     $audio_meta = get_post_meta( $post_id, '_presshub_audio_url', true );
                     if ( ! empty( $audio_meta ) ) {
@@ -395,13 +511,32 @@ class PressHub_Social_REST_Controller {
 
             // Text-only TikTok articles get a Gemini TTS voice-over (Zero-Silent-Fallback:
             // if narration is enabled and fails, the job fails instead of posting a silent video).
-            if ( 'tiktok' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_TikTok_Narrator' ) ) {
+            if ( ! $is_slides && 'tiktok' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_TikTok_Narrator' ) ) {
                 $narrated = PressHub_Social_TikTok_Narrator::attach_narration( $job );
                 if ( is_wp_error( $narrated ) ) {
                     PressHub_Social_Queue::mark_failed( $job_id, $narrated->get_error_message(), [ 'error_code' => $narrated->get_error_code() ] );
                     continue;
                 }
                 $job = $narrated;
+            }
+
+            // A Facebook Reel says how to post it: through the Graph API (the worker asks for
+            // a Page token right before it uploads) or with the browser session.
+            if ( $is_short && 'facebook' === ( $job['platform'] ?? '' ) ) {
+                $job['facebook_reel'] = [ 'mode' => $reels_api ? 'api' : 'browser' ];
+            }
+
+            // A YouTube video gets its title, description and upload settings. The
+            // worker asks for an access token right before it uploads.
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_YouTube' ) ) {
+                $job['post_url'] = $post_url;
+                $upload          = PressHub_Social_YouTube::attach_upload( $job );
+                if ( is_wp_error( $upload ) ) {
+                    PressHub_Social_Logger::error( $upload->get_error_message(), [ 'job_id' => $job_id, 'error_code' => $upload->get_error_code() ] );
+                    PressHub_Social_Queue::mark_failed( $job_id, $upload->get_error_message(), [ 'error_code' => $upload->get_error_code() ] );
+                    continue;
+                }
+                $job = $upload;
             }
 
             $job['post_title'] = $post_title;
@@ -415,6 +550,63 @@ class PressHub_Social_REST_Controller {
         return [
             'ok'   => true,
             'jobs' => $claimed_jobs,
+        ];
+    }
+
+    /**
+     * Handle POST /presshub-social/v1/worker/youtube/token
+     *
+     * A short-lived access token for the connected YouTube channel, asked for by the
+     * worker right before an upload. The refresh token and client secret stay here.
+     *
+     * @param WP_REST_Request|array $request
+     * @return array|WP_Error
+     */
+    public static function handle_youtube_token( $request ): array|WP_Error {
+        self::update_worker_presence( $request );
+        if ( ! class_exists( 'PressHub_Social_YouTube' ) ) {
+            return new WP_Error( 'youtube_unavailable', 'PressHub_Social_YouTube is not loaded.', [ 'status' => 500 ] );
+        }
+        // refresh: YouTube refused the cached token, so get a new one from Google.
+        $fresh = ! empty( self::get_param( $request, 'refresh', false ) );
+        $token = PressHub_Social_YouTube::access_token( false, $fresh );
+        if ( is_wp_error( $token ) ) {
+            PressHub_Social_Logger::error( 'YouTube access token for the worker failed: ' . $token->get_error_message(), [ 'error_code' => $token->get_error_code() ] );
+            return new WP_Error( $token->get_error_code(), $token->get_error_message(), [ 'status' => 409 ] );
+        }
+        return [
+            'ok'           => true,
+            'access_token' => $token['access_token'],
+            'expires_at'   => $token['expires_at'],
+            'expires_in'   => max( 0, $token['expires_at'] - time() ),
+        ];
+    }
+
+    /**
+     * Handle POST /presshub-social/v1/worker/facebook/token
+     *
+     * The Facebook Page's ID and a Page access token, asked for by the worker right
+     * before it uploads a Reel through the Graph API.
+     *
+     * @param WP_REST_Request|array $request
+     * @return array|WP_Error
+     */
+    public static function handle_facebook_token( $request ): array|WP_Error {
+        self::update_worker_presence( $request );
+        $page_id = PressHub_Social_Settings_Storage::get_meta_page_id();
+        $token   = PressHub_Social_Settings_Storage::get_meta_access_token();
+        if ( '' === $page_id || '' === $token ) {
+            PressHub_Social_Logger::error( 'Facebook Page token for the worker failed: the Meta Page ID or access token is not set.' );
+            return new WP_Error( 'facebook_not_configured', 'The Meta Page ID or access token is not set.', [ 'status' => 409 ] );
+        }
+        if ( ! class_exists( 'PressHub_Social_Meta_API_Client' ) ) {
+            return new WP_Error( 'facebook_unavailable', 'PressHub_Social_Meta_API_Client is not loaded.', [ 'status' => 500 ] );
+        }
+        return [
+            'ok'            => true,
+            'page_id'       => $page_id,
+            'access_token'  => PressHub_Social_Meta_API_Client::facebook_page_token( $page_id, $token ),
+            'graph_version' => PressHub_Social_Meta_API_Client::GRAPH_API_VERSION,
         ];
     }
 
@@ -460,9 +652,54 @@ class PressHub_Social_REST_Controller {
             PressHub_Social_Queue::mark_failed( $job_id, 'A TikTok short test render was reported as published; test renders must not be posted.', $metadata );
         } elseif ( 'published' === $status ) {
             PressHub_Social_Queue::mark_published( $job_id, $external_post_id, $external_post_url, $metadata );
+            if ( ! empty( $metadata['tiktok_slides_note'] ) ) {
+                // The photo post went out without the sound picked for its mood.
+                PressHub_Social_Logger::warning(
+                    sprintf( 'TikTok photo slides (job #%d): %s', $job_id, sanitize_text_field( (string) $metadata['tiktok_slides_note'] ) ),
+                    [ 'job_id' => $job_id, 'post_id' => (int) ( $job['post_id'] ?? 0 ) ]
+                );
+            }
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_episode_note'] ) ) {
+                // The enhanced episode was published without something it should have had.
+                PressHub_Social_Logger::warning(
+                    sprintf( 'YouTube episode %s (job #%d): %s', $external_post_id, $job_id, sanitize_text_field( (string) $metadata['youtube_episode_note'] ) ),
+                    [ 'job_id' => $job_id, 'post_id' => (int) ( $job['post_id'] ?? 0 ) ]
+                );
+            }
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_playlist_error'] ) ) {
+                PressHub_Social_Logger::warning(
+                    sprintf( 'YouTube video %s (job #%d) is uploaded but not in the podcast playlist: %s', $external_post_id, $job_id, sanitize_text_field( (string) $metadata['youtube_playlist_error'] ) ),
+                    [ 'job_id' => $job_id, 'post_id' => (int) ( $job['post_id'] ?? 0 ) ]
+                );
+            }
+        } elseif ( 'youtube' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_YouTube' ) && in_array( (string) ( $metadata['youtube_error_reason'] ?? '' ), [ 'quota', 'auth' ], true ) ) {
+            // Nothing was uploaded and the job itself is fine: it waits instead of failing,
+            // and claims hand out no YouTube jobs until the quota resets or the channel is
+            // connected again.
+            $reason = '' !== $error ? $error : 'YouTube upload stopped.';
+            if ( 'quota' === $metadata['youtube_error_reason'] ) {
+                $until = PressHub_Social_YouTube::pause_for_quota( $reason );
+                PressHub_Social_Queue::defer_job( $job_id, max( 60, $until - time() ), sprintf( 'Waiting for the daily YouTube quota (until %s UTC): %s', gmdate( 'Y-m-d H:i', $until ), $reason ) );
+            } else {
+                PressHub_Social_YouTube::require_reconnect( $reason );
+                PressHub_Social_Queue::defer_job( $job_id, 0, 'Waiting for Connect YouTube (Settings → Connections): ' . $reason );
+            }
+            $status = 'deferred';
         } else {
             $status = 'failed';
-            PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && 'refused' === (string) ( $metadata['youtube_error_reason'] ?? '' ) && is_array( $job ) ) {
+                // YouTube refused the finished upload (too long, a bad file): the same
+                // video would be refused again, so the job fails now instead of retrying.
+                PressHub_Social_Queue::update_job( $job_id, [ 'attempts' => max( (int) ( $job['attempts'] ?? 0 ), (int) ( $job['max_attempts'] ?? 3 ) ) ] );
+            }
+            if ( is_array( $job ) && ! empty( $metadata['short_render_failed'] ) && class_exists( 'PressHub_Social_TikTok_Shorts' )
+                && PressHub_Social_TikTok_Shorts::fallback_after_render_failure( $job, $error ) ) {
+                // The article short could not be rendered on its last attempt: the job
+                // is now the classic article post, pending again.
+                $status = 'pending';
+            } else {
+                PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );
+            }
         }
 
         return [

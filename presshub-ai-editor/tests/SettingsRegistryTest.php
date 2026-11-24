@@ -121,11 +121,10 @@ class SettingsRegistryTest {
             $failures[] = 'The qa tab alias should return only the presshub_ai_qa_* options.';
         }
 
-        // 6. Unused list matches the audit's confirmed items (podcast prompts 1–3 are still
-        //    read as a legacy fallback by resolve_podcast_prompt(), so they are not on it).
+        // 6. #237 removed everything on the Scheduled for removal list.
         $unused = array_keys( PressHub_Settings_Registry::unused() );
         sort( $unused );
-        $expected = [ 'presshub_social_github_token', 'presshub_social_twitter_access_secret', 'presshub_social_twitter_api_key', 'presshub_social_twitter_api_secret' ];
+        $expected = [];
         if ( $unused !== $expected ) {
             $failures[] = 'Unused options: expected ' . implode( ', ', $expected ) . '; got ' . implode( ', ', $unused );
         }

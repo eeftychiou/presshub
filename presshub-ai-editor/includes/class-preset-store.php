@@ -89,6 +89,10 @@ class PressHub_AI_Preset_Store {
     public static function save_plugin_defaults( array $presets ): array {
         $clean = PressHub_AI_Preset_Sanitizer::sanitize_presets( $presets );
         update_option( self::OPTION_DEFAULT_PRESETS, $clean, false );
+        // #309 (E4): every edit of a site-wide preset store is audited.
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'presets_saved', 'preset_store', self::OPTION_DEFAULT_PRESETS, [ 'count' => count( $clean ) ] );
+        }
         return $clean;
     }
 
@@ -207,6 +211,10 @@ class PressHub_AI_Preset_Store {
     public static function save_taxonomy_presets( array $map ): array {
         $clean = self::sanitize_org_map( $map );
         update_option( self::OPTION_TAXONOMY_PRESETS, $clean, false );
+        // #309 (E4): every edit of a site-wide preset store is audited.
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'presets_saved', 'preset_store', self::OPTION_TAXONOMY_PRESETS, [ 'count' => count( $clean ) ] );
+        }
         return $clean;
     }
 
@@ -238,6 +246,10 @@ class PressHub_AI_Preset_Store {
     public static function save_role_presets( array $map ): array {
         $clean = self::sanitize_org_map( $map );
         update_option( self::OPTION_ROLE_PRESETS, $clean, false );
+        // #309 (E4): every edit of a site-wide preset store is audited.
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'presets_saved', 'preset_store', self::OPTION_ROLE_PRESETS, [ 'count' => count( $clean ) ] );
+        }
         return $clean;
     }
 
