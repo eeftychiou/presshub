@@ -246,9 +246,38 @@ utf_check( 'fetch_article_data: content contains stockwatch prose', false !== st
 
 unset( $GLOBALS['GET_RESPONSE_FILTER'] );
 
+// =========================================================================
+// Publication date for every tier (ciren.cy: DOM text, date only in meta / JSON-LD graph)
+// =========================================================================
+$body_p = '<article><p>' . str_repeat( 'Η Υπηρεσία Υδάτων αρνείται να δώσει τα ονόματα των μεγάλων χρηστών νερού. ', 8 ) . '</p></article>';
+$ciren_html = '<html><head><meta property="article:published_time" content="2026-10-01T10:35:49+00:00" />'
+    . '<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"CIReN"},{"@type":"Article","headline":"Water","datePublished":"2026-10-01T10:35:49+00:00"}]}</script>'
+    . '</head><body><h1>Do Cypriots have the right to know who uses the water?</h1>' . $body_p . '</body></html>';
+$ciren_res = PressHub_AI_URL_Fetcher::extract_article_semantic( $ciren_html );
+utf_check( 'date: DOM tier keeps the meta published date', 'dom' === ( $ciren_res['tier'] ?? '' ) && '2026-10-01T10:35:49+00:00' === ( $ciren_res['published_at'] ?? '' ) );
+$ld_only = '<html><head><script type="application/ld+json">{"@graph":[{"@type":"WebPage"},{"@type":"NewsArticle","datePublished":"2026-10-21T08:00:00+03:00"}]}</script></head><body><h1>Τίτλος άρθρου εδώ</h1>' . $body_p . '</body></html>';
+utf_check( 'date: JSON-LD graph date without articleBody', '2026-10-21T08:00:00+03:00' === PressHub_AI_URL_Fetcher::extract_published_date( $ld_only ) );
+$itemprop = '<html><body><time itemprop="datePublished" datetime="2026-11-20T09:00:00+02:00">20/11</time></body></html>';
+utf_check( 'date: itemprop datePublished', '2026-11-20T09:00:00+02:00' === PressHub_AI_URL_Fetcher::extract_published_date( $itemprop ) );
+$graph_order = '<html><head><script type="application/ld+json">{"@graph":[{"@type":"ImageObject","datePublished":"2025-01-01T00:00:00+00:00"},{"@type":"CollectionPage","datePublished":"2025-02-01T00:00:00+00:00"},{"@type":"NewsArticle","datePublished":"2026-11-24T05:00:00+02:00"}]}</script></head><body></body></html>';
+utf_check( 'date: an older image or collection node before the article is ignored', '2026-11-24T05:00:00+02:00' === PressHub_AI_URL_Fetcher::extract_published_date( $graph_order ) );
+$img_only = '<html><head><script type="application/ld+json">{"@graph":[{"@type":"ImageObject","datePublished":"2025-01-01T00:00:00+00:00"},{"@type":"NewsArticle","headline":"x"}]}</script></head><body></body></html>';
+utf_check( 'date: an image date is never taken for the article', '' === PressHub_AI_URL_Fetcher::extract_published_date( $img_only ) );
+$modified = '<html><head><meta property="article:modified_time" content="2026-11-24T05:00:00+00:00" /><meta property="article:published_time" content="2026-10-01T10:35:49+00:00" /></head><body></body></html>';
+utf_check( 'date: modified time does not override the published date', '2026-10-01T10:35:49+00:00' === PressHub_AI_URL_Fetcher::extract_published_date( $modified ) );
+$sidebar = '<html><body><aside><time itemprop="datePublished" datetime="2025-05-05T00:00:00+00:00">old</time></aside><article><time itemprop="datePublished" datetime="2026-11-23T09:00:00+02:00">23/11</time></article></body></html>';
+utf_check( 'date: itemprop inside the article wins over a sidebar', '2026-11-23T09:00:00+02:00' === PressHub_AI_URL_Fetcher::extract_published_date( $sidebar ) );
+$raw_html = '<html><head><meta property="article:published_time" content="2026-10-21T08:00:00+00:00" /></head><body>Σύντομο κείμενο χωρίς παραγράφους εδώ για τη σελίδα</body></html>';
+$raw_res = PressHub_AI_URL_Fetcher::extract_article_semantic( $raw_html );
+utf_check( 'date: raw_strip / llm tiers keep the page date (tier ' . ( $raw_res['tier'] ?? '' ) . ')', in_array( $raw_res['tier'] ?? '', [ 'raw_strip', 'llm' ], true ) && '2026-10-21T08:00:00+00:00' === ( $raw_res['published_at'] ?? '' ) );
+$bad_og = '<html><head><meta property="og:description" content="Μια περιγραφή του άρθρου αρκετά μεγάλη." /><meta property="article:published_time" content="1 Οκτωβρίου" /><meta name="dc.date" content="2026-10-01" /></head><body></body></html>';
+$bad_res = PressHub_AI_URL_Fetcher::extract_article_semantic( $bad_og );
+utf_check( 'date: an unreadable tier date is replaced by a readable one', '2026-10-01' === ( $bad_res['published_at'] ?? '' ) );
+utf_check( 'date: none stated gives empty', '' === PressHub_AI_URL_Fetcher::extract_published_date( '<html><body><p>κείμενο</p></body></html>' ) );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "URLFetcherMultiTierFallbackTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
 
-echo "URLFetcherMultiTierFallbackTest: OK (23 checks)\n";
+echo "URLFetcherMultiTierFallbackTest: OK (33 checks)\n";

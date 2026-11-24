@@ -11,7 +11,10 @@
  *     estimates are not inflated by junk.
  *  2. Stale items: a title or URL that carries a date older than the
  *     briefing date (daily shows, yesterday's weather bulletin), or a
- *     published_at older than MAX_AGE_HOURS.
+ *     published_at older than MAX_AGE_HOURS. A page that states no date
+ *     is aged from the first harvest that saw its URL (option
+ *     FIRST_SEEN_OPTION), so an undated piece that stays on a homepage
+ *     for weeks is not new news every day.
  *  3. Promos and filler: titles that match the promo patterns, and scraped
  *     results stubs (a score-only title with little text). A general
  *     minimum length can be set with presshub_ai_pool_min_scraped_words.
@@ -33,6 +36,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 class PressHub_AI_Pool_Cleaner {
 
     const STORED_MAX_CHARS   = 20000;
+    /** URL hash => first harvest time, for pages that state no date. */
+    const FIRST_SEEN_OPTION  = 'presshub_ai_pool_first_seen';
+    /** First-seen entries are kept this long past the age limit. */
+    const FIRST_SEEN_KEEP_HOURS = 72;
     const MAX_AGE_HOURS      = 48;
     /** Extra minimum for scraped pages; 0 = only the harvester's own 30-word rule applies. */
     const MIN_SCRAPED_WORDS  = 0;
@@ -110,6 +117,9 @@ class PressHub_AI_Pool_Cleaner {
             $summary['chars_after'] += $art['char_count'];
         }
         unset( $art );
+
+        // Undated pages: age them from the first harvest that saw the URL.
+        self::apply_first_seen( $articles, $now );
 
         // 2–3. Per-item filters.
         $kept = [];
@@ -195,6 +205,73 @@ class PressHub_AI_Pool_Cleaner {
             || 'press_release' === (string) ( $art['source_type'] ?? '' );
     }
 
+    /**
+     * Give each undated, unprotected article its URL's first harvest time
+     * ('first_seen_at'), record new URLs, and drop entries older than the
+     * age limit plus FIRST_SEEN_KEEP_HOURS.
+     *
+     * @param array $articles Pool (changed in place).
+     * @param int   $now      Unix time.
+     */
+    public static function apply_first_seen( array &$articles, int $now ): void {
+        if ( ! function_exists( 'get_option' ) || ! function_exists( 'update_option' ) ) {
+            return;
+        }
+        $seen = get_option( self::FIRST_SEEN_OPTION, [] );
+        $seen = is_array( $seen ) ? $seen : [];
+        $changed = false;
+        foreach ( $articles as &$art ) {
+            if ( ! is_array( $art ) || self::is_protected( $art ) || self::has_date( $art ) ) {
+                continue;
+            }
+            $key = self::url_key( (string) ( $art['url'] ?? '' ) );
+            if ( '' === $key ) {
+                continue;
+            }
+            if ( ! isset( $seen[ $key ] ) || (int) $seen[ $key ] > $now ) {
+                $seen[ $key ] = $now;
+                $changed      = true;
+            }
+            $art['first_seen_at'] = gmdate( 'c', (int) $seen[ $key ] );
+        }
+        unset( $art );
+
+        $cutoff  = $now - ( max( 1, self::max_age_hours() ) + self::FIRST_SEEN_KEEP_HOURS ) * 3600;
+        foreach ( $seen as $k => $ts ) {
+            if ( (int) $ts < $cutoff ) {
+                unset( $seen[ $k ] );
+                $changed = true;
+            }
+        }
+        if ( $changed ) {
+            update_option( self::FIRST_SEEN_OPTION, $seen, false );
+        }
+    }
+
+    /** The age limit in hours: "Oldest article kept (h)", then the presshub_ai_pool_max_age_hours filter. */
+    public static function max_age_hours(): int {
+        $max_age = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_max_age_hours() : self::MAX_AGE_HOURS;
+        return (int) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_pool_max_age_hours', $max_age ) : $max_age );
+    }
+
+    /** True when the article has a published_at that strtotime() can read. */
+    private static function has_date( array $art ): bool {
+        $p = trim( (string) ( $art['published_at'] ?? '' ) );
+        return '' !== $p && false !== strtotime( $p );
+    }
+
+    /** Short stable key for a URL: scheme, "www." and a trailing slash ignored. */
+    public static function url_key( string $url ): string {
+        $url = strtolower( trim( $url ) );
+        if ( '' === $url ) {
+            return '';
+        }
+        $url = preg_replace( '#^https?://(www\.)?#', '', $url );
+        $url = preg_replace( '/#.*$/', '', $url );
+        $url = rtrim( $url, '/' );
+        return substr( md5( $url ), 0, 16 );
+    }
+
     /** '' to keep, otherwise 'stale' | 'promo' | 'too_short'. */
     public static function drop_reason( array $art, string $date, int $now ): string {
         $title = (string) ( $art['title'] ?? '' );
@@ -210,11 +287,10 @@ class PressHub_AI_Pool_Cleaner {
             return 'stale';
         }
 
-        $published = (string) ( $art['published_at'] ?? '' );
+        $published = self::has_date( $art ) ? (string) $art['published_at'] : (string) ( $art['first_seen_at'] ?? '' );
         if ( '' !== $published ) {
             $ts      = strtotime( $published );
-            $max_age = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_max_age_hours() : self::MAX_AGE_HOURS;
-            $max_age = (int) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_pool_max_age_hours', $max_age ) : $max_age );
+            $max_age = self::max_age_hours();
             if ( false !== $ts && $max_age > 0 && $ts < $now - $max_age * 3600 ) {
                 return 'stale';
             }

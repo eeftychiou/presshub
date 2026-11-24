@@ -114,6 +114,7 @@ $presshub_ai_options = [
     'presshub_ai_social_trending_summary_enabled',
     'presshub_ai_social_trending_briefing_count',
     'presshub_ai_social_trending_briefing_pool',
+    'presshub_ai_pool_first_seen',
     'presshub_ai_social_trending_state',
     'presshub_ai_social_trending_candidates',
     'presshub_ai_social_trending_posts',

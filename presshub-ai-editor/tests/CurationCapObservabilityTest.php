@@ -415,6 +415,13 @@ cco_check( 'render: small input omits inspector subtext (no truncation)', false 
 
 
 // Summary
+$dated_render = ( new PressHub_AI_News_Curator() )->format_articles_context( [
+    [ 'title' => 'Dated', 'source' => 'ciren.cy', 'url' => 'https://ciren.cy/a', 'content' => 'Κείμενο.', 'published_at' => '2026-10-01T10:35:49+00:00' ],
+    [ 'title' => 'Undated', 'source' => 'x.cy', 'url' => 'https://x.cy/b', 'content' => 'Κείμενο.' ],
+] );
+cco_check( 'date: an article shows its publication date', false !== strpos( $dated_render, '**Δημοσίευση:** 1/10/2026' ) );
+cco_check( 'date: an undated article shows none', 1 === substr_count( $dated_render, 'Δημοσίευση' ) );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "CurationCapObservabilityTest: {$failures} failure(s)\n" );
     exit( 1 );
