@@ -356,6 +356,11 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_system_instruction' ],
             'type'              => 'string',
         ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_tts_pronunciations', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tts_pronunciations' ],
+            'type'              => 'string',
+            'default'           => '',
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_turn_pause_ms', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_turn_pause_ms' ],
             'type'              => 'integer',
@@ -3638,6 +3643,14 @@ class PressHub_AI_Settings_Storage {
             return '';
         }
         return substr( trim( $value ), 0, 10000 );
+    }
+
+    /** Pronunciation list for the voice (2.88.0), see PressHub_AI_TTS_Pronunciations::sanitize(). */
+    public static function sanitize_tts_pronunciations( $value ): string {
+        if ( ! class_exists( 'PressHub_AI_TTS_Pronunciations' ) ) {
+            require_once __DIR__ . '/class-tts-pronunciations.php';
+        }
+        return PressHub_AI_TTS_Pronunciations::sanitize( $value );
     }
 
     public static function sanitize_briefing_tts_turn_pause_ms( $value ): int {

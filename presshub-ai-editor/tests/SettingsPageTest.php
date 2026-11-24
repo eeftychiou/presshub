@@ -262,6 +262,7 @@ class SettingsPageTest
             'presshub_ai_briefing_memory_provider',
             'presshub_ai_briefing_memory_model',
             'presshub_ai_briefing_tts_turn_pause_ms',
+            'presshub_ai_tts_pronunciations',
             'presshub_ai_briefing_tts_topic_pause_ms',
             'presshub_ai_briefing_tts_request_delay_ms',
             'presshub_ai_briefing_tts_request_mode',
