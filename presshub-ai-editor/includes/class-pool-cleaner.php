@@ -221,7 +221,7 @@ class PressHub_AI_Pool_Cleaner {
         $seen = is_array( $seen ) ? $seen : [];
         $changed = false;
         foreach ( $articles as &$art ) {
-            if ( ! is_array( $art ) || self::is_protected( $art ) || '' !== (string) ( $art['published_at'] ?? '' ) ) {
+            if ( ! is_array( $art ) || self::is_protected( $art ) || self::has_date( $art ) ) {
                 continue;
             }
             $key = self::url_key( (string) ( $art['url'] ?? '' ) );
@@ -236,8 +236,7 @@ class PressHub_AI_Pool_Cleaner {
         }
         unset( $art );
 
-        $max_age = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_max_age_hours() : self::MAX_AGE_HOURS;
-        $cutoff  = $now - ( max( 1, $max_age ) + self::FIRST_SEEN_KEEP_HOURS ) * 3600;
+        $cutoff  = $now - ( max( 1, self::max_age_hours() ) + self::FIRST_SEEN_KEEP_HOURS ) * 3600;
         foreach ( $seen as $k => $ts ) {
             if ( (int) $ts < $cutoff ) {
                 unset( $seen[ $k ] );
@@ -247,6 +246,18 @@ class PressHub_AI_Pool_Cleaner {
         if ( $changed ) {
             update_option( self::FIRST_SEEN_OPTION, $seen, false );
         }
+    }
+
+    /** The age limit in hours: "Oldest article kept (h)", then the presshub_ai_pool_max_age_hours filter. */
+    public static function max_age_hours(): int {
+        $max_age = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_max_age_hours() : self::MAX_AGE_HOURS;
+        return (int) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_pool_max_age_hours', $max_age ) : $max_age );
+    }
+
+    /** True when the article has a published_at that strtotime() can read. */
+    private static function has_date( array $art ): bool {
+        $p = trim( (string) ( $art['published_at'] ?? '' ) );
+        return '' !== $p && false !== strtotime( $p );
     }
 
     /** Short stable key for a URL: scheme, "www." and a trailing slash ignored. */
@@ -276,14 +287,10 @@ class PressHub_AI_Pool_Cleaner {
             return 'stale';
         }
 
-        $published = (string) ( $art['published_at'] ?? '' );
-        if ( '' === $published ) {
-            $published = (string) ( $art['first_seen_at'] ?? '' );
-        }
+        $published = self::has_date( $art ) ? (string) $art['published_at'] : (string) ( $art['first_seen_at'] ?? '' );
         if ( '' !== $published ) {
             $ts      = strtotime( $published );
-            $max_age = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_max_age_hours() : self::MAX_AGE_HOURS;
-            $max_age = (int) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_pool_max_age_hours', $max_age ) : $max_age );
+            $max_age = self::max_age_hours();
             if ( false !== $ts && $max_age > 0 && $ts < $now - $max_age * 3600 ) {
                 return 'stale';
             }

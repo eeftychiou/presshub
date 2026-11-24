@@ -344,7 +344,9 @@ class PressHub_AI_URL_Fetcher {
         // Only the JSON-LD and OpenGraph tiers read a date, so a page whose
         // text comes from the DOM (ciren.cy) had no published_at and passed
         // the pool's age check every day it stayed on the homepage.
-        if ( '' === (string) ( $result['published_at'] ?? '' ) ) {
+        // A date strtotime() cannot read counts as none, so the page is still aged.
+        $pub = trim( (string) ( $result['published_at'] ?? '' ) );
+        if ( '' === $pub || false === strtotime( $pub ) ) {
             $result['published_at'] = self::extract_published_date( (string) $html );
         }
         return $result;
@@ -383,33 +385,60 @@ class PressHub_AI_URL_Fetcher {
             }
         }
 
-        if ( preg_match( '/<[a-z]+\s+[^>]*itemprop=["\']datePublished["\'][^>]*(?:datetime|content)=["\']([^"\']+)["\']/i', $html, $m )
-            || preg_match( '/<[a-z]+\s+[^>]*(?:datetime|content)=["\']([^"\']+)["\'][^>]*itemprop=["\']datePublished["\']/i', $html, $m ) ) {
-            $v = trim( $m[1] );
-            if ( false !== strtotime( $v ) ) {
-                return $v;
+        // itemprop: inside <article> or <main> first, so a sidebar's date is not taken.
+        $scopes = [];
+        foreach ( [ 'article', 'main' ] as $tag ) {
+            if ( preg_match( '#<' . $tag . '\b[^>]*>(.*?)</' . $tag . '>#is', $html, $sm ) ) {
+                $scopes[] = $sm[1];
+            }
+        }
+        $scopes[] = $html;
+        foreach ( $scopes as $scope ) {
+            if ( preg_match( '/<[a-z]+\s+[^>]*itemprop=["\']datePublished["\'][^>]*(?:datetime|content)=["\']([^"\']+)["\']/i', $scope, $m )
+                || preg_match( '/<[a-z]+\s+[^>]*(?:datetime|content)=["\']([^"\']+)["\'][^>]*itemprop=["\']datePublished["\']/i', $scope, $m ) ) {
+                $v = trim( $m[1] );
+                if ( false !== strtotime( $v ) ) {
+                    return $v;
+                }
             }
         }
         return '';
     }
 
-    /** First datePublished in a decoded JSON-LD value (object, list or @graph). */
-    private static function find_json_ld_date( array $node, int $depth = 0 ): string {
-        if ( $depth > 6 ) {
-            return '';
+    /**
+     * datePublished of the page's article node in a decoded JSON-LD value
+     * (object, list or @graph). Only article-type nodes count (Article,
+     * NewsArticle, BlogPosting, Report…), then a plain WebPage; an image,
+     * video, site or collection page date is never taken for the article's.
+     */
+    private static function find_json_ld_date( array $decoded ): string {
+        if ( isset( $decoded['@graph'] ) && is_array( $decoded['@graph'] ) ) {
+            $nodes = $decoded['@graph'];
+        } elseif ( isset( $decoded[0] ) ) {
+            $nodes = $decoded;
+        } else {
+            $nodes = [ $decoded ];
         }
-        if ( isset( $node['datePublished'] ) && is_string( $node['datePublished'] ) && false !== strtotime( $node['datePublished'] ) ) {
-            return trim( $node['datePublished'] );
-        }
-        foreach ( $node as $child ) {
-            if ( is_array( $child ) ) {
-                $found = self::find_json_ld_date( $child, $depth + 1 );
-                if ( '' !== $found ) {
-                    return $found;
+        $page_date = '';
+        foreach ( $nodes as $node ) {
+            if ( ! is_array( $node ) ) {
+                continue;
+            }
+            $date = isset( $node['datePublished'] ) && is_string( $node['datePublished'] ) ? trim( $node['datePublished'] ) : '';
+            if ( '' === $date || false === strtotime( $date ) ) {
+                continue;
+            }
+            $types = array_map( 'strtolower', (array) ( $node['@type'] ?? [] ) );
+            foreach ( $types as $t ) {
+                if ( false !== strpos( (string) $t, 'article' ) || in_array( $t, [ 'blogposting', 'report', 'liveblogposting' ], true ) ) {
+                    return $date;
                 }
             }
+            if ( '' === $page_date && in_array( 'webpage', $types, true ) ) {
+                $page_date = $date;
+            }
         }
-        return '';
+        return $page_date;
     }
 
     /** The content tiers of extract_article_semantic(). */

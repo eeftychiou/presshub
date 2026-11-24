@@ -157,6 +157,33 @@ pc_check( 'first seen: dated pages are not recorded', 1 === count( $p6['articles
 $P::clean( $p6, '2026-12-10', strtotime( '2026-12-10 05:00:00 UTC' ) );
 pc_check( 'first seen: old entries are pruned', [] === get_option( 'presshub_ai_pool_first_seen', [] ) );
 
+// Protected items and unreadable dates.
+delete_option( 'presshub_ai_pool_first_seen' );
+$manual = array_merge( $undated, [ 'url' => 'https://ciren.cy/manual', 'is_manual' => true ] );
+$odd    = array_merge( $undated, [ 'url' => 'https://ciren.cy/odd', 'published_at' => '1 Οκτωβρίου' ] );
+$p7 = [ 'articles' => [ $manual, $odd ] ];
+$P::clean( $p7, '2026-11-18', $day1 );
+$seen = get_option( 'presshub_ai_pool_first_seen', [] );
+pc_check( 'first seen: protected items are not recorded', ! isset( $seen[ $P::url_key( 'https://ciren.cy/manual' ) ] ) );
+pc_check( 'first seen: an unreadable published_at is aged like no date', isset( $seen[ $P::url_key( 'https://ciren.cy/odd' ) ] ) );
+$p8 = [ 'articles' => [ $odd ] ];
+$P::clean( $p8, '2026-11-24', $day1 + 6 * 24 * 3600 );
+pc_check( 'first seen: the unreadable-date item is dropped after the limit', 0 === count( $p8['articles'] ) );
+
+// The max-age filter also sets how long first-seen entries are kept.
+delete_option( 'presshub_ai_pool_first_seen' );
+$long_age = static function () { return 240; };
+add_filter( 'presshub_ai_pool_max_age_hours', $long_age );
+$p9 = [ 'articles' => [ $undated ] ];
+$P::clean( $p9, '2026-11-18', $day1 );
+$p10 = [ 'articles' => [ $undated ] ];
+$P::clean( $p10, '2026-11-24', $day1 + 6 * 24 * 3600 );
+pc_check( 'first seen: kept inside a filtered 240 h limit', 1 === count( $p10['articles'] ) && gmdate( 'c', $day1 ) === ( $p10['articles'][0]['first_seen_at'] ?? '' ) );
+$p11 = [ 'articles' => [ $undated ] ];
+$P::clean( $p11, '2026-11-29', $day1 + 11 * 24 * 3600 );
+pc_check( 'first seen: dropped after the filtered limit, not reset', 0 === count( $p11['articles'] ) );
+remove_filter( 'presshub_ai_pool_max_age_hours', $long_age );
+
 // wiring
 $src = file_get_contents( dirname( __DIR__ ) . '/includes/class-news-harvester.php' );
 $pos_clean = strpos( $src, 'PressHub_AI_Pool_Cleaner::clean( $payload, $date )' );
