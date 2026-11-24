@@ -76,7 +76,8 @@ if ( ! function_exists( 'get_post_meta' ) ) {
 
 if ( ! function_exists( 'update_post_meta' ) ) {
     function update_post_meta( $post_id, $key, $value ) {
-        $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] = $value;
+        // As WordPress: the value is unslashed before it is stored.
+        $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] = function_exists( 'wp_unslash' ) ? wp_unslash( $value ) : $value;
         return true;
     }
 }
@@ -123,6 +124,10 @@ if ( ! function_exists( 'update_option' ) ) {
      */
     function update_option( $key, $value, $autoload = null ) {
         $old_value = $GLOBALS['OPTIONS_STORE'][ $key ] ?? false;
+        // As in WordPress: "pre_update_option_{$key}" can change or refuse the new value.
+        if ( function_exists( 'apply_filters' ) ) {
+            $value = apply_filters( 'pre_update_option_' . $key, $value, $old_value, $key );
+        }
         $GLOBALS['OPTIONS_STORE'][ $key ] = $value;
         $GLOBALS['UPDATE_OPTION_CALLS'][] = [ $key, $value, $autoload ];
         if ( function_exists( 'do_action' ) ) {
@@ -490,7 +495,7 @@ if ( ! function_exists( 'wp_insert_post' ) ) {
         $GLOBALS['POSTS_STORE'][ $id ] = array_merge( [ 'ID' => $id ], $postarr );
         if ( ! empty( $postarr['meta_input'] ) && is_array( $postarr['meta_input'] ) ) {
             foreach ( $postarr['meta_input'] as $k => $v ) {
-                $GLOBALS['POST_META_STORE'][ $id ][ $k ] = $v;
+                $GLOBALS['POST_META_STORE'][ $id ][ $k ] = function_exists( 'wp_unslash' ) ? wp_unslash( $v ) : $v;
             }
         }
         return $id;
@@ -863,8 +868,22 @@ if ( ! function_exists( 'add_query_arg' ) ) {
     }
 }
 
+if ( ! function_exists( 'wp_slash' ) ) {
+    function wp_slash( $value ) {
+        // As WordPress: strings, and every string inside arrays.
+        if ( is_array( $value ) ) {
+            return array_map( 'wp_slash', $value );
+        }
+        return is_string( $value ) ? addslashes( $value ) : $value;
+    }
+}
+
 if ( ! function_exists( 'wp_unslash' ) ) {
     function wp_unslash( $value ) {
+        // As WordPress (stripslashes_deep): strings, and every string inside arrays.
+        if ( is_array( $value ) ) {
+            return array_map( 'wp_unslash', $value );
+        }
         return is_string( $value ) ? stripslashes( $value ) : $value;
     }
 }
@@ -1509,6 +1528,16 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 if ( preg_match( "/briefing_date <= '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['briefing_date'] ?? '' ) > $m[1] ) return false;
                 }
+                // QA reviews (PressHub_AI_QA_Review_Store).
+                if ( preg_match( "/(?<![A-Za-z0-9_])post_id = (\d+)/", $where, $m ) ) {
+                    if ( (int) ( $row['post_id'] ?? 0 ) !== (int) $m[1] ) return false;
+                }
+                if ( preg_match( "/verdict = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['verdict'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/(editorial|legal|seo)_result = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row[ $m[1] . '_result' ] ?? '' ) !== $m[2] ) return false;
+                }
                 if ( preg_match( "/source_post_id = (\d+)/", $where, $m ) ) {
                     if ( (int) ( $row['source_post_id'] ?? 0 ) !== (int) $m[1] ) return false;
                 }
@@ -1663,5 +1692,32 @@ if ( ! function_exists( 'wp_rand' ) ) {
 if ( ! function_exists( 'esc_js' ) ) {
     function esc_js( $text ) {
         return addslashes( htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ) );
+    }
+}
+
+if ( ! function_exists( 'presshub_test_provider_keys' ) ) {
+    /**
+     * #237: API keys live only on Connections providers. Tests that used to
+     * set the old single key option seed one provider per type with that key.
+     */
+    function presshub_test_provider_keys( string $key, array $types = [ 'openai', 'anthropic', 'gemini' ] ): array {
+        $out = [];
+        foreach ( $types as $type ) {
+            $out[] = [ 'id' => $type . '-test', 'type' => $type, 'name' => ucfirst( $type ), 'enabled' => true, 'api_key' => $key ];
+        }
+        return $out;
+    }
+}
+if ( ! function_exists( 'presshub_test_providers' ) ) {
+    /**
+     * Connections records with $active first (#309 E1: the first enabled
+     * provider is the active one; there is no presshub_ai_provider option).
+     * $fields are merged into the active record (model, tuning, headers).
+     */
+    function presshub_test_providers( string $key, string $active, array $fields = [], array $types = [ 'openai', 'anthropic', 'gemini' ] ): array {
+        $types = array_values( array_unique( array_merge( [ $active ], $types ) ) );
+        $out   = presshub_test_provider_keys( $key, $types );
+        $out[0] = array_merge( $out[0], $fields );
+        return $out;
     }
 }

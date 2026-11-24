@@ -70,10 +70,7 @@ class PressHub_AI_Settings_Storage {
         $render = new PressHub_AI_Settings_Render();
 
         // --- General ---
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_provider', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_provider' ],
-            'type'              => 'string',
-        ] );
+        // #309 (E1): presshub_ai_provider is gone; the provider is chosen per task in AI models.
 
         // Fetch source URLs server-side (2026-08-16): models cannot browse
         // URLs, so the plugin fetches + extracts article text itself.
@@ -90,17 +87,9 @@ class PressHub_AI_Settings_Storage {
         ] );
 
         // --- Providers ---
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_api_key', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_api_key' ],
-            'type'              => 'string',
-        ] );
         // "Remove stored key" checkboxes: posting 1 deletes the secret so
         // a compromised key can be revoked through the UI (the masked
         // round-trip alone can never clear a key).
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_remove_api_key', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_remove_api_key' ],
-            'type'              => 'boolean',
-        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_remove_google_cloud_api_key', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_remove_google_cloud_api_key' ],
             'type'              => 'boolean',
@@ -109,34 +98,10 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_remove_github_token' ],
             'type'              => 'boolean',
         ] );
-        foreach ( self::PROVIDERS as $provider ) {
-            PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_model_' . $provider, [
-                'sanitize_callback' => function ( $value ) use ( $provider ) {
-                    return self::sanitize_model( $value, $provider );
-                },
-                'type' => 'string',
-            ] );
-            PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_temperature_' . $provider, [
-                'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
-                'type'              => 'number',
-            ] );
-            PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_max_tokens_' . $provider, [
-                'sanitize_callback' => [ __CLASS__, 'sanitize_max_tokens' ],
-                'type'              => 'integer',
-            ] );
-            PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_timeout_' . $provider, [
-                'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
-                'type'              => 'integer',
-            ] );
-        }
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_openai_org', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_openai_org' ],
-            'type'              => 'string',
-        ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_anthropic_version', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_anthropic_version' ],
-            'type'              => 'string',
-        ] );
+        // #309 (E1): the per-provider model, temperature, max tokens and timeout,
+        // the OpenAI organization and the Anthropic version live on each
+        // provider in Connections; the old flat options were removed by the
+        // settings clean-up.
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_github_token', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_github_token' ],
             'type'              => 'string',
@@ -179,14 +144,6 @@ class PressHub_AI_Settings_Storage {
         ] );
 
         // --- Daily Briefing & AI Podcast ---
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_api_key', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_api_key' ],
-            'type'              => 'string',
-        ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_remove_briefing_tts_api_key', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_remove_briefing_tts_api_key' ],
-            'type'              => 'boolean',
-        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_engine', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_engine' ],
             'type'              => 'string',
@@ -232,6 +189,12 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_audit_log_retention_days' ],
             'type'              => 'integer',
             'default'           => 90,
+        ] );
+        // #296: how many pre-update backups PressHub → Backups keeps.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_backup_keep', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_backup_keep' ],
+            'type'              => 'integer',
+            'default'           => 5,
         ] );
 
         // Settings-First: Social & OpenGraph metadata master toggle and scope.
@@ -339,6 +302,20 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_tertiary' ],
             'type'              => 'string',
         ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_languages', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_languages' ],
+            'type'              => 'array',
+            'default'           => [],
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_language_notes', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_language_notes' ],
+            'type'              => 'array',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_language_voices', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_language_voices' ],
+            'type'              => 'array',
+            'default'           => [],
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_audio_split_by_topic', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
             'type'              => 'integer',
@@ -383,6 +360,16 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_turn_pause_ms' ],
             'type'              => 'integer',
         ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_podcast_mp3_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_checkbox' ],
+            'type'              => 'integer',
+            'default'           => 1,
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_podcast_mp3_bitrate', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_podcast_mp3_bitrate' ],
+            'type'              => 'integer',
+            'default'           => self::PODCAST_MP3_BITRATE_DEFAULT,
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_topic_pause_ms', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_topic_pause_ms' ],
             'type'              => 'integer',
@@ -390,6 +377,17 @@ class PressHub_AI_Settings_Storage {
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_request_delay_ms', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_request_delay_ms' ],
             'type'              => 'integer',
+        ] );
+        // 2.74.0 - fewer Gemini speech requests per episode (temporary, while the daily quota is low).
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_request_mode', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_request_mode' ],
+            'type'              => 'string',
+            'default'           => self::TTS_REQUEST_MODE_DEFAULT,
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_request_max_chars', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_request_max_chars' ],
+            'type'              => 'integer',
+            'default'           => self::TTS_REQUEST_MAX_CHARS_DEFAULT,
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_max_retries', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_max_retries' ],
@@ -447,10 +445,6 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_title_prefix' ],
             'type'              => 'string',
         ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_morning_podcast_title_prefix', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_title_prefix' ],
-            'type'              => 'string',
-        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_noon_podcast_title_prefix', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_podcast_title_prefix' ],
             'type'              => 'string',
@@ -463,16 +457,34 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'type'              => 'string',
         ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_ids', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
-            'type'              => 'string',
-        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_source', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_source' ],
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_featured_image_source', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_featured_image_source' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_image_template', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_image_template' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_image_template', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_image_template' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_trending_image_template', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_social_trending_image_template' ],
+            'type'              => 'string',
+        ] );
+        foreach ( [ 'presshub_ai_briefing_noon_image_template', 'presshub_ai_briefing_noon_podcast_image_template' ] as $tpl_option ) {
+            PressHub_Settings_Registry::register( 'presshub_ai_options', $tpl_option, [
+                'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_image_template' ],
+                'type'              => 'string',
+            ] );
+        }
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_trending_image_source', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_social_trending_image_source' ],
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_image_feature_enabled', [
@@ -531,18 +543,6 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
             'type'              => 'string',
         ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt_1', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
-            'type'              => 'string',
-        ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt_2', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
-            'type'              => 'string',
-        ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt_3', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
-            'type'              => 'string',
-        ] );
 
         // Modular Module Provider & Model Options (Task 6)
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_provider', [
@@ -554,7 +554,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_temperature', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_temperature' ],
             'type'              => 'number',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_max_tokens', [
@@ -562,7 +562,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_timeout', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_timeout' ],
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_coauthor_max_source_chars', [
@@ -599,6 +599,40 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_qa_prompt' ],
             'type'              => 'string',
         ] );
+        // Publish gate (2.47.0): legal and SEO checks beside the editorial score.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_legal_action', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_legal_action' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_legal_fail_risk', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_legal_fail_risk' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_seo_action', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_seo_action' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_seo_min_score', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_seo_min_score' ],
+            'type'              => 'integer',
+        ] );
+        // Publish gate coverage (2.48.0): which publish paths the gate checks.
+        foreach ( [ 'presshub_ai_qa_check_editors', 'presshub_ai_qa_include_podcasts', 'presshub_ai_qa_include_trending' ] as $gate_option ) {
+            PressHub_Settings_Registry::register( 'presshub_ai_options', $gate_option, [
+                'sanitize_callback' => [ __CLASS__, 'sanitize_qa_coverage_flag' ],
+                'type'              => 'integer',
+            ] );
+        }
+
+        // #236: Editorial QA can run on its own model; empty = same as Co-author.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_provider', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_provider_id' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_model', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_model_string' ],
+            'type'              => 'string',
+        ] );
 
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_copilot_provider', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_provider_id' ],
@@ -609,7 +643,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_copilot_temperature', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_temperature' ],
             'type'              => 'number',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_copilot_max_tokens', [
@@ -617,7 +651,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_copilot_timeout', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_timeout' ],
             'type'              => 'integer',
         ] );
 
@@ -721,13 +755,18 @@ class PressHub_AI_Settings_Storage {
 
         // #233 step 5: switches that were filter-only. Each default equals the
         // value the code used before, and the filter still runs on top.
-        foreach ( [ 'presshub_ai_policy_fiches_enabled', 'presshub_ai_stakeholders_enabled', 'presshub_ai_claim_check_enabled', 'presshub_ai_pool_cleanup_enabled', 'presshub_ai_podcast_show_notes_enabled' ] as $switch ) {
+        foreach ( [ 'presshub_ai_policy_fiches_enabled', 'presshub_ai_stakeholders_enabled', 'presshub_ai_claim_check_enabled', 'presshub_ai_pool_cleanup_enabled', 'presshub_ai_podcast_show_notes_enabled', 'presshub_ai_podcast_lead_enabled', 'presshub_ai_fact_checks_enabled' ] as $switch ) {
             PressHub_Settings_Registry::register( 'presshub_ai_options', $switch, [
                 'sanitize_callback' => [ __CLASS__, 'sanitize_checkbox' ],
                 'type'              => 'integer',
                 'default'           => 1,
             ] );
         }
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_fact_check_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_fact_check_days' ],
+            'type'              => 'integer',
+            'default'           => 30,
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_pool_max_age_hours', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_pool_max_age_hours' ],
             'type'              => 'integer',
@@ -754,169 +793,33 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
             'default'           => 8,
         ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_trending_quiet_from_hour', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_trending_quiet_hour' ],
+            'type'              => 'integer',
+            'default'           => 0,
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_trending_quiet_until_hour', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_trending_quiet_hour' ],
+            'type'              => 'integer',
+            'default'           => 6,
+        ] );
 
-        // --- P1: sections ---
-        add_settings_section( 'presshub_ai_general', __( 'General', 'presshub-ai-editor' ), [ $render, 'render_general_section' ], 'presshub-ai' );
-        add_settings_section( 'presshub_ai_providers', __( 'Providers', 'presshub-ai-editor' ), [ $render, 'render_providers_section' ], 'presshub-ai' );
+        // --- Settings API sections and fields ---
+        // Only these three sections are printed field by field (by
+        // render_section_with_fields()); every other section renders its own
+        // rows, so it registers no add_settings_field() calls (#237).
         add_settings_section( 'presshub_ai_media', __( 'Media (Google Cloud)', 'presshub-ai-editor' ), [ $render, 'render_media_section' ], 'presshub-ai' );
-        add_settings_section( 'presshub_ai_rate_limits', __( 'Rate Limits & Research Retention', 'presshub-ai-editor' ), [ $render, 'render_rate_limits_section' ], 'presshub-ai' );
-        add_settings_section( 'presshub_ai_logging', __( 'Diagnostic Logging', 'presshub-ai-editor' ), [ $render, 'render_logging_section' ], 'presshub-ai' );
-        add_settings_section( 'presshub_ai_briefing', __( 'Daily Briefing & AI Podcast', 'presshub-ai-editor' ), [ $render, 'render_briefing_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_github', __( 'Plugin Updates & GitHub Integration', 'presshub-ai-editor' ), [ $render, 'render_github_section' ], 'presshub-ai' );
+        add_settings_section( 'presshub_ai_social', __( 'Social & OpenGraph Metadata', 'presshub-ai-editor' ), [ $render, 'render_social_section' ], 'presshub-ai' );
 
-        // --- P1: fields ---
-        add_settings_field( 'presshub_ai_provider', __( 'AI Provider', 'presshub-ai-editor' ), [ $render, 'render_provider_field' ], 'presshub-ai', 'presshub_ai_general' );
-        add_settings_field( 'presshub_ai_fetch_urls', __( 'Fetch source URLs', 'presshub-ai-editor' ), [ $render, 'render_fetch_urls_field' ], 'presshub-ai', 'presshub_ai_general' );
-
-        add_settings_field( 'presshub_ai_api_key', __( 'API Key', 'presshub-ai-editor' ), [ $render, 'render_api_key_field' ], 'presshub-ai', 'presshub_ai_providers' );
-        foreach ( self::PROVIDERS as $provider ) {
-            $label = ucfirst( $provider );
-            add_settings_field( 'presshub_ai_model_' . $provider, sprintf( __( 'Model (%s)', 'presshub-ai-editor' ), $label ), [ $render, 'render_model_field' ], 'presshub-ai', 'presshub_ai_providers', [ 'provider' => $provider ] );
-            add_settings_field( 'presshub_ai_temperature_' . $provider, sprintf( __( 'Temperature (%s)', 'presshub-ai-editor' ), $label ), [ $render, 'render_temperature_field' ], 'presshub-ai', 'presshub_ai_providers', [ 'provider' => $provider ] );
-            add_settings_field( 'presshub_ai_max_tokens_' . $provider, sprintf( __( 'Max Tokens (%s)', 'presshub-ai-editor' ), $label ), [ $render, 'render_max_tokens_field' ], 'presshub-ai', 'presshub_ai_providers', [ 'provider' => $provider ] );
-            add_settings_field( 'presshub_ai_timeout_' . $provider, sprintf( __( 'Timeout (%s)', 'presshub-ai-editor' ), $label ), [ $render, 'render_timeout_field' ], 'presshub-ai', 'presshub_ai_providers', [ 'provider' => $provider ] );
-        }
-        add_settings_field( 'presshub_ai_openai_org', __( 'OpenAI Organization ID (optional)', 'presshub-ai-editor' ), [ $render, 'render_openai_org_field' ], 'presshub-ai', 'presshub_ai_providers' );
-        add_settings_field( 'presshub_ai_anthropic_version', __( 'Anthropic API Version', 'presshub-ai-editor' ), [ $render, 'render_anthropic_version_field' ], 'presshub-ai', 'presshub_ai_providers' );
         add_settings_field( 'presshub_ai_github_token', __( 'GitHub Token (optional)', 'presshub-ai-editor' ), [ $render, 'render_github_token_field' ], 'presshub-ai', 'presshub_ai_github' );
 
         add_settings_field( 'presshub_ai_google_cloud_api_key', __( 'Google Cloud API Key (Imagen/TTS)', 'presshub-ai-editor' ), [ $render, 'render_google_cloud_api_key_field' ], 'presshub-ai', 'presshub_ai_media' );
         add_settings_field( 'presshub_ai_gcloud_project_id', __( 'Google Cloud Project ID (Imagen)', 'presshub-ai-editor' ), [ $render, 'render_gcloud_project_id_field' ], 'presshub-ai', 'presshub_ai_media' );
         add_settings_field( 'presshub_ai_imagen_region', __( 'Imagen Region', 'presshub-ai-editor' ), [ $render, 'render_imagen_region_field' ], 'presshub-ai', 'presshub_ai_media' );
 
-        add_settings_field( 'presshub_ai_rate_limit_enabled', __( 'Enable Per-User Rate Limit', 'presshub-ai-editor' ), [ $render, 'render_rate_limit_enabled_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
-        add_settings_field( 'presshub_ai_rate_limit_per_hour', __( 'Requests per Window', 'presshub-ai-editor' ), [ $render, 'render_rate_limit_per_hour_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
-        add_settings_field( 'presshub_ai_rate_limit_window_seconds', __( 'Window Length (seconds)', 'presshub-ai-editor' ), [ $render, 'render_rate_limit_window_seconds_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
-        add_settings_field( 'presshub_ai_research_retention_days', __( 'Research Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_research_retention_days_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
-
-        // Diagnostic Logging fields unified under presshub_ai_logging section
-        add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $render, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_logging' );
-        add_settings_field( 'presshub_ai_debug_prompts', __( 'Raw debug dump: prompts', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_logging' );
-        add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Raw debug dump: TTS payloads', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_logging' );
-        add_settings_field( 'presshub_ai_generation_record_retention_days', __( 'Generation Record Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_generation_record_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
-        add_settings_field( 'presshub_ai_log_file_retention_days', __( 'Log File Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_log_file_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
-        add_settings_field( 'presshub_ai_token_log_retention_days', __( 'Token Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_token_log_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
-        add_settings_field( 'presshub_ai_audit_log_retention_days', __( 'Audit Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_audit_log_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
-
-        add_settings_section( 'presshub_ai_social', __( 'Social & OpenGraph Metadata', 'presshub-ai-editor' ), [ $render, 'render_social_section' ], 'presshub-ai' );
         add_settings_field( 'presshub_ai_social_meta_enabled', __( 'Enable Social Metadata (OpenGraph & Twitter Cards)', 'presshub-ai-editor' ), [ $render, 'render_social_meta_enabled_field' ], 'presshub-ai', 'presshub_ai_social' );
         add_settings_field( 'presshub_ai_social_meta_all_posts', __( 'Enable for All Published Posts', 'presshub-ai-editor' ), [ $render, 'render_social_meta_all_posts_field' ], 'presshub-ai', 'presshub_ai_social' );
-
-        add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $render, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_engine', __( 'Speech engine', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_engine_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_api_key', __( 'Speech Generation API Key (Google AI Studio / Gemini)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_api_key_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_model', __( 'Voice Generation AI Model', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_timeout', __( 'Speech Generation Request Timeout (seconds)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_timeout_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_schedule_enabled', __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ), [ $render, 'render_briefing_schedule_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_noon_schedule_enabled', __( 'Enable Noon Briefing Schedule', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_schedule_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_noon_harvest_time', __( 'Noon Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_noon_generation_time', __( 'Noon Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_harvest_time_budget', __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ), [ $render, 'render_harvest_time_budget_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        // Issue #61 — Settings-First: curation LLM context cap knobs. These
-        // rows live in the Daily Briefing section next to the harvest budget
-        // and reference the News Pool Inspector in their descriptions.
-        add_settings_field( 'presshub_ai_curation_max_articles', __( 'Maximum Articles Sent to Curation LLM', 'presshub-ai-editor' ), [ $render, 'render_curation_max_articles_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_curation_max_chars_per_article', __( 'Maximum Characters per Article (Curation)', 'presshub-ai-editor' ), [ $render, 'render_curation_max_chars_per_article_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_text_preset', __( 'Text Story Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_preset', __( 'Podcast Dialogue Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_target_duration', __( 'Target Podcast Duration', 'presshub-ai-editor' ), [ $render, 'render_briefing_target_duration_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_host_count', __( 'Podcast Presenters Count', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_count_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_host_female', __( 'Presenter 1 Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_host_male', __( 'Presenter 2 Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_host_tertiary', __( 'Presenter 3 Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_tertiary_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        // Issue #90 — Settings-First: podcast dialogue style selector.
-        add_settings_field( 'presshub_ai_briefing_podcast_style', __( 'Podcast Dialogue Style', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_voice_female', __( 'Female Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_voice_male', __( 'Male Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_voice_tertiary', __( 'Third Host Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_tertiary_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_voice_speed', __( 'Voice Speaking Rate / Speed', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_speed_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_voice_pitch', __( 'Voice Pitch Tuning', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_pitch_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_turn_pause_ms', __( 'Turn Pause Duration (ms)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_turn_pause_ms_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_topic_pause_ms', __( 'Topic Transition Pause (ms)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_topic_pause_ms_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_request_delay_ms', __( 'Inter-Turn Throttle Delay (ms)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_request_delay_ms_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_max_retries', __( 'Speech API Max Retries (429/5xx)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_max_retries_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_retry_backoff_ms', __( 'Speech API Retry Backoff (ms)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_retry_backoff_ms_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_requests_per_minute', __( 'Speech API Requests per Minute', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_requests_per_minute_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_max_retry_wait_ms', __( 'Speech API Max Retry Wait (ms)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_max_retry_wait_ms_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_cron_retry_delay_min', __( 'Scheduled Synthesis Retry Delay (min)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_cron_retry_delay_min_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_audio_split_by_topic', __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ), [ $render, 'render_briefing_audio_split_by_topic_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_style', __( 'Speaking Delivery Style', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_custom_style', __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_custom_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_payload_mode', __( 'Gemini Speech Payload Structure', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_payload_mode_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_system_instruction', __( 'Gemini Speech System Instruction', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_system_instruction_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_text_category', __( 'Text Briefing Category', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_category', __( 'Podcast Category', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_text_status', __( 'Text Briefing Post Status', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        // Issue #65 — Settings-First: operator-configurable title prefix
-        // and date format for the generated Text Story post. Both fields
-        // live in the Daily Briefing section immediately after the
-        // existing post-status row so operators can adjust masthead shape
-        // without touching code.
-        add_settings_field( 'presshub_ai_briefing_text_title_prefix', __( 'Text Story Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_text_title_date_format', __( 'Text Story Title Date Format', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_date_format_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_noon_text_title_prefix', __( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_text_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_title_prefix', __( 'Morning Podcast Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_noon_podcast_title_prefix', __( 'Noon Podcast Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_podcast_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_featured_image_ids_morning', __( 'Morning Featured Image Pool', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_morning_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_featured_image_ids_noon', __( 'Noon Featured Image Pool', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_noon_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_featured_image_ids', __( 'Featured Image Pool (Attachment IDs)', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_include_text', __( 'Include Text in Podcast Post', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_include_text_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_status', __( 'Podcast Post Status', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_text_prompt', __( 'Text Story System Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_prompt_1', __( 'Podcast Dialogue System Prompt (1 Host)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_1_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_prompt_2', __( 'Podcast Dialogue System Prompt (2 Hosts)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_2_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_prompt_3', __( 'Podcast Dialogue System Prompt (3 Hosts)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_3_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-
-        // Issue #90 — Per-style prompt overrides (9 = 3 styles × 3 host counts).
-        // Each style's textareas are rendered via a dedicated render method
-        // that displays all 3 host-count variants together with a collapsible
-        // header for clarity.
-        add_settings_field( 'presshub_ai_briefing_podcast_prompts_default_greek_chat', __( 'Podcast Prompt Overrides: Default Greek Chat', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompts_default_greek_chat_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_prompts_bbc_broadcasting_standards', __( 'Podcast Prompt Overrides: BBC Broadcasting Standards', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompts_bbc_broadcasting_standards_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_prompts_conversational_news_reporting', __( 'Podcast Prompt Overrides: Conversational News Reporting', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompts_conversational_news_reporting_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-
-        // Issue #90 — Live preview block: shows the resolved template after
-        // style + host_count + per-style overrides have been applied.
-        add_settings_field( 'presshub_ai_briefing_podcast_live_preview', __( 'Podcast Dialogue Live Preview', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_live_preview_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-
-        // Automated AI Editorial QA Review System fields
-        add_settings_field( 'presshub_ai_qa_enabled', __( 'Enable AI QA Review System', 'presshub-ai-editor' ), [ $render, 'render_qa_enabled_field' ], 'presshub-ai', 'presshub_ai_general' );
-        add_settings_field( 'presshub_ai_qa_include_briefings', __( 'Include Daily Briefings in AI QA Review', 'presshub-ai-editor' ), [ $render, 'render_qa_include_briefings_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_qa_min_score', __( 'Minimum Passing Score', 'presshub-ai-editor' ), [ $render, 'render_qa_min_score_field' ], 'presshub-ai', 'presshub_ai_general' );
-        add_settings_field( 'presshub_ai_qa_notify_editor', __( 'Notify Editor on Failures', 'presshub-ai-editor' ), [ $render, 'render_qa_notify_editor_field' ], 'presshub-ai', 'presshub_ai_general' );
-        add_settings_field( 'presshub_ai_qa_editor_email', __( 'Editor Notification Email', 'presshub-ai-editor' ), [ $render, 'render_qa_editor_email_field' ], 'presshub-ai', 'presshub_ai_general' );
-        add_settings_field( 'presshub_ai_qa_article_prompt', __( 'Article QA Review Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_qa_article_prompt_field' ], 'presshub-ai', 'presshub_ai_general' );
-        add_settings_field( 'presshub_ai_qa_briefing_prompt', __( 'Daily Briefing QA Review Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_qa_briefing_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-
-        // Daily Briefing Featured Image Source fields
-        add_settings_field( 'presshub_ai_briefing_featured_image_source', __( 'Text Briefing Featured Image Source', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_source_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_featured_image_source', __( 'Podcast Featured Image Source', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_featured_image_source_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-
-        // Issue #132 — Settings-First: Editorial Memory Section Fields
-        add_settings_field( 'presshub_ai_memory_enabled', __( 'Enable Editorial Memory', 'presshub-ai-editor' ), [ $render, 'render_memory_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_memory_daily_days', __( 'Recent Memory Window (days)', 'presshub-ai-editor' ), [ $render, 'render_memory_daily_days_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_memory_background_days', __( 'Background Memory Window (days)', 'presshub-ai-editor' ), [ $render, 'render_memory_background_days_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_memory_briefing_budget_chars', __( 'Briefing Memory Budget (chars)', 'presshub-ai-editor' ), [ $render, 'render_memory_briefing_budget_chars_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_memory_podcast_budget_chars', __( 'Podcast Memory Budget (chars)', 'presshub-ai-editor' ), [ $render, 'render_memory_podcast_budget_chars_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_memory_retention_days', __( 'Memory Retention Window (days)', 'presshub-ai-editor' ), [ $render, 'render_memory_retention_days_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_memory_provider', __( 'Memory Model Provider', 'presshub-ai-editor' ), [ $render, 'render_briefing_memory_provider_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_memory_model', __( 'Memory Model Override', 'presshub-ai-editor' ), [ $render, 'render_briefing_memory_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-
-        // AI Featured Images section & fields
-        add_settings_section( 'presshub_ai_images', __( 'AI Featured Images', 'presshub-ai-editor' ), [ $render, 'render_images_section' ], 'presshub-ai' );
-        add_settings_field( 'presshub_ai_image_feature_enabled', __( 'Enable AI Featured Images', 'presshub-ai-editor' ), [ $render, 'render_image_feature_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_image_prompt_provider', __( 'Article Analysis AI Provider', 'presshub-ai-editor' ), [ $render, 'render_image_prompt_provider_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_image_prompt_model', __( 'Article Analysis Model Override', 'presshub-ai-editor' ), [ $render, 'render_image_prompt_model_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_image_generation_provider', __( 'Image Generation AI Provider', 'presshub-ai-editor' ), [ $render, 'render_image_generation_provider_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_image_aspect_ratio', __( 'Default Aspect Ratio', 'presshub-ai-editor' ), [ $render, 'render_image_aspect_ratio_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_image_analysis_prompt', __( 'Article Analysis Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_image_analysis_prompt_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_image_metadata_enabled', __( 'AI Image Metadata', 'presshub-ai-editor' ), [ $render, 'render_image_metadata_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_seo_auto_enabled', __( 'Automatic Tags & SEO', 'presshub-ai-editor' ), [ $render, 'render_seo_auto_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_briefing_seo_enhance_enabled', __( 'Daily Briefing SEO Structure', 'presshub-ai-editor' ), [ $render, 'render_briefing_seo_enhance_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_seo_max_tags', __( 'Maximum Tags per Post', 'presshub-ai-editor' ), [ $render, 'render_seo_max_tags_field' ], 'presshub-ai', 'presshub_ai_images' );
-        add_settings_field( 'presshub_ai_seo_review_enabled', __( 'SEO Score in Editorial Review', 'presshub-ai-editor' ), [ $render, 'render_seo_review_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
     }
 
 
@@ -929,11 +832,6 @@ class PressHub_AI_Settings_Storage {
     // $render = new PressHub_AI_Settings_Render() instance so the
     // render_*_field callbacks resolve on the render module.
     // ------------------------------------------------------------------
-
-    public static function sanitize_provider( $value ) {
-        $value = self::sanitize_text( $value );
-        return in_array( $value, self::PROVIDERS, true ) ? $value : 'openai';
-    }
 
     /**
      * 1.2.4: fetch-source-URLs toggle ('1'/'0' only).
@@ -994,10 +892,6 @@ class PressHub_AI_Settings_Storage {
         return substr( trim( $value ), 0, 10000 );
     }
 
-    public static function sanitize_api_key( $value ) {
-        return self::sanitize_secret( $value, 'presshub_ai_api_key' );
-    }
-
     public static function sanitize_google_cloud_api_key( $value ) {
         return self::sanitize_secret( $value, 'presshub_ai_google_cloud_api_key' );
     }
@@ -1006,30 +900,18 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_secret( $value, 'presshub_ai_github_token' );
     }
 
-    public static function sanitize_briefing_tts_api_key( $value ) {
-        return self::sanitize_secret( $value, 'presshub_ai_briefing_tts_api_key' );
-    }
-
     /**
      * "Remove stored key" checkbox sanitizers: posting 1 deletes the
      * secret option outright (the only UI path that can clear a key, since
      * empty/masked posts preserve the saved value). The flag option itself
      * is stored as 0 either way.
      */
-    public static function sanitize_remove_api_key( $value ) {
-        return self::sanitize_remove_key( $value, 'presshub_ai_api_key' );
-    }
-
     public static function sanitize_remove_google_cloud_api_key( $value ) {
         return self::sanitize_remove_key( $value, 'presshub_ai_google_cloud_api_key' );
     }
 
     public static function sanitize_remove_github_token( $value ) {
         return self::sanitize_remove_key( $value, 'presshub_ai_github_token' );
-    }
-
-    public static function sanitize_remove_briefing_tts_api_key( $value ) {
-        return self::sanitize_remove_key( $value, 'presshub_ai_briefing_tts_api_key' );
     }
 
     private static function sanitize_remove_key( $value, $option_name ) {
@@ -1148,22 +1030,30 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_audit_log_retention_days( get_option( 'presshub_ai_audit_log_retention_days', 90 ) );
     }
 
-    public static function sanitize_model( $value, $provider = 'openai' ) {
-        $value = self::sanitize_text( $value );
-        if ( '' === $value ) {
-            return self::default_model( $provider );
+    /**
+     * Sanitize backup_keep (#296): how many backups to keep.
+     * Non-numeric input falls back to the default of 5; numeric input is clamped to 1-20.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_backup_keep( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
         }
-        return substr( $value, 0, 200 );
+        if ( ! is_numeric( $value ) ) {
+            return 5;
+        }
+        return max( 1, min( 20, (int) $value ) );
     }
 
-    public static function sanitize_temperature( $value ) {
-        $value = wp_unslash( $value );
-        if ( ! is_numeric( $value ) ) {
-            return self::default_temperature();
-        }
-        // Clamp to 0–2 like every other temperature field (#258); only a
-        // non-numeric value falls back to the default.
-        return round( max( 0.0, min( 2.0, (float) $value ) ), 2 );
+    /**
+     * backup_keep: backups PressHub keeps (default 5, clamped 1-20).
+     *
+     * @return int
+     */
+    public static function get_backup_keep(): int {
+        return self::sanitize_backup_keep( get_option( 'presshub_ai_backup_keep', 5 ) );
     }
 
     /**
@@ -1211,16 +1101,6 @@ class PressHub_AI_Settings_Storage {
         return max( 1, min( 65536, $n ) );
     }
 
-    public static function sanitize_timeout( $value ) {
-        if ( null === $value || '' === trim( (string) $value ) ) {
-            return PressHub_AI_Provider_Defaults::DEFAULT_TIMEOUT;
-        }
-        // 10 s is the shortest timeout the API client honours (#259); a
-        // lower stored value would be silently ignored there.
-        $n = (int) wp_unslash( $value );
-        return max( 10, min( 300, $n ) );
-    }
-
     public static function sanitize_rate_limit_per_hour( $value ) {
         $n = (int) wp_unslash( $value );
         return max( 1, min( 10000, $n ) );
@@ -1251,14 +1131,6 @@ class PressHub_AI_Settings_Storage {
             return $value;
         }
         return 'INFO';
-    }
-
-    public static function sanitize_openai_org( $value ) {
-        return substr( self::sanitize_text( $value ), 0, 512 );
-    }
-
-    public static function sanitize_anthropic_version( $value ) {
-        return substr( self::sanitize_text( $value ), 0, 50 );
     }
 
     /**
@@ -2021,14 +1893,6 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_provider_id( (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' ) );
     }
 
-    public static function get_briefing_podcast_provider(): string {
-        return self::sanitize_provider_id( (string) get_option( 'presshub_ai_briefing_podcast_provider', '' ) );
-    }
-
-    public static function get_briefing_podcast_model(): string {
-        return self::sanitize_model_string( (string) get_option( 'presshub_ai_briefing_podcast_model', '' ) );
-    }
-
     public static function get_briefing_target_duration(): string {
         return self::sanitize_briefing_duration( (string) get_option( 'presshub_ai_briefing_target_duration', self::default_briefing_target_duration() ) );
     }
@@ -2049,16 +1913,8 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_briefing_status( (string) get_option( 'presshub_ai_briefing_podcast_status', 'pending' ) );
     }
 
-    public static function get_briefing_text_preset(): string {
-        return self::sanitize_preset_slug( (string) get_option( 'presshub_ai_briefing_text_preset', '' ) );
-    }
-
     public static function get_briefing_podcast_preset(): string {
         return self::sanitize_preset_slug( (string) get_option( 'presshub_ai_briefing_podcast_preset', '' ) );
-    }
-
-    public static function get_briefing_text_prompt(): string {
-        return self::sanitize_briefing_prompt( (string) get_option( 'presshub_ai_briefing_text_prompt', '' ) );
     }
 
     public static function get_briefing_tts_turn_pause_ms(): int {
@@ -2071,6 +1927,21 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_briefing_tts_request_delay_ms(): int {
         return self::sanitize_briefing_tts_request_delay_ms( get_option( 'presshub_ai_briefing_tts_request_delay_ms', self::default_briefing_tts_request_delay_ms() ) );
+    }
+
+    /**
+     * How podcast turns become Gemini speech requests (2.74.0):
+     * per_turn (one request per turn, the default), same_voice (back-to-back
+     * turns by the same voice in one request) or two_voices (two hosts in one
+     * request, names kept in the text, plus same_voice joining).
+     */
+    public static function get_briefing_tts_request_mode(): string {
+        return self::sanitize_briefing_tts_request_mode( get_option( 'presshub_ai_briefing_tts_request_mode', self::TTS_REQUEST_MODE_DEFAULT ) );
+    }
+
+    /** Most characters of script text in one joined speech request. */
+    public static function get_briefing_tts_request_max_chars(): int {
+        return self::sanitize_briefing_tts_request_max_chars( get_option( 'presshub_ai_briefing_tts_request_max_chars', self::TTS_REQUEST_MAX_CHARS_DEFAULT ) );
     }
 
     public static function get_briefing_tts_max_retries(): int {
@@ -2155,14 +2026,23 @@ class PressHub_AI_Settings_Storage {
         return in_array( $voice, $allowed, true ) ? $voice : $default;
     }
 
+    /** Default third presenter voice for the current speech engine (registry default, #309 E9). */
+    public static function default_voice_tertiary(): string {
+        return ( 'google_cloud' === self::get_briefing_tts_engine() ) ? 'el-GR-Wavenet-C' : 'Puck';
+    }
+
+    /** Default log level when none is chosen: as PressHub_AI_Logger, DEBUG with WP_DEBUG, else INFO (#309 E9). */
+    public static function default_log_level(): string {
+        return ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? 'DEBUG' : 'INFO';
+    }
+
     /**
      * Helper to retrieve configured tertiary voice persona (default 'Puck').
      *
      * @return string Third host voice persona.
      */
     public static function get_voice_tertiary(): string {
-        $engine = self::get_briefing_tts_engine();
-        $default = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck';
+        $default = self::default_voice_tertiary();
         $voice = (string) get_option( 'presshub_ai_briefing_voice_tertiary', $default );
         $allowed = self::voice_catalog_allow_list();
         return in_array( $voice, $allowed, true ) ? $voice : $default;
@@ -2245,6 +2125,99 @@ class PressHub_AI_Settings_Storage {
     public static function get_briefing_audio_split_by_topic(): bool {
         $val = get_option( 'presshub_ai_briefing_audio_split_by_topic', 1 );
         return (bool) (int) $val;
+    }
+
+    /**
+     * Languages the Daily Briefing podcast is also made in (codes of
+     * PressHub_AI_Podcast_Translations::LANGUAGES, e.g. [ 'en', 'tr' ]). Default: none.
+     *
+     * @return string[]
+     */
+    public static function get_briefing_podcast_languages(): array {
+        return self::sanitize_briefing_podcast_languages( get_option( 'presshub_ai_briefing_podcast_languages', [] ) );
+    }
+
+    /** Known language codes only, in the order of LANGUAGES, each once. */
+    public static function sanitize_briefing_podcast_languages( $value ): array {
+        if ( null === $value ) {
+            // Not in this save (another tab's form): keep what is stored.
+            $value = get_option( 'presshub_ai_briefing_podcast_languages', [] );
+        }
+        $value = is_array( $value ) ? array_map( 'strval', $value ) : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        return array_values( array_intersect( $known, $value ) );
+    }
+
+    /**
+     * Translator's notes for one language: place names, terms and wording the
+     * translation of the podcast must follow. Default: the built-in notes.
+     */
+    public static function get_briefing_podcast_language_notes( string $lang ): string {
+        $all = get_option( 'presshub_ai_briefing_podcast_language_notes', null );
+        $notes = ( is_array( $all ) && array_key_exists( $lang, $all ) ) ? self::sanitize_language_notes_text( $all[ $lang ] ) : '';
+        // An emptied box goes back to the built-in notes.
+        return '' !== $notes ? $notes : self::default_briefing_podcast_language_notes( $lang );
+    }
+
+    /** Built-in translator's notes of a language ('' for an unknown one). */
+    public static function default_briefing_podcast_language_notes( string $lang ): string {
+        $defaults = class_exists( 'PressHub_AI_Podcast_Translations' ) ? PressHub_AI_Podcast_Translations::default_notes() : [];
+        return (string) ( $defaults[ $lang ] ?? '' );
+    }
+
+    /** Notes per known language, each plain text of at most 4,000 characters. */
+    public static function sanitize_briefing_podcast_language_notes( $value ): array {
+        $value = is_array( $value ) ? $value : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out   = [];
+        foreach ( $known as $lang ) {
+            $out[ $lang ] = array_key_exists( $lang, $value )
+                ? self::sanitize_language_notes_text( $value[ $lang ] )
+                : self::get_briefing_podcast_language_notes( $lang );
+        }
+        return $out;
+    }
+
+    private static function sanitize_language_notes_text( $text ): string {
+        $text = is_string( $text ) ? $text : '';
+        $text = function_exists( 'wp_unslash' ) ? wp_unslash( $text ) : $text;
+        $text = function_exists( 'sanitize_textarea_field' ) ? sanitize_textarea_field( $text ) : trim( strip_tags( $text ) );
+        return mb_substr( trim( $text ), 0, 4000 );
+    }
+
+    /**
+     * Voices of one language's podcast, keyed presenter_1..presenter_3. An empty
+     * voice means the Greek podcast's voice for that presenter (the default).
+     *
+     * @return array{presenter_1:string,presenter_2:string,presenter_3:string}
+     */
+    public static function get_briefing_podcast_language_voices( string $lang ): array {
+        $all = self::sanitize_briefing_podcast_language_voices( get_option( 'presshub_ai_briefing_podcast_language_voices', [] ) );
+        return $all[ $lang ] ?? [ 'presenter_1' => '', 'presenter_2' => '', 'presenter_3' => '' ];
+    }
+
+    /**
+     * Voice names per known language and presenter; anything else is dropped. A
+     * language or presenter missing from the posted value (another tab's form, or a
+     * presenter hidden while the podcast has fewer hosts) keeps its stored voice.
+     */
+    public static function sanitize_briefing_podcast_language_voices( $value ): array {
+        $stored = get_option( 'presshub_ai_briefing_podcast_language_voices', [] );
+        $stored = is_array( $stored ) ? $stored : [];
+        $value  = is_array( $value ) ? $value : [];
+        $known  = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out    = [];
+        foreach ( $known as $lang ) {
+            $row = is_array( $value[ $lang ] ?? null ) ? $value[ $lang ] : [];
+            $old = is_array( $stored[ $lang ] ?? null ) ? $stored[ $lang ] : [];
+            foreach ( [ 'presenter_1', 'presenter_2', 'presenter_3' ] as $p ) {
+                $voice = array_key_exists( $p, $row ) ? $row[ $p ] : ( $old[ $p ] ?? '' );
+                $voice = is_string( $voice ) ? trim( $voice ) : '';
+                // Gemini names (Kore) and Google Cloud names (en-US-Chirp3-HD-Achird).
+                $out[ $lang ][ $p ] = preg_match( '/^[A-Za-z0-9][A-Za-z0-9_\-]{1,63}$/', $voice ) ? $voice : '';
+            }
+        }
+        return $out;
     }
 
     /**
@@ -2343,6 +2316,118 @@ class PressHub_AI_Settings_Storage {
         return PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
     }
 
+    // ------------------------------------------------------------------
+    // Publish gate: legal and SEO checks (2.47.0)
+    // ------------------------------------------------------------------
+
+    /** What a failed legal check does: off, alert (publish and email) or hold (keep pending). */
+    const QA_LEGAL_ACTIONS = [ 'off', 'alert', 'hold' ];
+
+    /** What a failed SEO check does: alert (publish and email) or hold. */
+    const QA_SEO_ACTIONS = [ 'alert', 'hold' ];
+
+    /** Lowest legal risk that fails the legal check. */
+    const QA_LEGAL_FAIL_RISKS = [ 'high', 'medium' ];
+
+    public static function default_qa_legal_action(): string {
+        return 'alert';
+    }
+
+    public static function sanitize_qa_legal_action( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_LEGAL_ACTIONS, true ) ? $value : self::default_qa_legal_action();
+    }
+
+    /** Legal check action: 'off', 'alert' or 'hold'. Default: alert. */
+    public static function get_qa_legal_action(): string {
+        return self::sanitize_qa_legal_action( get_option( 'presshub_ai_qa_legal_action', self::default_qa_legal_action() ) );
+    }
+
+    public static function default_qa_legal_fail_risk(): string {
+        return 'high';
+    }
+
+    public static function sanitize_qa_legal_fail_risk( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_LEGAL_FAIL_RISKS, true ) ? $value : self::default_qa_legal_fail_risk();
+    }
+
+    /** Lowest legal risk that fails: 'high' (only High) or 'medium' (Medium or High). Default: high. */
+    public static function get_qa_legal_fail_risk(): string {
+        return self::sanitize_qa_legal_fail_risk( get_option( 'presshub_ai_qa_legal_fail_risk', self::default_qa_legal_fail_risk() ) );
+    }
+
+    public static function default_qa_seo_action(): string {
+        return 'alert';
+    }
+
+    public static function sanitize_qa_seo_action( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_SEO_ACTIONS, true ) ? $value : self::default_qa_seo_action();
+    }
+
+    /** SEO check action: 'alert' or 'hold'. Default: alert. */
+    public static function get_qa_seo_action(): string {
+        return self::sanitize_qa_seo_action( get_option( 'presshub_ai_qa_seo_action', self::default_qa_seo_action() ) );
+    }
+
+    public static function default_qa_seo_min_score(): int {
+        return 60;
+    }
+
+    /** Minimum SEO score, clamped to 0 - 100. */
+    public static function sanitize_qa_seo_min_score( $value ): int {
+        if ( '' === $value || null === $value ) {
+            return self::default_qa_seo_min_score();
+        }
+        return max( 0, min( 100, (int) wp_unslash( $value ) ) );
+    }
+
+    /** Minimum SEO score (0 - 100) the SEO check needs. Default: 60. */
+    public static function get_qa_seo_min_score(): int {
+        return self::sanitize_qa_seo_min_score( get_option( 'presshub_ai_qa_seo_min_score', self::default_qa_seo_min_score() ) );
+    }
+
+    /** Default of the three coverage switches below: on. */
+    public static function default_qa_coverage_flag(): int {
+        return 1;
+    }
+
+    /** A coverage switch: 1 or 0. Anything else falls back to the default. */
+    public static function sanitize_qa_coverage_flag( $value ): int {
+        if ( null === $value || '' === $value ) {
+            return 0; // An unticked checkbox posts the hidden "0" or nothing.
+        }
+        $value = is_string( $value ) ? strtolower( trim( wp_unslash( $value ) ) ) : $value;
+        if ( in_array( $value, [ 1, '1', true, 'on', 'yes' ], true ) ) {
+            return 1;
+        }
+        if ( in_array( $value, [ 0, '0', false, 'off', 'no' ], true ) ) {
+            return 0;
+        }
+        return self::default_qa_coverage_flag();
+    }
+
+    private static function qa_coverage_flag( string $option ): bool {
+        $value = get_option( $option, self::default_qa_coverage_flag() );
+        return 1 === self::sanitize_qa_coverage_flag( false === $value ? self::default_qa_coverage_flag() : $value );
+    }
+
+    /** Check posts that editors and admins publish. Default: on. */
+    public static function get_qa_check_editors(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_check_editors' );
+    }
+
+    /** Check Daily Briefing podcast posts. Default: on. */
+    public static function get_qa_include_podcasts(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_include_podcasts' );
+    }
+
+    /** Check the Trending in Cyprus roundup. Default: on. */
+    public static function get_qa_include_trending(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_include_trending' );
+    }
+
     /**
      * Helper to get the selected sound effect to inject between topics (default 'silence').
      *
@@ -2364,32 +2449,11 @@ class PressHub_AI_Settings_Storage {
         return self::resolve_podcast_prompt( 1, 'presshub_ai_briefing_podcast_prompt_1', $style );
     }
 
-    /**
-     * Issue #90 — overload of get_podcast_prompt_1() that accepts an explicit
-     * style key. Precedence:
-     *   1. presshub_ai_briefing_podcast_prompt_1_<style> (per-style override)
-     *   2. PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( 1, $style )
-     * The legacy global override (presshub_ai_briefing_podcast_prompt_1)
-     * is no longer consulted when a style is explicitly passed; operators
-     * customize per-style from now on.
-     */
-    public static function get_podcast_prompt_1_for_style( string $style ): string {
-        return self::resolve_podcast_prompt( 1, 'presshub_ai_briefing_podcast_prompt_1', $style );
-    }
-
     public static function get_podcast_prompt_2( string $style = '' ): string {
         return self::resolve_podcast_prompt( 2, 'presshub_ai_briefing_podcast_prompt_2', $style );
     }
 
-    public static function get_podcast_prompt_2_for_style( string $style ): string {
-        return self::resolve_podcast_prompt( 2, 'presshub_ai_briefing_podcast_prompt_2', $style );
-    }
-
     public static function get_podcast_prompt_3( string $style = '' ): string {
-        return self::resolve_podcast_prompt( 3, 'presshub_ai_briefing_podcast_prompt_3', $style );
-    }
-
-    public static function get_podcast_prompt_3_for_style( string $style ): string {
         return self::resolve_podcast_prompt( 3, 'presshub_ai_briefing_podcast_prompt_3', $style );
     }
 
@@ -2524,11 +2588,6 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_press_inbox_timeout'             => [ __CLASS__, 'sanitize_press_inbox_timeout' ],
             'presshub_ai_press_inbox_extract_attachments' => [ __CLASS__, 'sanitize_boolean' ],
         ];
-    }
-
-    /** Checkbox options of the press inbox (unchecked => 0 on save). */
-    public static function get_press_inbox_boolean_options(): array {
-        return [ 'presshub_ai_press_inbox_enabled', 'presshub_ai_press_inbox_verify_ssl', 'presshub_ai_press_inbox_extract_attachments' ];
     }
 
     private static function clamp_int_option( $value, int $min, int $max, int $default ): int {
@@ -2745,10 +2804,6 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_social_monitor_max_video_seconds'      => [ __CLASS__, 'sanitize_social_monitor_max_video_seconds' ],
             'presshub_ai_social_monitor_max_video_mb'           => [ __CLASS__, 'sanitize_social_monitor_max_video_mb' ],
         ];
-    }
-
-    public static function get_social_monitor_boolean_options(): array {
-        return [ 'presshub_ai_social_monitor_enabled', 'presshub_ai_social_monitor_transcribe_videos' ];
     }
 
     public static function sanitize_social_monitor_interval_min( $value ): int {
@@ -3150,15 +3205,6 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
-     * Settings-First getter for AI Co-Author Maximum Output Tokens.
-     * Returns 0 if unset or < 64 (meaning no module override, use provider default).
-     */
-    public static function get_coauthor_max_tokens(): int {
-        $value = (int) get_option( 'presshub_ai_coauthor_max_tokens', 0 );
-        return ( $value >= 64 && $value <= 65536 ) ? $value : 0;
-    }
-
-    /**
      * Settings-First getter for AI Co-Author Maximum Source Material Characters.
      * Returns clamped value between 1,000 and 1,000,000. Defaults to 200,000.
      *
@@ -3204,15 +3250,6 @@ class PressHub_AI_Settings_Storage {
             return 200000;
         }
         return max( 1000, min( 1000000, $val ) );
-    }
-
-    /**
-     * Settings-First getter for AI Copilot Maximum Output Tokens.
-     * Returns 0 if unset or < 64 (meaning no module override, use provider default).
-     */
-    public static function get_copilot_max_tokens(): int {
-        $value = (int) get_option( 'presshub_ai_copilot_max_tokens', 0 );
-        return ( $value >= 64 && $value <= 65536 ) ? $value : 0;
     }
 
     /**
@@ -3360,10 +3397,8 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function get_briefing_podcast_title_prefix(): string {
+        // #309 (E1): the old morning name was copied here by the settings clean-up.
         $value = get_option( 'presshub_ai_briefing_podcast_title_prefix', null );
-        if ( null === $value ) {
-            $value = get_option( 'presshub_ai_briefing_morning_podcast_title_prefix', null );
-        }
         if ( null === $value ) {
             return self::default_briefing_podcast_title_prefix();
         }
@@ -3620,6 +3655,16 @@ class PressHub_AI_Settings_Storage {
         return max( 0, min( 5000, $val ) );
     }
 
+    public static function sanitize_briefing_tts_request_mode( $value ): string {
+        $value = is_string( $value ) ? trim( $value ) : '';
+        return in_array( $value, self::TTS_REQUEST_MODES, true ) ? $value : self::TTS_REQUEST_MODE_DEFAULT;
+    }
+
+    public static function sanitize_briefing_tts_request_max_chars( $value ): int {
+        $val = is_numeric( $value ) ? (int) $value : self::TTS_REQUEST_MAX_CHARS_DEFAULT;
+        return max( self::TTS_REQUEST_MAX_CHARS_MIN, min( self::TTS_REQUEST_MAX_CHARS_MAX, $val ) );
+    }
+
     public static function sanitize_briefing_tts_max_retries( $value ): int {
         $val = is_numeric( $value ) ? (int) $value : self::default_briefing_tts_max_retries();
         return max( 0, min( 5, $val ) );
@@ -3738,8 +3783,8 @@ class PressHub_AI_Settings_Storage {
     // These delegate to PressHub_AI_Provider_Defaults (the single
     // source of truth — class-provider-defaults.php) so that the
     // storage class never diverges from the facade's return values.
-    // sanitize_model → default_model, sanitize_temperature →
-    // default_temperature, etc.
+    // (The per-provider sanitizers went with their options in #309 E1;
+    // provider tuning is sanitized by PressHub_AI_Provider_Store.)
     //
     // The "briefing" defaults (host names, harvest time, voice,
     // style, etc.) live on PressHub_AI_Settings itself for now;
@@ -3771,11 +3816,6 @@ class PressHub_AI_Settings_Storage {
     public static function get_briefing_harvest_time(): string {
         $value = get_option( 'presshub_ai_briefing_harvest_time', self::default_briefing_harvest_time() );
         return self::sanitize_harvest_time( $value );
-    }
-
-    public static function get_briefing_generation_time(): string {
-        $value = get_option( 'presshub_ai_briefing_generation_time', self::default_briefing_generation_time() );
-        return self::sanitize_generation_time( $value );
     }
 
     public static function default_briefing_noon_schedule_enabled(): int {
@@ -3846,12 +3886,8 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_briefing_featured_image_ids_morning(): array {
         $val = (string) get_option( 'presshub_ai_briefing_featured_image_ids_morning', '' );
-        $ids = self::parse_ids_to_array( $val );
-        if ( ! empty( $ids ) ) {
-            return $ids;
-        }
-        $legacy = (string) get_option( 'presshub_ai_briefing_featured_image_ids', '' );
-        return self::parse_ids_to_array( $legacy );
+        // #309 (E1): the old single pool was copied here by the settings clean-up.
+        return self::parse_ids_to_array( $val );
     }
 
     public static function get_briefing_featured_image_ids_noon(): array {
@@ -4034,6 +4070,98 @@ class PressHub_AI_Settings_Storage {
         return (string) get_option( 'presshub_ai_briefing_podcast_featured_image_source', self::default_briefing_featured_image_source() );
     }
 
+    /** Featured Image Studio template for automatic briefing images: Editorial photo. */
+    public static function default_briefing_image_template(): string {
+        return 'editorial_photo';
+    }
+
+    /** A template id that exists (built-in or saved); anything else is the default. */
+    public static function sanitize_briefing_image_template( $value ): string {
+        $id = sanitize_key( (string) $value );
+        if ( '' === $id ) {
+            return self::default_briefing_image_template();
+        }
+        if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+        }
+        return null !== PressHub_AI_Image_Prompt_Templates::get( $id ) ? $id : self::default_briefing_image_template();
+    }
+
+    public static function sanitize_briefing_podcast_image_template( $value ): string {
+        return self::sanitize_briefing_image_template( $value );
+    }
+
+    /**
+     * Trending in Cyprus template: Editorial cartoon. The roundup is drawn from
+     * unverified social posts, so an illustration is not mistaken for a news photo.
+     */
+    public static function default_social_trending_image_template(): string {
+        return 'editorial_cartoon';
+    }
+
+    public static function sanitize_social_trending_image_template( $value ): string {
+        $id = sanitize_key( (string) $value );
+        if ( '' === $id ) {
+            return self::default_social_trending_image_template();
+        }
+        if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+        }
+        return null !== PressHub_AI_Image_Prompt_Templates::get( $id ) ? $id : self::default_social_trending_image_template();
+    }
+
+    /** Default template of one automatic post type. */
+    public static function default_auto_image_template( string $kind ): string {
+        return 'social_trending' === $kind ? self::default_social_trending_image_template() : self::default_briefing_image_template();
+    }
+
+    /**
+     * The automatic post types that make an AI featured image, in the order
+     * of the Settings table: kind => template option.
+     */
+    public static function auto_image_template_options(): array {
+        return [
+            'briefing_morning' => 'presshub_ai_briefing_image_template',
+            'briefing_noon'    => 'presshub_ai_briefing_noon_image_template',
+            'podcast_morning'  => 'presshub_ai_briefing_podcast_image_template',
+            'podcast_noon'     => 'presshub_ai_briefing_noon_podcast_image_template',
+            'social_trending'  => 'presshub_ai_social_trending_image_template',
+        ];
+    }
+
+    /**
+     * Template id for one automatic post type (a kind of auto_image_template_options()).
+     * Read it through PressHub_AI_Image_Prompt_Templates::resolve(), which handles a deleted one.
+     */
+    public static function get_auto_image_template( string $kind ): string {
+        $options = self::auto_image_template_options();
+        if ( ! isset( $options[ $kind ] ) ) {
+            return self::default_briefing_image_template();
+        }
+        $id = (string) get_option( $options[ $kind ], self::default_auto_image_template( $kind ) );
+        return '' !== $id ? $id : self::default_auto_image_template( $kind );
+    }
+
+    /** Briefing or podcast template for an edition. */
+    public static function get_briefing_edition_image_template( string $type, string $edition ): string {
+        $kind = ( 'podcast' === $type ? 'podcast_' : 'briefing_' ) . ( 'noon' === $edition ? 'noon' : 'morning' );
+        return self::get_auto_image_template( $kind );
+    }
+
+    /** Trending in Cyprus featured image: the top post's picture (default) or an AI image. */
+    public static function default_social_trending_image_source(): string {
+        return 'top_post';
+    }
+
+    public static function sanitize_social_trending_image_source( $value ): string {
+        $val = trim( (string) $value );
+        return in_array( $val, [ 'top_post', 'auto_generate' ], true ) ? $val : self::default_social_trending_image_source();
+    }
+
+    public static function get_social_trending_image_source(): string {
+        return self::sanitize_social_trending_image_source( get_option( 'presshub_ai_social_trending_image_source', self::default_social_trending_image_source() ) );
+    }
+
     public static function default_image_feature_enabled(): int {
         return 0;
     }
@@ -4054,16 +4182,8 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_provider_id( $value );
     }
 
-    public static function get_image_prompt_provider(): string {
-        return (string) get_option( 'presshub_ai_image_prompt_provider', self::default_image_prompt_provider() );
-    }
-
     public static function sanitize_image_prompt_model( $value ): string {
         return self::sanitize_model_string( $value );
-    }
-
-    public static function get_image_prompt_model(): string {
-        return (string) get_option( 'presshub_ai_image_prompt_model', '' );
     }
 
     public static function default_image_generation_provider(): string {
@@ -4072,10 +4192,6 @@ class PressHub_AI_Settings_Storage {
 
     public static function sanitize_image_generation_provider( $value ): string {
         return self::sanitize_provider_id( $value );
-    }
-
-    public static function get_image_generation_provider(): string {
-        return (string) get_option( 'presshub_ai_image_generation_provider', self::default_image_generation_provider() );
     }
 
     public static function default_image_aspect_ratio(): string {
@@ -4289,10 +4405,6 @@ class PressHub_AI_Settings_Storage {
         return '' !== trim( $value ) ? $value : self::default_briefing_tts_system_instruction();
     }
 
-    public static function get_briefing_tts_api_key(): string {
-        return (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-    }
-
     public static function get_voice_speed(): float {
         $val = get_option( 'presshub_ai_briefing_voice_speed', 1.0 );
         return self::sanitize_voice_speed( $val );
@@ -4483,14 +4595,6 @@ class PressHub_AI_Settings_Storage {
         return max( 30, min( 730, $n ) );
     }
 
-    public static function get_briefing_memory_provider(): string {
-        return self::sanitize_provider_id( (string) get_option( 'presshub_ai_briefing_memory_provider', '' ) );
-    }
-
-    public static function get_briefing_memory_model(): string {
-        return self::sanitize_model_string( (string) get_option( 'presshub_ai_briefing_memory_model', '' ) );
-    }
-
 
     // ------------------------------------------------------------------
     // #233 step 5: Editorial knowledge switches (were filter-only)
@@ -4517,12 +4621,59 @@ class PressHub_AI_Settings_Storage {
         return self::get_switch( 'presshub_ai_claim_check_enabled' );
     }
 
+    public static function get_fact_checks_enabled(): bool {
+        return self::get_switch( 'presshub_ai_fact_checks_enabled' );
+    }
+
+    /** How many days a fact check in the editorial memory is used (1 to 180, default 30). */
+    public static function sanitize_fact_check_days( $value ): int {
+        $n = is_numeric( $value ) ? (int) $value : 30;
+        return max( 1, min( 180, $n ) );
+    }
+
+    public static function get_fact_check_days(): int {
+        return self::sanitize_fact_check_days( get_option( 'presshub_ai_fact_check_days', 30 ) );
+    }
+
     public static function get_pool_cleanup_enabled(): bool {
         return self::get_switch( 'presshub_ai_pool_cleanup_enabled' );
     }
 
     public static function get_podcast_show_notes_enabled(): bool {
         return self::get_switch( 'presshub_ai_podcast_show_notes_enabled' );
+    }
+
+    public static function get_podcast_lead_enabled(): bool {
+        return self::get_switch( 'presshub_ai_podcast_lead_enabled' );
+    }
+
+    /** MP3 bitrates offered for the podcast episodes (kbps); the voice is 24 kHz mono. */
+    public const PODCAST_MP3_BITRATES = [ 48, 64, 96, 128 ];
+
+    public const PODCAST_MP3_BITRATE_DEFAULT = 64;
+
+    /** Speech request modes (2.74.0): see get_briefing_tts_request_mode(). */
+    public const TTS_REQUEST_MODES        = [ 'per_turn', 'same_voice', 'two_voices' ];
+    public const TTS_REQUEST_MODE_DEFAULT = 'per_turn';
+
+    /** Characters of script text in one joined speech request: default and range. */
+    public const TTS_REQUEST_MAX_CHARS_DEFAULT = 1500;
+    public const TTS_REQUEST_MAX_CHARS_MIN     = 300;
+    public const TTS_REQUEST_MAX_CHARS_MAX     = 4000;
+
+    /** Whether the worker converts WAV podcast episodes to MP3. Default: on. */
+    public static function get_podcast_mp3_enabled(): bool {
+        return self::get_switch( 'presshub_ai_podcast_mp3_enabled' );
+    }
+
+    public static function sanitize_podcast_mp3_bitrate( $value ): int {
+        $n = is_numeric( $value ) ? (int) $value : self::PODCAST_MP3_BITRATE_DEFAULT;
+        return in_array( $n, self::PODCAST_MP3_BITRATES, true ) ? $n : self::PODCAST_MP3_BITRATE_DEFAULT;
+    }
+
+    /** MP3 bitrate of the podcast episodes, in kbps. Default: 64. */
+    public static function get_podcast_mp3_bitrate(): int {
+        return self::sanitize_podcast_mp3_bitrate( get_option( 'presshub_ai_podcast_mp3_bitrate', self::PODCAST_MP3_BITRATE_DEFAULT ) );
     }
 
     public static function sanitize_pool_max_age_hours( $value ): int {
@@ -4561,6 +4712,22 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_trending_share_after_hour( get_option( 'presshub_ai_social_trending_share_after_hour', 8 ) );
     }
 
+    /** Quiet hours of the trending roundup: a local hour 0–23. */
+    public static function sanitize_trending_quiet_hour( $value ): int {
+        $n = is_numeric( $value ) ? (int) $value : 0;
+        return max( 0, min( 23, $n ) );
+    }
+
+    /** First local hour without scheduled trending runs (default 0, midnight). */
+    public static function get_trending_quiet_from_hour(): int {
+        return self::sanitize_trending_quiet_hour( get_option( 'presshub_ai_social_trending_quiet_from_hour', 0 ) );
+    }
+
+    /** Local hour scheduled trending runs start again (default 6). Equal to the start: no quiet hours. */
+    public static function get_trending_quiet_until_hour(): int {
+        return self::sanitize_trending_quiet_hour( get_option( 'presshub_ai_social_trending_quiet_until_hour', 6 ) );
+    }
+
     /**
      * Context budget options => the code defaults they start from (characters
      * per AI action). The classes keep their BUDGETS constants as the defaults.
@@ -4572,6 +4739,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_policy_fiches_budgets'     => class_exists( 'PressHub_AI_Policy_Fiches' ) ? PressHub_AI_Policy_Fiches::BUDGETS : [],
             'presshub_ai_stakeholders_budgets'      => class_exists( 'PressHub_AI_Stakeholders' ) ? PressHub_AI_Stakeholders::BUDGETS : [],
             'presshub_ai_editorial_agenda_budgets'  => class_exists( 'PressHub_AI_Editorial_Agenda' ) ? PressHub_AI_Editorial_Agenda::BUDGETS : [],
+            'presshub_ai_fact_checks_budgets'       => class_exists( 'PressHub_AI_Fact_Checks' ) ? PressHub_AI_Fact_Checks::BUDGETS : [],
         ];
     }
 
@@ -4603,6 +4771,10 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_context_budgets( $value, self::context_budget_options()['presshub_ai_editorial_agenda_budgets'] );
     }
 
+    public static function sanitize_fact_checks_budgets( $value ): array {
+        return self::sanitize_context_budgets( $value, self::context_budget_options()['presshub_ai_fact_checks_budgets'] );
+    }
+
     /** Effective budgets for one budget option: stored values over the defaults. */
     public static function get_context_budgets( string $option, array $defaults ): array {
         $stored = get_option( $option, [] );
@@ -4619,6 +4791,10 @@ class PressHub_AI_Settings_Storage {
 
     public static function default_editorial_agenda_budgets(): array {
         return self::context_budget_options()['presshub_ai_editorial_agenda_budgets'];
+    }
+
+    public static function default_fact_checks_budgets(): array {
+        return self::context_budget_options()['presshub_ai_fact_checks_budgets'];
     }
 
 }

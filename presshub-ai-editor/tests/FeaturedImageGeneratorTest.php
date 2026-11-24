@@ -17,6 +17,7 @@ require_once __DIR__ . '/../includes/class-api-client.php';
 require_once __DIR__ . '/../includes/class-news-curator.php';
 require_once __DIR__ . '/../includes/class-audio-synthesizer.php';
 require_once __DIR__ . '/../includes/class-ajax-handlers.php';
+require_once __DIR__ . '/../includes/class-image-prompt-templates.php';
 
 class FeaturedImageGeneratorTest {
     private $failures = [];
@@ -29,6 +30,7 @@ class FeaturedImageGeneratorTest {
         $this->test_briefing_curator_auto_image_generation();
         $this->test_briefing_curator_auto_image_fallback_to_pool();
         $this->test_podcast_auto_image_generation();
+        $this->test_briefing_and_podcast_use_chosen_template();
         $this->test_ajax_handlers();
 
         if ( ! empty( $this->failures ) ) {
@@ -278,6 +280,77 @@ class FeaturedImageGeneratorTest {
         $this->assert( ! is_wp_error( $post_id ), 'Briefing post creation should still succeed on image error' );
         $thumb_id = get_post_thumbnail_id( $post_id );
         $this->assert( in_array( $thumb_id, [ 555, 556 ], true ), "Expected thumbnail from pool [555, 556], got {$thumb_id}" );
+    }
+
+    /** The user prompt of the chat call that drafted the image prompt: the last one before an image generation. */
+    private function last_chat_user_prompt(): string {
+        $chat = '';
+        foreach ( (array) ( $GLOBALS['CAPTURED_REQUESTS'] ?? [] ) as $req ) {
+            $url = (string) ( $req[0] ?? '' );
+            if ( false !== strpos( $url, 'images/generations' ) ) {
+                $found = $chat;
+                continue;
+            }
+            if ( false === strpos( $url, 'chat/completions' ) ) {
+                continue;
+            }
+            $body = json_decode( (string) ( $req[1]['body'] ?? '' ), true );
+            foreach ( (array) ( $body['messages'] ?? [] ) as $m ) {
+                if ( 'user' === ( $m['role'] ?? '' ) ) {
+                    $chat = is_array( $m['content'] ) ? wp_json_encode( $m['content'] ) : (string) $m['content'];
+                }
+            }
+        }
+        return $found ?? '';
+    }
+
+    public function test_briefing_and_podcast_use_chosen_template(): void {
+        foreach ( [ [ 'text', 'morning' ], [ 'podcast', 'morning' ], [ 'text', 'noon' ], [ 'podcast', 'noon' ] ] as $case ) {
+            list( $kind, $edition ) = $case;
+            $this->reset_env();
+            $GLOBALS['CAPTURED_REQUESTS'] = [];
+            PressHub_AI_Provider_Store::save_provider( [
+                'id'            => 'openai-tpl',
+                'type'          => 'openai',
+                'name'          => 'OpenAI Tpl',
+                'api_key'       => 'test-key',
+                'default_model' => 'gpt-4o',
+                'enabled'       => true,
+            ] );
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled']                  = 1;
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_featured_image_source']         = 'auto_generate';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_featured_image_source'] = 'auto_generate';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_image_template']                = 'editorial_cartoon';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_image_template']        = 'landscape_aerial';
+            // Noon swaps them, so each edition is shown to read its own setting.
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_noon_image_template']           = 'landscape_aerial';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_noon_podcast_image_template']   = 'editorial_cartoon';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_image_prompt_provider']                  = 'openai-tpl';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_image_generation_provider']              = 'openai-tpl';
+            $GLOBALS['REMOTE_RESPONSES']['https://api.openai.com/v1/chat/completions'] = [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [ 'choices' => [ [ 'message' => [ 'role' => 'assistant', 'content' => 'A drawing.' ] ] ] ] ),
+            ];
+            $GLOBALS['REMOTE_RESPONSES']['https://api.openai.com/v1/images/generations'] = [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [ 'data' => [ [ 'b64_json' => base64_encode( 'IMG' ) ] ] ] ),
+            ];
+
+            $cartoon = ( 'text' === $kind ) === ( 'morning' === $edition );
+            $expect  = $cartoon ? 'editorial cartoonist' : 'aerial photographer';
+            if ( 'text' === $kind ) {
+                ( new PressHub_AI_News_Curator() )->create_wordpress_post( 'Water cuts across Nicosia today.', '2026-10-18', 'Water cuts', $edition );
+            } else {
+                ( new PressHub_AI_Audio_Synthesizer() )->create_podcast_post( 'http://example.test/audio.mp3', 123, 'SPEAKER 1: Good morning...', '2026-10-18', '', $edition );
+            }
+            $this->assert( false !== strpos( $this->last_chat_user_prompt(), $expect ), "{$edition} {$kind} image drafted with its own template ({$expect})" );
+        }
+
+        // A deleted template falls back to Editorial photo.
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_image_template'] = 'custom_gone';
+        $GLOBALS['CAPTURED_REQUESTS'] = [];
+        ( new PressHub_AI_News_Curator() )->create_wordpress_post( 'Water cuts across Nicosia today.', '2026-10-19', 'Water cuts', 'morning' );
+        $this->assert( false !== strpos( $this->last_chat_user_prompt(), 'editorial photographer' ), 'Missing template falls back to Editorial photo' );
     }
 
     public function test_podcast_auto_image_generation(): void {

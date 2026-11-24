@@ -61,7 +61,16 @@ class PressHub_Social_AI_Copywriter {
             return $article_data;
         }
 
-        return self::generate_from_data( $article_data, $platform, $force_ai );
+        $res = self::generate_from_data( $article_data, $platform, $force_ai );
+        self::forget_cuts();
+        return $res;
+    }
+
+    /** The post's cuts were recorded with its calls (or no call ran): drop them. */
+    private static function forget_cuts(): void {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_copy_' );
+        }
     }
 
     /**
@@ -86,6 +95,7 @@ class PressHub_Social_AI_Copywriter {
                     : [] );
         }
         if ( empty( $platforms ) ) {
+            self::forget_cuts();
             return [];
         }
 
@@ -104,6 +114,7 @@ class PressHub_Social_AI_Copywriter {
                 $results[ $platform ] = $res;
             }
         }
+        self::forget_cuts();
 
         if ( empty( $results ) && ! empty( $errors ) ) {
             $first_err = reset( $errors );
@@ -354,9 +365,10 @@ class PressHub_Social_AI_Copywriter {
      * 2. Configured provider record from PressHub_AI_Provider_Store (first enabled if none specified)
      * 3. Class defaults from PressHub_AI_Provider_Defaults
      *
+     * @param bool $quiet No log lines (the settings screen shows the result instead, #236).
      * @return array|WP_Error Resolved provider configuration array or WP_Error.
      */
-    public static function resolve_ai_provider_config() {
+    public static function resolve_ai_provider_config( bool $quiet = false ) {
         $module_provider_id = PressHub_Social_Settings_Storage::get_ai_provider();
         $provider_record    = null;
         $provider_source    = '';
@@ -367,9 +379,9 @@ class PressHub_Social_AI_Copywriter {
                 $module_model = PressHub_Social_Settings_Storage::get_ai_model();
                 if ( null !== $candidate && ! self::is_text_provider( $candidate, $module_model ) ) {
                     // A speech, image or music model cannot write copy or JSON; every job would fail.
-                    PressHub_Social_Logger::warning(
+                    $quiet || PressHub_Social_Logger::warning(
                         sprintf(
-                            'Social copy provider "%s" uses "%s", which is not a text model. Using the first enabled text provider instead. Pick a text model under PressHub > Social settings > AI Copywriter.',
+                            'Social copy provider "%s" uses "%s", which is not a text model. Using the first enabled text provider instead. Pick a text model in PressHub > Settings > AI models > Social copy.',
                             $module_provider_id,
                             '' !== $module_model ? $module_model : (string) ( $candidate['default_model'] ?? '' )
                         ),
@@ -379,7 +391,7 @@ class PressHub_Social_AI_Copywriter {
                     $provider_record = $candidate;
                     $provider_source = 'module_override:presshub_social_ai_provider';
                 } else {
-                    PressHub_Social_Logger::warning(
+                    $quiet || PressHub_Social_Logger::warning(
                         sprintf( 'Module configured provider "%s" is disabled or missing an API key. Falling back to active store provider.', $module_provider_id ),
                         [ 'module_provider' => $module_provider_id ]
                     );
@@ -407,7 +419,7 @@ class PressHub_Social_AI_Copywriter {
 
         if ( null === $provider_record ) {
             $msg = __( 'No AI provider is configured or enabled in PressHub AI Editor.', 'presshub-social-autopost' );
-            PressHub_Social_Logger::error( $msg, [ 'requested_id' => $module_provider_id ] );
+            $quiet || PressHub_Social_Logger::error( $msg, [ 'requested_id' => $module_provider_id ] );
             return new WP_Error( 'missing_ai_provider', $msg );
         }
 
@@ -421,7 +433,7 @@ class PressHub_Social_AI_Copywriter {
         // API Key verification.
         if ( 'ollama_local' !== $type && '' === trim( $api_key ) ) {
             $msg = sprintf( __( 'AI provider "%s" (ID: %s) does not have an API key configured.', 'presshub-social-autopost' ), $name, $provider_id );
-            PressHub_Social_Logger::error( $msg, [ 'provider_id' => $provider_id, 'type' => $type ] );
+            $quiet || PressHub_Social_Logger::error( $msg, [ 'provider_id' => $provider_id, 'type' => $type ] );
             return new WP_Error( 'missing_ai_api_key', $msg );
         }
 
@@ -481,7 +493,7 @@ class PressHub_Social_AI_Copywriter {
             $timeout = 120;
         }
 
-        PressHub_Social_Logger::info(
+        $quiet || PressHub_Social_Logger::info(
             sprintf(
                 '[Social AI Resolution] Module: "social_copy" | Provider: "%s" (%s, ID: %s, source: %s) | Model: "%s" (source: %s)',
                 $name,
@@ -594,6 +606,11 @@ class PressHub_Social_AI_Copywriter {
      * @return array|WP_Error Article metadata array or WP_Error.
      */
     public static function build_article_data( int $post_id ) {
+        // The cuts of this post's text are noted for every platform's call
+        // (social_copy_*); an earlier post's notes go first.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_copy_' );
+        }
         $post = get_post( $post_id );
         if ( ! is_object( $post ) ) {
             $msg = sprintf( __( 'Post ID %d not found.', 'presshub-social-autopost' ), $post_id );
@@ -615,7 +632,10 @@ class PressHub_Social_AI_Copywriter {
         // Clean plain text content clamped to 3000 chars for context.
         $content = wp_strip_all_tags( function_exists( 'strip_shortcodes' ) ? strip_shortcodes( $raw_content ) : $raw_content );
         $content = preg_replace( '/\s+/', ' ', $content );
-        $content = mb_substr( trim( $content ), 0, 3000, 'UTF-8' );
+        $content = trim( $content );
+        $content = class_exists( 'PressHub_AI_Knowledge_Cuts' )
+            ? PressHub_AI_Knowledge_Cuts::clip_material( 'social_copy_', $content, 3000, __( 'Post text', 'presshub-ai-editor' ) )
+            : mb_substr( $content, 0, 3000, 'UTF-8' );
 
         // Podcast script / dialogue ingestion:
         // When content is short (< 300 chars), or post is marked as podcast/briefing,
@@ -709,7 +729,13 @@ class PressHub_Social_AI_Copywriter {
                 $cleaned = self::clean_podcast_script( $podcast_script );
                 if ( '' !== $cleaned ) {
                     if ( mb_strlen( $cleaned, 'UTF-8' ) > mb_strlen( $content, 'UTF-8' ) || $is_podcast || '' === trim( $content ) ) {
-                        $content = mb_substr( $cleaned, 0, 4000, 'UTF-8' );
+                        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                            // The script replaces the post text, so the post text's cut is not sent.
+                            PressHub_AI_Knowledge_Cuts::forget_material( 'social_copy_', __( 'Post text', 'presshub-ai-editor' ) );
+                            $content = PressHub_AI_Knowledge_Cuts::clip_material( 'social_copy_', $cleaned, 4000, __( 'Podcast script', 'presshub-ai-editor' ) );
+                        } else {
+                            $content = mb_substr( $cleaned, 0, 4000, 'UTF-8' );
+                        }
                     }
                     if ( '' === trim( $excerpt ) || mb_strlen( $excerpt, 'UTF-8' ) < 40 || false !== strpos( $excerpt, 'TOPIC' ) || false !== strpos( $excerpt, 'SPEAKER_' ) ) {
                         $excerpt = function_exists( 'wp_trim_words' ) ? wp_trim_words( $cleaned, 50, '...' ) : mb_substr( $cleaned, 0, 250, 'UTF-8' );

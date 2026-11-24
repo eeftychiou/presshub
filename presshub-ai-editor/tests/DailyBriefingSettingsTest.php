@@ -42,19 +42,16 @@ class DailyBriefingSettingsTest
         $settings = new PressHub_AI_Settings();
         $settings->register_settings();
 
-        $sections    = $GLOBALS['SECTIONS']['presshub-ai'] ?? [];
-        $section_ids = array_column( $sections, 'id' );
-        if ( ! in_array( 'presshub_ai_briefing', $section_ids, true ) ) {
-            $failures[] = 'presshub_ai_briefing section must be registered in presshub-ai page; got: ' . implode( ', ', $section_ids );
+        // #237: the Daily briefing section prints its own rows, so it registers
+        // no Settings API fields; its options must still be registered.
+        if ( ! empty( $GLOBALS['FIELDS']['presshub-ai']['presshub_ai_briefing'] ) ) {
+            $failures[] = 'presshub_ai_briefing should register no never-rendered settings fields.';
         }
-
-        $fields = $GLOBALS['FIELDS']['presshub-ai']['presshub_ai_briefing'] ?? [];
-        $field_ids = array_column( $fields, 'id' );
+        $registered    = PressHub_Settings_Registry::registered();
         $expected_fields = [
             'presshub_ai_briefing_sources',
             'presshub_ai_briefing_schedule_enabled',
             'presshub_ai_briefing_tts_engine',
-            'presshub_ai_briefing_tts_api_key',
             'presshub_ai_briefing_tts_model',
             'presshub_ai_briefing_tts_timeout',
             'presshub_ai_briefing_harvest_time',
@@ -82,14 +79,17 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_text_status',
             'presshub_ai_briefing_podcast_status',
             'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt_1',
-            'presshub_ai_briefing_podcast_prompt_2',
-            'presshub_ai_briefing_podcast_prompt_3',
         ];
 
         foreach ( $expected_fields as $expected_field ) {
-            if ( ! in_array( $expected_field, $field_ids, true ) ) {
-                $failures[] = "Field {$expected_field} is missing from presshub_ai_briefing section.";
+            if ( ! isset( $registered[ $expected_field ] ) ) {
+                $failures[] = "Option {$expected_field} should be registered.";
+            }
+        }
+        // #237: replaced by the per-style prompt studio and removed.
+        foreach ( [ 1, 2, 3 ] as $n ) {
+            if ( isset( $registered[ 'presshub_ai_briefing_podcast_prompt_' . $n ] ) ) {
+                $failures[] = "presshub_ai_briefing_podcast_prompt_{$n} was removed and must not be registered.";
             }
         }
 
@@ -443,23 +443,11 @@ class DailyBriefingSettingsTest
             $failures[] = 'presshub_ai_execute_generation_cron function must exist.';
         }
 
-        // --- Case 14: Sanitization of speech generation API key & remove key flag ---
-        self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_api_key'] = 'AIzaSyExistingKey1234';
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '' ) !== 'AIzaSyExistingKey1234' ) {
-            $failures[] = 'empty briefing tts api key post should preserve existing key.';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '••••1234' ) !== 'AIzaSyExistingKey1234' ) {
-            $failures[] = 'masked briefing tts api key post should preserve existing key.';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '<script>AIzaSyNewKey5678</script>' ) !== 'AIzaSyNewKey5678' ) {
-            $failures[] = 'briefing tts api key should strip HTML tags.';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_remove_briefing_tts_api_key', '1' ) !== 0 ) {
-            $failures[] = 'remove briefing tts api key flag should sanitize to 0.';
-        }
-        if ( array_key_exists( 'presshub_ai_briefing_tts_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
-            $failures[] = 'checking remove briefing tts api key should delete the option.';
+        // --- Case 14: #237 removed the separate speech key and its remove flag ---
+        foreach ( [ 'presshub_ai_briefing_tts_api_key', 'presshub_ai_remove_briefing_tts_api_key' ] as $gone ) {
+            if ( isset( $cbs[ $gone ] ) || isset( $registered[ $gone ] ) ) {
+                $failures[] = "{$gone} was removed in #237 and must no longer be registered.";
+            }
         }
 
         // --- Case 15: Harvest Execution Time Budget (clamping, options map, getter, render) ---
@@ -770,8 +758,9 @@ class DailyBriefingSettingsTest
         if ( false === strpos( $page_html, 'name="presshub_ai_briefing_tts_model"' ) ) {
             $failures[] = 'render_settings_page must render presshub_ai_briefing_tts_model input in Section 2.';
         }
-        if ( false === strpos( $page_html, 'Voice Generation AI Model' ) ) {
-            $failures[] = 'render_settings_page must render Voice Generation AI Model label in Section 2.';
+        // #236: the speech model is edited in its AI models row, labelled "Speech model ID".
+        if ( false === strpos( $page_html, 'Speech model ID' ) ) {
+            $failures[] = 'render_settings_page must render the Speech model ID label in AI models.';
         }
 
         // Issue #113: briefing TTS model helper & sanitizer

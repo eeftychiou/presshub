@@ -189,16 +189,17 @@ class APIClientModularTest
         }
 
         // ==================================================================
-        // 4. Fallback to legacy global options when store has no enabled providers
+        // 4. No enabled provider: the OpenAI defaults, with no key. The old
+        // flat options are not read even if a row is left (#237, #309 E1).
         // ==================================================================
         self::reset_world();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [];
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']             = 'openai';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']              = 'sk-legacy-openai-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']             = 'gemini';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai']         = 'gpt-4o-mini';
 
         $legacy_fallback = PressHub_AI_API_Client::resolve_module_config( 'coauthor' );
-        if ( $legacy_fallback['type'] !== 'openai' || $legacy_fallback['api_key'] !== 'sk-legacy-openai-key' || $legacy_fallback['model'] !== 'gpt-4o-mini' ) {
+        if ( $legacy_fallback['type'] !== 'openai' || $legacy_fallback['api_key'] !== '' || $legacy_fallback['model'] !== PressHub_AI_Provider_Defaults::default_model( 'openai' ) ) {
             $failures[] = "Legacy fallback resolution failed. Got: " . var_export( $legacy_fallback, true );
         }
 
@@ -385,9 +386,7 @@ class APIClientModularTest
         // 10. Backward compatibility for legacy calls
         // ==================================================================
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']      = 'legacy-key';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']     = 'openai';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai'] = 'gpt-4o';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_providers( 'legacy-key', 'openai', [ 'default_model' => 'gpt-4o' ] );
         $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
             [ $url ] = $req;
             if ( str_contains( $url, 'api.openai.com/v1/chat/completions' ) ) {
@@ -672,17 +671,26 @@ class APIClientModularTest
             $failures[] = "Specific provider ID override model_source mismatch; got: " . var_export( $client_res->get_model_source(), true );
         }
 
-        // 18e: Legacy fallback client source tracking
+        // 18e: no-argument client source tracking (#309 E1: always Connections;
+        // a left-over presshub_ai_provider row is not read).
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']     = 'openai';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']      = 'sk-legacy-test';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai'] = 'gpt-4o-mini';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_providers( 'sk-legacy-test', 'openai', [ 'default_model' => 'gpt-4o-mini' ] );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']             = 'gemini';
         $legacy_client_2 = new PressHub_AI_API_Client();
-        if ( $legacy_client_2->get_provider_source() !== 'legacy_fallback:presshub_ai_provider' ) {
-            $failures[] = "Legacy client provider_source mismatch; got: " . var_export( $legacy_client_2->get_provider_source(), true );
+        if ( $legacy_client_2->get_provider_source() !== 'store_fallback:first_enabled_provider' || 'openai' !== $legacy_client_2->get_provider() ) {
+            $failures[] = "No-arg client should use the first Connections provider; got: " . var_export( [ $legacy_client_2->get_provider_source(), $legacy_client_2->get_provider() ], true );
         }
-        if ( $legacy_client_2->get_model_source() !== 'legacy_type_option:presshub_ai_model_openai' ) {
-            $failures[] = "Legacy client model_source mismatch; got: " . var_export( $legacy_client_2->get_model_source(), true );
+        if ( $legacy_client_2->get_model_source() !== 'provider_store_default:openai-test' || 'gpt-4o-mini' !== $legacy_client_2->get_model() ) {
+            $failures[] = "No-arg client model_source mismatch; got: " . var_export( $legacy_client_2->get_model_source(), true );
+        }
+        self::reset_world();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']             = 'gemini';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai']         = 'gpt-4o-mini';
+        $legacy_client_3 = new PressHub_AI_API_Client();
+        if ( 'openai' !== $legacy_client_3->get_provider() || $legacy_client_3->get_provider_source() !== 'class_defaults:no_provider'
+            || $legacy_client_3->get_model() !== PressHub_AI_Provider_Defaults::default_model( 'openai' ) ) {
+            $failures[] = "With no provider the client should use the OpenAI defaults; got: " . var_export( [ $legacy_client_3->get_provider(), $legacy_client_3->get_provider_source(), $legacy_client_3->get_model() ], true );
         }
 
         // ==================================================================

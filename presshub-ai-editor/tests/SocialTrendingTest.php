@@ -63,7 +63,12 @@ function st_reset( array $opts = [] ) {
         'presshub_ai_social_trending_facebook_pages'     => "https://www.facebook.com/philenews",
         'presshub_ai_social_trending_min_engagement'     => 10,
         'gmt_offset'                                     => 2,
+        // Off unless a test sets them, so runs do not depend on the clock.
+        'presshub_ai_social_trending_quiet_from_hour'    => 0,
+        'presshub_ai_social_trending_quiet_until_hour'   => 0,
         'presshub_ai_social_trending_summary_enabled'    => 0,
+        // The QA gate on the roundup is tested in PublishGateTest.
+        'presshub_ai_qa_include_trending'                => 0,
     ], $opts );
     $GLOBALS['TERMS']               = [];
     $GLOBALS['POSTS_STORE']         = [];
@@ -411,6 +416,71 @@ st_check( 'featured: no picture, nothing to do', 0 === $T::maybe_set_featured_im
 $T::$sideload = static function () { return new WP_Error( 'http', 'expired' ); };
 st_check( 'featured: sideload failure tolerated', 0 === $T::maybe_set_featured_image( 78, [ $T::normalize_item( st_post( 'x', '205', 1, 10, [ 'thumbnail' => 'https://pbs.twimg.com/media/a.jpg' ] ), $now ) ] ) && empty( $GLOBALS['THUMBS'][78] ) );
 $T::$sideload = null;
+// Roundup featured image source: an AI image with the Trending in Cyprus template, drawn in a job of
+// its own (not in the worker's request); the top post picture stands in and stays if drawing fails.
+$ai_calls = [];
+$T::$ai_image = static function ( $content, $title, $tpl, $pid ) use ( &$ai_calls ) { $ai_calls[] = [ $content, $tpl['id'], $pid ]; return 9500; };
+$T::$sideload = static function () { return 9600; };
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$ai_jobs = static function () { return array_values( array_filter( (array) $GLOBALS['SCHEDULED_EVENTS'], static function ( $e ) { return 'presshub_ai_social_trending_ai_image' === $e['hook']; } ) ); };
+$ai_items = [ $T::normalize_item( st_post( 'x', '206', 1, 10, [ 'text' => 'Heatwave in Nicosia', 'thumbnail' => 'https://pbs.twimg.com/media/b.jpg' ] ), $now ) ];
+st_check( 'featured source: top post by default', 'top_post' === $S::get_social_trending_image_source() && 9600 === $T::maybe_set_featured_image( 81, $ai_items ) && [] === $ai_jobs() );
+st_check( 'featured source: sanitized', 'top_post' === $S::sanitize_social_trending_image_source( 'weird' ) && 'auto_generate' === $S::sanitize_social_trending_image_source( 'auto_generate' ) );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled'] = 0;
+st_check( 'featured source: AI off falls back to the top post, no job', 9600 === $T::maybe_set_featured_image( 82, $ai_items ) && [] === $ai_jobs() );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled'] = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] = 'landscape_aerial';
+st_check( 'featured source: AI queues a job, top post picture meanwhile', 9600 === $T::maybe_set_featured_image( 83, $ai_items ) && 1 === count( $ai_jobs() ) && [] === $ai_calls );
+$job = $ai_jobs()[0];
+st_check( 'featured source: release waits for the AI image', '1' === (string) get_post_meta( 83, '_presshub_trending_ai_release_pending', true ) );
+st_check( 'featured source: job carries the post and its texts only', [ 83, [ 'Heatwave in Nicosia' ] ] === $job['args'] );
+unset( $GLOBALS['THUMBS'][83] );
+$T::maybe_set_featured_image( 83, $ai_items );
+st_check( 'featured source: queued once per post', 1 === count( $ai_jobs() ) );
+if ( ! function_exists( 'delete_post_meta' ) ) {
+    function delete_post_meta( $post_id, $key, $value = '' ) { unset( $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] ); return true; }
+}
+$GLOBALS['POSTS_STORE'][83] = [ 'ID' => 83, 'post_title' => 'Trending', 'post_status' => 'pending' ];
+$GLOBALS['POST_META_STORE'][83]['_presshub_gate_target_status'] = 'publish';
+st_check( 'featured source: job sets the AI image with the chosen template', 9500 === $T::run_ai_featured_image( 83, [ 'Heatwave in Nicosia' ] ) && 9500 === $GLOBALS['THUMBS'][83] && 1 === count( $ai_calls ) && 'landscape_aerial' === $ai_calls[0][1] && false !== strpos( $ai_calls[0][0], 'Heatwave in Nicosia' ) && 83 === $ai_calls[0][2] );
+st_check( 'featured source: the job releases the post after the image', '' === (string) get_post_meta( 83, '_presshub_trending_ai_release_pending', true ) && '' === (string) get_post_meta( 83, '_presshub_gate_target_status', true ) );
+$T::$ai_image = static function () { return new WP_Error( 'api', 'down' ); };
+$GLOBALS['THUMBS'][84] = 9600;
+$GLOBALS['POSTS_STORE'][84] = [ 'ID' => 84, 'post_title' => 'Trending' ];
+st_check( 'featured source: a failed job keeps the top post picture', 0 === $T::run_ai_featured_image( 84, [ 'Heatwave' ] ) && 9600 === $GLOBALS['THUMBS'][84] );
+st_check( 'featured source: job for a deleted post does nothing', 0 === $T::run_ai_featured_image( 999, [ 'x' ] ) );
+$GLOBALS['POSTS_STORE'][85] = [ 'ID' => 85, 'post_title' => 'Trending', 'post_status' => 'trash' ];
+$n_calls = count( $ai_calls );
+st_check( 'featured source: job for a trashed post draws nothing', 0 === $T::run_ai_featured_image( 85, [ 'x' ] ) && $n_calls === count( $ai_calls ) );
+$T::$ai_image = static function ( $c, $t, $tpl ) use ( &$ai_calls ) { $ai_calls[] = [ $c, $tpl['id'], 0 ]; return 9700; };
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'top_post';
+$GLOBALS['POST_META_STORE'][84]['_presshub_trending_ai_release_pending'] = '1';
+st_check( 'featured source: source switched back before the job: no drawing, still released', 0 === $T::run_ai_featured_image( 84, [ 'x' ] ) && $n_calls === count( $ai_calls ) && '' === (string) get_post_meta( 84, '_presshub_trending_ai_release_pending', true ) );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] = 'custom_gone';
+$T::run_ai_featured_image( 84, [ 'x' ] );
+st_check( 'featured source: a missing template falls back to Editorial cartoon', 'editorial_cartoon' === end( $ai_calls )[1] );
+// Watchdog: a job that never ran releases the roundup with the stand-in after 15 minutes.
+$GLOBALS['POSTS_STORE'][86] = [ 'ID' => 86, 'post_title' => 'Trending', 'post_status' => 'pending' ];
+$GLOBALS['POST_META_STORE'][86] = [ '_presshub_trending_ai_release_pending' => '1', '_presshub_trending_ai_image_queued' => (string) ( $now - 60 ), '_presshub_gate_target_status' => 'publish' ];
+st_check( 'watchdog: a fresh job is waited for', false === $T::maybe_release_stale_ai_wait( 86, $now ) && '1' === $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] );
+st_check( 'watchdog: a stale job releases the roundup', true === $T::maybe_release_stale_ai_wait( 86, $now + 901 ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_gate_target_status'] ) && 'publish' === get_post( 86 )->post_status );
+$T::$ai_image = static function () { return 9800; };
+unset( $GLOBALS['THUMBS'][86] );
+st_check( 'watchdog: a late job keeps the released picture and does not release again', 0 === $T::run_ai_featured_image( 86, [ 'x' ] ) && empty( $GLOBALS['THUMBS'][86] ) );
+// A new roundup with an AI image planned is held as pending even with the gate off for Trending.
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
+$GLOBALS['ST_NOW'] = $now + 2 * 86400;
+$plan = $T::get_worker_plan( false, $now + 2 * 86400 );
+$res  = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '207', 900, 10, [ 'text' => 'Storm over Limassol', 'thumbnail' => 'https://pbs.twimg.com/media/c.jpg' ] ) ], [], $now + 2 * 86400 );
+unset( $GLOBALS['ST_NOW'] );
+$rid  = (int) ( $res['post_id'] ?? 0 );
+$rpost = get_post( $rid );
+st_check( 'held for the AI image: new roundup pending with its target status kept', $rid > 0 && 'pending' === ( $rpost->post_status ?? '' ) && '' !== (string) get_post_meta( $rid, '_presshub_gate_target_status', true ) && 1 === count( $ai_jobs() ) );
+$T::$ai_image = null;
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'], $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'], $GLOBALS['POSTS_STORE'][83], $GLOBALS['POSTS_STORE'][84] );
 // TikTok photo posts: first image from the Media Library, never TikTok's player.
 $GLOBALS['THUMBS'] = [];
 unset( $GLOBALS['OPTIONS_STORE'][ $T::OPTION_IMAGES ] );
@@ -527,6 +597,29 @@ $GLOBALS['WP_UPDATE_POST_CALLS'] = 0;
 ( new PressHub_AI_Workflow() )->enforce_editorial_workflow( 'publish', 'new', (object) [ 'ID' => 900, 'post_type' => 'post', 'post_content' => 'x' ] );
 st_check( 'workflow: roundup post not sent back to pending', 0 === $GLOBALS['WP_UPDATE_POST_CALLS'] );
 
+// QA gate on the roundup: reviewed on insert and when its set of posts
+// changes (summary on or off), not when only the numbers change.
+st_reset( [ 'presshub_ai_qa_include_trending' => 1, 'presshub_ai_qa_enabled' => 1, 'presshub_ai_social_trending_post_mode' => 'daily' ] );
+global $wpdb;
+$wpdb->tables = [];
+$qa_rows = function () { return PressHub_AI_QA_Review_Store::count(); };
+$GLOBALS['ST_NOW'] = $now;
+$plan = $T::get_worker_plan( false, $now );
+$res  = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 500, 60 ), st_post( 'tiktok', '72', 900, 30 ) ], [], $now );
+$gid  = (int) $res['post_id'];
+st_check( 'gate: new roundup is reviewed', 1 === $qa_rows() );
+st_check( 'gate: a roundup whose review cannot run is held', 'pending' === ( $GLOBALS['POSTS_STORE'][ $gid ]['post_status'] ?? '' ) );
+$held_content = (string) ( $GLOBALS['POSTS_STORE'][ $gid ]['post_content'] ?? '' );
+$GLOBALS['ST_NOW'] = $now + 7200;
+$plan = $T::get_worker_plan( true, $now + 7200 );
+$T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 900, 60 ), st_post( 'tiktok', '72', 1500, 30 ) ], [], $now + 7200 );
+st_check( 'gate: same posts with new numbers are not reviewed again; rows ' . $qa_rows(), 1 === $qa_rows() );
+st_check( 'gate: a held roundup keeps the text it was reviewed on, so Publish anyway still matches', $held_content === (string) ( $GLOBALS['POSTS_STORE'][ $gid ]['post_content'] ?? '' ) && 'pending' === ( $GLOBALS['POSTS_STORE'][ $gid ]['post_status'] ?? '' ) );
+$GLOBALS['ST_NOW'] = $now + 14400;
+$plan = $T::get_worker_plan( true, $now + 14400 );
+$T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 900, 60 ), st_post( 'x', '73', 2500, 30 ) ], [], $now + 14400 );
+st_check( 'gate: a new set of posts is reviewed again with the summary off; rows ' . $qa_rows(), 2 === $qa_rows() );
+
 // =========================================================================
 // 11. Briefing: trending posts as one harvest item
 // =========================================================================
@@ -634,6 +727,41 @@ $fixed = $T::filter_legacy_facebook_embeds( $legacy );
 st_check( 'legacy: bare Facebook link loses the plugin class, keeps its link', false !== strpos( $fixed, '<div class="presshub-trending-fb-link" data-href="https://www.facebook.com/1786820783453934"' ) && false !== strpos( $fixed, '<a href="https://www.facebook.com/1786820783453934">' ) );
 st_check( 'legacy: reel and posts links untouched', false !== strpos( $fixed, '<div class="fb-video" data-href="https://www.facebook.com/reel/1026139433848847"' ) && false !== strpos( $fixed, '<div class="fb-post" data-href="https://www.facebook.com/VoltCyprus/posts/pfbid0j9"' ) );
 st_check( 'legacy: other content untouched', '<div class="fb-video" data-href="https://www.facebook.com/123"></div>' === $T::filter_legacy_facebook_embeds( '<div class="fb-video" data-href="https://www.facebook.com/123"></div>' ) );
+
+// Items meta survives WordPress's unslash (2.87.1): update_post_meta() and meta_input
+// strip backslashes, so unslashed JSON lost its quotes' escapes and its \uXXXX letters.
+st_reset();
+$GLOBALS['ST_NOW'] = $now;
+$plan   = $T::get_worker_plan( false, $now );
+$tricky = 'Ο "Πρόεδρος" είπε: C:\\path 😀';
+$res    = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 500, 60, [ 'text' => $tricky ] ) ], [], $now );
+// The stubs unslash meta as WordPress does, so the store holds what the site would.
+$back   = json_decode( (string) ( $GLOBALS['POST_META_STORE'][ $res['post_id'] ][ $T::META_ITEMS ] ?? '' ), true );
+st_check( 'items meta: decodes after unslash (new post)', is_array( $back ) && $tricky === ( $back[0]['text'] ?? null ) );
+// Same day: the update path (update_post_meta), read back by the short's items().
+$later = $now + 6 * 3600 + 5;
+$GLOBALS['ST_NOW'] = $later;
+$plan  = $T::get_worker_plan( false, $later );
+$T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '72', 800, 10, [ 'text' => $tricky ] ) ], [], $later );
+$short_items = PressHub_Social_Trending_Short::items( $res['post_id'] );
+st_check( 'items meta: decodes after unslash (update), the short sees the posts', 1 <= count( $short_items ) && $tricky === ( $short_items[0]['text'] ?? null ) );
+unset( $GLOBALS['ST_NOW'] );
+
+// Quiet hours: no scheduled run overnight, Refresh now still works.
+$day   = 1794614400 - 7200; // 2026-11-14 00:00 local (gmt_offset 2)
+st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 0, 'presshub_ai_social_trending_quiet_until_hour' => 6 ] );
+st_check( 'quiet: 03:00 is quiet', $T::in_quiet_hours( $day + 3 * 3600 ) );
+st_check( 'quiet: 06:00 is not', ! $T::in_quiet_hours( $day + 6 * 3600 ) );
+st_check( 'quiet: 23:59 is not', ! $T::in_quiet_hours( $day + 86399 ) );
+st_check( 'quiet: no scheduled run at 03:00', null === $T::maybe_start_run( $day + 3 * 3600 ) );
+st_check( 'quiet: forced run at 03:00 still starts', null !== $T::maybe_start_run( $day + 3 * 3600, true ) );
+st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 0, 'presshub_ai_social_trending_quiet_until_hour' => 6 ] );
+st_check( 'quiet: scheduled run starts at 06:00', null !== $T::maybe_start_run( $day + 6 * 3600 ) );
+st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 22, 'presshub_ai_social_trending_quiet_until_hour' => 6 ] );
+st_check( 'quiet: window wraps past midnight', $T::in_quiet_hours( $day + 23 * 3600 ) && $T::in_quiet_hours( $day + 2 * 3600 ) && ! $T::in_quiet_hours( $day + 12 * 3600 ) );
+st_reset( [ 'presshub_ai_social_trending_quiet_from_hour' => 5, 'presshub_ai_social_trending_quiet_until_hour' => 5 ] );
+st_check( 'quiet: equal hours turn it off', ! $T::in_quiet_hours( $day + 5 * 3600 ) );
+st_check( 'quiet: hours clamped', 23 === PressHub_AI_Settings_Storage::sanitize_trending_quiet_hour( 40 ) && 0 === PressHub_AI_Settings_Storage::sanitize_trending_quiet_hour( 'x' ) );
 
 if ( $failures > 0 ) {
     fwrite( STDERR, "{$failures} failure(s)\n" );

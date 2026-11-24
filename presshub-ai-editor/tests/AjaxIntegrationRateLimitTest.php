@@ -185,7 +185,7 @@ class AjaxIntegrationRateLimitTest
         $GLOBALS['CURRENT_USER_ID'] = $user_id;
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         if ( $enabled ) {
             $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
@@ -253,7 +253,7 @@ class AjaxIntegrationRateLimitTest
         $GLOBALS['CURRENT_USER_ID'] = $user_id;
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'k', [ 'gemini', 'openai', 'anthropic' ] );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'gemini';
         if ( $enabled ) {
             $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
@@ -331,7 +331,7 @@ class AjaxIntegrationRateLimitTest
         $GLOBALS['CURRENT_USER_ID'] = $user_id;
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         if ( $enabled ) {
             $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
@@ -401,7 +401,7 @@ class AjaxIntegrationRateLimitTest
         $GLOBALS['CURRENT_USER_ID'] = $user_id;
         $GLOBALS['CURRENT_USER_CAPS'] = $caps;
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'gc';
         if ( $enabled ) {

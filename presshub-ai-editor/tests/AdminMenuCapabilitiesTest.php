@@ -56,11 +56,14 @@ function amc_build_menu(): array {
     $GLOBALS['SUBMENU_PAGES'] = [];
     PressHub_Admin_Menu::add_top_level();
     ( new PressHub_AI_Briefing_Admin() )->add_admin_menu();
+    ( new PressHub_AI_QA_Reviews_Admin() )->add_admin_menu();
+    ( new PressHub_AI_QA_Held_Admin() )->add_admin_menu();
     PressHub_Social_Settings::get_instance()->add_admin_menu();
     ( new PressHub_AI_Fiches_Admin() )->add_admin_menu();
     PressHub_Admin_Menu::add_usage_page();
     ( new PressHub_AI_Settings() )->add_settings_page();
     ( new PressHub_AI_Admin_Presets() )->add_presets_submenu();
+    ( new PressHub_AI_Help_Admin() )->add_admin_menu();
     return $GLOBALS['SUBMENU_PAGES'][ PressHub_Admin_Menu::PARENT ] ?? [];
 }
 
@@ -86,6 +89,8 @@ function amc_ajax( callable $fn, array $post = [] ): ?array {
 $expected = [
     'presshub-ai-briefing-hub'       => 'Daily Briefing Hub',
     'presshub-ai-generation-records' => 'Generation records',
+    'presshub-ai-qa-reviews'         => 'QA reviews',
+    'presshub-ai-qa-held'            => 'Held by QA',
     'presshub-social-queue'          => 'Social Queue',
     'presshub-ai-memory'             => 'Memory',
     'presshub-ai-agenda'             => 'Editorial agenda',
@@ -94,6 +99,7 @@ $expected = [
     'presshub-ai-usage'              => 'Usage & logs',
     'presshub-ai'                    => 'Settings',
     'presshub-ai-presets'            => 'Presets',
+    'presshub-ai-help'               => 'Help',
 ];
 
 // ---------------------------------------------------------------------
@@ -289,7 +295,7 @@ $redirects = [
     // #246: every old tab of both settings pages opens its section.
     [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'briefing' ], 'presshub-ai', 'daily-briefing', '', [] ],
     [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'images' ], 'presshub-ai', 'writing-qa', 'featured-images', [] ],
-    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'copilot' ], 'presshub-ai', 'ai-models', 'copilot', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'copilot' ], 'presshub-ai', 'ai-models', 'model-copilot', [] ],
     [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'advanced' ], 'presshub-ai', 'site-system', '', [] ],
     [ 'admin.php', [ 'page' => 'presshub-social-settings' ], 'presshub-ai', 'social-publishing', '', [] ],
     [ 'admin.php', [ 'page' => 'presshub-social-settings', 'tab' => 'credentials' ], 'presshub-ai', 'connections', 'social-accounts', [] ],

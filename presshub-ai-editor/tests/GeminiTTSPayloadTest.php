@@ -339,7 +339,7 @@ class GeminiTTSPayloadTest
         // Case 3: Live Synthesis Test Method (test_synthesize_speech)
         // =========================================================================
         self::reset_world();
-        update_option( 'presshub_ai_briefing_tts_api_key', 'test-gemini-key-12345' );
+        update_option( 'presshub_ai_configured_providers', [ [ 'id' => 'gemini-test', 'type' => 'gemini', 'name' => 'Gemini', 'enabled' => true, 'api_key' => 'test-gemini-key-12345', 'default_model' => 'gemini-2.5-flash' ] ] );
         update_option( 'presshub_ai_briefing_tts_model', 'gemini-2.5-flash-preview-tts' );
 
         // Mock wp_remote_post to return a fake base64 audio response via CAPTURE_FILTER

@@ -10,8 +10,10 @@ require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/../scripts/settings-inventory.php';
 
 $target  = dirname( __DIR__, 2 ) . '/docs/settings-inventory.md';
-$current = is_readable( $target ) ? file_get_contents( $target ) : '';
-$fresh   = presshub_settings_inventory_markdown();
+// Compare with line endings normalised: a Windows checkout with
+// core.autocrlf=true has CRLF on disk while the generator emits LF.
+$current = is_readable( $target ) ? str_replace( "\r\n", "\n", (string) file_get_contents( $target ) ) : '';
+$fresh   = str_replace( "\r\n", "\n", presshub_settings_inventory_markdown() );
 
 if ( $current !== $fresh ) {
     echo "FAIL\n  - docs/settings-inventory.md is stale. Run: php presshub-ai-editor/scripts/settings-inventory.php\n";

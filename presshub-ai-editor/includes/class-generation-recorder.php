@@ -41,6 +41,10 @@ class PressHub_AI_Generation_Recorder {
      * calls are logged on the record and it is linked to the article post.
      * tiktok_short: TTS of one TikTok short cut from a podcast post; the short's
      * script is the user prompt and its TTS calls are logged on the record.
+     * tiktok_short_script: the LLM call that writes the scripts of the TikTok and
+     * YouTube shorts of a post; a response the plan cannot use is marked error.
+     * post_images_plan: the LLM call that describes the AI images of a social post
+     * (X, Facebook, Instagram, TikTok); same error marking.
      */
     const KINDS = [
         'briefing_text',
@@ -58,6 +62,8 @@ class PressHub_AI_Generation_Recorder {
         'tts_test',
         'tiktok_narration',
         'tiktok_short',
+        'tiktok_short_script',
+        'post_images_plan',
         'seo',
     ];
 
@@ -340,10 +346,102 @@ class PressHub_AI_Generation_Recorder {
         if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
             PressHub_AI_Policy_Fiches::clear_last_applied();
         }
+        if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            PressHub_AI_Fact_Checks::clear_last_applied();
+        }
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::clear_last_material();
+        }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'reset_last_llm_request' ) ) {
             PressHub_AI_Token_Logger::reset_last_llm_request();
         }
         return microtime( true );
+    }
+
+    /**
+     * Fold what call_provider() injected (editorial agenda, people fiches,
+     * policy fiches) into a record: the list of what went in goes on $config,
+     * and $sys_prompt becomes the prompt as it was actually sent when it is the
+     * one the caller passed in. Consumes (clears) the classes' last-applied
+     * state. Callers that store with record() call this right after their
+     * call_provider() so briefing and podcast records show the fiches too.
+     *
+     * @param mixed $sys_prompt System prompt as the caller built it.
+     * @param array $config     Record config to add the keys to.
+     * @return array{0:mixed,1:array} [ system prompt as sent, config ].
+     */
+    public static function apply_injected_context( $sys_prompt, array $config ): array {
+        // Issue #198: record the agenda version, and the system prompt as it was
+        // actually sent when the caller passed the prompt from before injection.
+        if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
+            $agenda = PressHub_AI_Editorial_Agenda::last_applied();
+            if ( is_array( $agenda ) ) {
+                $config['editorial_agenda_version'] = (int) $agenda['version'];
+                $config['editorial_agenda_chars']   = (int) $agenda['chars'];
+                if ( ! empty( $agenda['left_out'] ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    $config['editorial_agenda_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $agenda['left_out'] );
+                }
+                if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $agenda['original_hash'] ) {
+                    $sys_prompt = $agenda['prompt'];
+                }
+            }
+            PressHub_AI_Editorial_Agenda::clear_last_applied();
+        }
+        // Issue #197: which stakeholder fiches went in (applied after the agenda).
+        if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
+            $fiches = PressHub_AI_Stakeholders::last_applied();
+            if ( is_array( $fiches ) ) {
+                $config['stakeholders']       = array_values( (array) $fiches['people'] );
+                $config['stakeholders_chars'] = (int) $fiches['chars'];
+                if ( ! empty( $fiches['left_out'] ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    $config['stakeholders_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $fiches['left_out'] );
+                }
+                if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $fiches['original_hash'] ) {
+                    $sys_prompt = $fiches['prompt'];
+                }
+            }
+            PressHub_AI_Stakeholders::clear_last_applied();
+        }
+        // Policy fiches (applied after the people fiches).
+        if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+            $policy = PressHub_AI_Policy_Fiches::last_applied();
+            if ( is_array( $policy ) ) {
+                $config['policy_fiches']       = array_values( (array) $policy['fiches'] );
+                $config['policy_fiches_chars'] = (int) $policy['chars'];
+                if ( ! empty( $policy['left_out'] ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    $config['policy_fiches_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $policy['left_out'] );
+                }
+                if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $policy['original_hash'] ) {
+                    $sys_prompt = $policy['prompt'];
+                }
+            }
+            PressHub_AI_Policy_Fiches::clear_last_applied();
+        }
+        // Fact checks from the editorial memory (applied after the policy fiches).
+        if ( class_exists( 'PressHub_AI_Fact_Checks' ) ) {
+            $facts = PressHub_AI_Fact_Checks::last_applied();
+            if ( is_array( $facts ) ) {
+                $config['fact_checks']       = array_values( (array) $facts['claims'] );
+                $config['fact_checks_chars'] = (int) $facts['chars'];
+                if ( ! empty( $facts['left_out'] ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    $config['fact_checks_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $facts['left_out'] );
+                }
+                if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $facts['original_hash'] ) {
+                    $sys_prompt = $facts['prompt'];
+                }
+            }
+            PressHub_AI_Fact_Checks::clear_last_applied();
+        }
+        // Material the caller cut to fit its limits (article body, script,
+        // fetched pages, URL count): design principle, never silent.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            $material = PressHub_AI_Knowledge_Cuts::last_material();
+            if ( ! empty( $material ) ) {
+                $config['material_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $material );
+            }
+            PressHub_AI_Knowledge_Cuts::clear_last_material();
+        }
+        return [ $sys_prompt, $config ];
     }
 
     /**
@@ -367,43 +465,7 @@ class PressHub_AI_Generation_Recorder {
                 : [];
             $is_error    = is_wp_error( $result );
             $config      = self::build_client_config( $client, is_array( $extra['config'] ?? null ) ? $extra['config'] : [] );
-            // Issue #198: record the agenda version, and the system prompt as it was
-            // actually sent when the caller passed the prompt from before injection.
-            if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
-                $agenda = PressHub_AI_Editorial_Agenda::last_applied();
-                if ( is_array( $agenda ) ) {
-                    $config['editorial_agenda_version'] = (int) $agenda['version'];
-                    $config['editorial_agenda_chars']   = (int) $agenda['chars'];
-                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $agenda['original_hash'] ) {
-                        $sys_prompt = $agenda['prompt'];
-                    }
-                }
-                PressHub_AI_Editorial_Agenda::clear_last_applied();
-            }
-            // Issue #197: which stakeholder fiches went in (applied after the agenda).
-            if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
-                $fiches = PressHub_AI_Stakeholders::last_applied();
-                if ( is_array( $fiches ) ) {
-                    $config['stakeholders']       = array_values( (array) $fiches['people'] );
-                    $config['stakeholders_chars'] = (int) $fiches['chars'];
-                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $fiches['original_hash'] ) {
-                        $sys_prompt = $fiches['prompt'];
-                    }
-                }
-                PressHub_AI_Stakeholders::clear_last_applied();
-            }
-            // Policy fiches (applied after the people fiches).
-            if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
-                $policy = PressHub_AI_Policy_Fiches::last_applied();
-                if ( is_array( $policy ) ) {
-                    $config['policy_fiches']       = array_values( (array) $policy['fiches'] );
-                    $config['policy_fiches_chars'] = (int) $policy['chars'];
-                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $policy['original_hash'] ) {
-                        $sys_prompt = $policy['prompt'];
-                    }
-                }
-                PressHub_AI_Policy_Fiches::clear_last_applied();
-            }
+            [ $sys_prompt, $config ] = self::apply_injected_context( $sys_prompt, $config );
             $user_id     = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 );
             if ( $user_id > 0 ) {
                 $config['user_id'] = $user_id;

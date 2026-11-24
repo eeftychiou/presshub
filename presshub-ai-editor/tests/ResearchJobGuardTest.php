@@ -273,7 +273,7 @@ class ResearchJobGuardTest
         $GLOBALS['POST_META_STORE'] = [];
         $GLOBALS['CAPTURED_REQUESTS'] = [];
         $GLOBALS['OPTIONS_STORE']   = [
-            'presshub_ai_api_key'  => 'test-key',
+            'presshub_ai_configured_providers' => presshub_test_provider_keys( 'test-key' ),
             'presshub_ai_provider' => 'openai',
         ];
         $GLOBALS['WP_UPDATE_POST_CALLS'] = 0;

@@ -675,7 +675,15 @@ class PressHub_AI_Memory_Rollup_Builder {
             'attempt'        => $attempt,
         ];
 
-        $raw         = $api_client->call_provider( $sys_prompt, $user_prompt, true, [], null, $metadata );
+        // This call writes its own generation record below, so call_provider()
+        // must not add a second, generic one.
+        $suppressed = $api_client->suppress_provider_prompt_log;
+        $api_client->suppress_provider_prompt_log = true;
+        try {
+            $raw         = $api_client->call_provider( $sys_prompt, $user_prompt, true, [], null, $metadata );
+        } finally {
+            $api_client->suppress_provider_prompt_log = $suppressed;
+        }
         $duration_ms = (int) round( ( microtime( true ) - $t0 ) * 1000 );
 
         $record_id = 0;

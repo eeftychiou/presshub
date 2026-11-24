@@ -39,8 +39,13 @@ class PressHub_AI_Metaboxes {
 
     public function render_metabox( $post ) {
         $scorecard = get_post_meta( $post->ID, '_presshub_ai_scorecard', true );
+        // QA gate verdicts, history and "Publish anyway" (2.50.0), first in the box.
+        $gate_panel = class_exists( 'PressHub_AI_QA_Held_Admin' ) ? PressHub_AI_QA_Held_Admin::metabox_slot( (int) $post->ID ) : '';
+        // The gate panel already shows the latest editorial and legal result.
+        $show_legacy_scorecard = false === strpos( $gate_panel, 'presshub-qa-gate-panel' );
         ?>
         <div class="presshub-ai-container">
+            <?php echo $gate_panel; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in metabox_html(). ?>
             <h3><?php echo esc_html__( 'Multi-Modal Source Material', 'presshub-ai-editor' ); ?></h3>
             <label for="presshub-ai-files"><?php echo esc_html__( 'Attach research files (PDF, DOCX, MP3, MP4, WAV, M4A)', 'presshub-ai-editor' ); ?></label>
             <input type="file" id="presshub-ai-files" multiple accept=".pdf,.docx,.mp3,.mp4,.wav,.m4a" style="margin-bottom: 10px; display: block;" />
@@ -68,7 +73,7 @@ class PressHub_AI_Metaboxes {
             <span id="presshub-ai-review-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
 
             <div id="presshub-ai-scorecard-results" style="margin-top: 15px;">
-                <?php if ( is_array( $scorecard ) && isset( $scorecard['score'] ) && is_numeric( $scorecard['score'] ) ) : ?>
+                <?php if ( $show_legacy_scorecard && is_array( $scorecard ) && isset( $scorecard['score'] ) && is_numeric( $scorecard['score'] ) ) : ?>
                     <?php
                     // ME-4 / F-23: color-coded tone classes mirror the
                     // admin.js renderer (red < 50, yellow 50-min_score, green >= min_score).
@@ -185,18 +190,7 @@ class PressHub_AI_Metaboxes {
             $selected = PressHub_AI_Image_Prompt_Templates::DEFAULT_ID;
         }
 
-        $user_id    = (int) get_current_user_id();
-        $can_manage = current_user_can( 'edit_others_posts' );
-        $payload    = [];
-        foreach ( $templates as $tpl ) {
-            $payload[] = [
-                'id'        => $tpl['id'],
-                'name'      => $tpl['name'],
-                'template'  => $tpl['template'],
-                'builtin'   => ! empty( $tpl['builtin'] ),
-                'deletable' => empty( $tpl['builtin'] ) && ( $can_manage || (int) ( $tpl['author'] ?? 0 ) === $user_id ),
-            ];
-        }
+        $payload = PressHub_AI_Image_Prompt_Templates::client_payload();
         $selected_text = '';
         foreach ( $templates as $tpl ) {
             if ( $tpl['id'] === $selected ) {
@@ -237,6 +231,11 @@ class PressHub_AI_Metaboxes {
                     <button type="button" class="button-link button-link-delete" id="presshub-ai-image-template-delete" hidden><?php echo esc_html__( 'Delete this template', 'presshub-ai-editor' ); ?></button>
                     <span id="presshub-ai-image-template-status" class="presshub-image-studio-template-status" role="status"></span>
                 </div>
+                <?php if ( class_exists( 'PressHub_Capabilities' ) && class_exists( 'PressHub_Settings_Sections' ) && current_user_can( PressHub_Capabilities::manage() ) ) : ?>
+                    <p class="description presshub-image-studio-manage-link">
+                        <a href="<?php echo esc_url( PressHub_Settings_Sections::url( 'writing-qa', 'featured-images' ) ); ?>" target="_blank" rel="noopener"><?php echo esc_html__( 'Manage all templates in Settings', 'presshub-ai-editor' ); ?><span class="screen-reader-text"> <?php echo esc_html__( '(opens in a new tab)', 'presshub-ai-editor' ); ?></span><span aria-hidden="true" class="dashicons dashicons-external presshub-image-studio-external"></span></a>
+                    </p>
+                <?php endif; ?>
             </div>
         </div>
         <?php

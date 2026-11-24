@@ -1,13 +1,34 @@
-Review this news article draft. Provide a JSON response with exactly four keys:
-- "score": An integer from 0 to 100 representing overall publication readiness.
-- "libel_risk": A string rating the legal exposure ("Low", "Medium", or "High").
-- "feedback": A 2-3 sentence critique summarizing editorial quality, structure, and balance.
-- "legal_concerns": A concise 1-2 sentence assessment highlighting any potentially libelous, unverified, or defamatory claims (or explicitly state "None identified" if the draft presents low risk).
+Review this news article before publication. Answer as three reviewers in one JSON object: an editor, a media lawyer and an SEO editor. Write every text value in the SAME LANGUAGE as the article.
 
-Evaluation Criteria:
-1. Editorial Quality: Assess clarity, structure, factual attribution, narrative balance, grammar, and standard journalistic style.
-2. Defamation & Libel Check: Flag unverified assertions of criminal wrongdoing, unsubstantiated attacks on character or professional reputation, lack of attribution for controversial allegations, or missing opportunities for a right of reply.
-3. Knowledge Cutoff & Recency: Do not dispute or penalize recent real-world events, breaking news, or reported deaths based on static pre-training knowledge. Assess the draft strictly on internal editorial soundness and attribution standards.
+1. Editorial review
+Judge clarity, structure, factual attribution, narrative balance, grammar and standard journalistic style.
 
-Draft:
+2. Legal review (Cyprus and EU media law and journalistic ethics)
+Look for, and quote, any sentence that:
+- presents an allegation of a crime or wrongdoing as fact, or names a suspect without attribution ("according to police", "the complaint alleges"), or ignores the presumption of innocence;
+- attacks a person's or company's reputation without a source, or misses an obvious right of reply;
+- reveals personal data without public interest: health, sexual life, religion, home address, phone, ID numbers, or the identity of a minor or of a victim of a sexual or violent crime;
+- is hate speech or incites violence or discrimination;
+- copies a long passage, photo caption or other material from another outlet without credit;
+- breaks a reporting restriction (for example a court order, or publishing opinion polls during an election blackout).
+A sentence that quotes an allegation and says clearly who makes it is normally acceptable. Do not invent problems: if nothing applies, say so.
+
+3. SEO review
+Judge the headline (clear, specific, main keyphrase near the start, about 40 to 65 characters), the opening paragraph (who, what, where, when), structure, meta description, tags, images and links. The automated checks below were measured from the post itself. Trust them over guesses:
+{seo_facts}
+
+Knowledge cutoff: do not dispute or penalise recent real-world events, breaking news or reported deaths based on your training knowledge. Judge only how the article is written and attributed.
+
+Return a JSON object with exactly these keys:
+- "score": integer 0 to 100, editorial readiness for publication.
+- "feedback": a 2 to 3 sentence editorial critique.
+- "libel_risk": "Low", "Medium" or "High", the overall legal risk.
+- "legal_concerns": one or two sentences summarising the legal risk, or "None identified".
+- "legal_issues": an array, empty when there is no issue, of objects with "type" (one of "defamation", "presumption_of_innocence", "privacy", "minors_or_victims", "hate_speech", "copyright", "reporting_restriction", "other"), "quote" (the exact sentence from the article), "severity" ("Low", "Medium" or "High") and "fix" (how to rewrite it).
+- "seo": an object with "seo_score" (integer 0 to 100), "focus_keyphrase" (1 to 4 words), "summary" (one sentence), "suggestions" (3 to 6 short improvements, most impactful first), "suggested_tags" (3 to 8 tags of 1 to 3 words; reuse these existing site tags when they fit, spelled exactly as listed: {existing_tags}) and "suggested_meta_description" (120 to 155 characters).
+
+Article title:
+{title}
+
+Article:
 {content}

@@ -27,7 +27,8 @@ class PressHub_AI_Token_Logger {
      * Get the most recent LLM request captured by log_llm_request().
      *
      * @return array|null Keys: action, provider, model, prompt_tokens, completion_tokens,
-     *                    total_tokens, duration_ms, status, error. Null if none captured.
+     *                    total_tokens, duration_ms, status, error, log_id (0 when the
+     *                    row was not stored). Null if none captured.
      */
     public static function get_last_llm_request(): ?array {
         return self::$last_llm_request;
@@ -151,7 +152,7 @@ class PressHub_AI_Token_Logger {
             'error'             => $error,
         ];
 
-        return self::insert_row( [
+        $log_id = self::insert_row( [
             'action_trigger'    => sanitize_key( $action ) ?: sanitize_text_field( $action ),
             'provider'          => sanitize_text_field( $provider ),
             'model'             => sanitize_text_field( $model ),
@@ -165,6 +166,118 @@ class PressHub_AI_Token_Logger {
             'error_message'     => $error ? sanitize_textarea_field( $error ) : null,
             'metadata'          => ! empty( $metadata ) ? wp_json_encode( $metadata ) : null,
         ] );
+        self::$last_llm_request['log_id'] = (int) $log_id;
+        return $log_id;
+    }
+
+    /**
+     * Names of the logged actions for the Usage & logs filter. Always listed, in this
+     * order; any other action found in the log is added after them (action_label()).
+     *
+     * @return array<string,string> action => name.
+     */
+    public static function known_actions(): array {
+        return [
+            'coauthor_draft'          => function_exists( '__' ) ? __( 'Co-author draft', 'presshub-ai-editor' ) : 'Co-author draft',
+            'coauthor_scorecard'      => function_exists( '__' ) ? __( 'Editorial scorecard', 'presshub-ai-editor' ) : 'Editorial scorecard',
+            'copilot_chat'            => function_exists( '__' ) ? __( 'Copilot chat', 'presshub-ai-editor' ) : 'Copilot chat',
+            'briefing_curation'       => function_exists( '__' ) ? __( 'Briefing curation', 'presshub-ai-editor' ) : 'Briefing curation',
+            'podcast_script'          => function_exists( '__' ) ? __( 'Podcast script', 'presshub-ai-editor' ) : 'Podcast script',
+            'podcast_audio'           => function_exists( '__' ) ? __( 'Podcast audio synthesis', 'presshub-ai-editor' ) : 'Podcast audio synthesis',
+            'scrape_harvest'          => function_exists( '__' ) ? __( 'News harvester', 'presshub-ai-editor' ) : 'News harvester',
+            'social_tiktok_shorts'    => function_exists( '__' ) ? __( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ) : 'Shorts script (TikTok/YouTube)',
+            'social_post_images'      => function_exists( '__' ) ? __( 'Post image plan (social)', 'presshub-ai-editor' ) : 'Post image plan (social)',
+            'social_trending_summary' => function_exists( '__' ) ? __( 'Trending roundup summary', 'presshub-ai-editor' ) : 'Trending roundup summary',
+            'social_video_transcribe' => function_exists( '__' ) ? __( 'Social video transcription', 'presshub-ai-editor' ) : 'Social video transcription',
+            'generate_image_prompt'   => function_exists( '__' ) ? __( 'Image prompt', 'presshub-ai-editor' ) : 'Image prompt',
+            'generate_featured_image' => function_exists( '__' ) ? __( 'Image generation', 'presshub-ai-editor' ) : 'Image generation',
+            'generate_image_metadata' => function_exists( '__' ) ? __( 'Image metadata (SEO)', 'presshub-ai-editor' ) : 'Image metadata (SEO)',
+            'custom_test'             => function_exists( '__' ) ? __( 'Test connection', 'presshub-ai-editor' ) : 'Test connection',
+        ];
+    }
+
+    /**
+     * The readable name of a logged action: a known name, "Social copy: X" for
+     * social_copy_x, "SEO: x" for seo_x, otherwise the key with spaces.
+     */
+    public static function action_label( string $action ): string {
+        $known = self::known_actions();
+        if ( isset( $known[ $action ] ) ) {
+            return $known[ $action ];
+        }
+        $platforms = [ 'twitter' => 'X', 'facebook' => 'Facebook', 'instagram' => 'Instagram', 'tiktok' => 'TikTok', 'youtube' => 'YouTube' ];
+        if ( 0 === strpos( $action, 'social_copy_' ) ) {
+            $platform = substr( $action, strlen( 'social_copy_' ) );
+            /* translators: %s: social platform, e.g. Facebook. */
+            $format = function_exists( '__' ) ? __( 'Social copy: %s', 'presshub-ai-editor' ) : 'Social copy: %s';
+            return sprintf( $format, $platforms[ $platform ] ?? ucfirst( str_replace( '_', ' ', $platform ) ) );
+        }
+        if ( 0 === strpos( $action, 'seo_' ) ) {
+            /* translators: %s: SEO task, e.g. post title. */
+            $format = function_exists( '__' ) ? __( 'SEO: %s', 'presshub-ai-editor' ) : 'SEO: %s';
+            return sprintf( $format, str_replace( '_', ' ', substr( $action, 4 ) ) );
+        }
+        return ucfirst( str_replace( '_', ' ', $action ) );
+    }
+
+    /**
+     * Every action ever logged (distinct), sorted. Empty when the table cannot be read.
+     *
+     * @return string[]
+     */
+    public static function get_logged_actions(): array {
+        global $wpdb;
+        if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_col' ) ) {
+            return [];
+        }
+        $table   = self::get_table_name();
+        $actions = (array) $wpdb->get_col( "SELECT DISTINCT action_trigger FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only.
+        $actions = array_values( array_unique( array_filter( array_map( 'strval', $actions ), fn( $a ) => '' !== $a ) ) );
+        sort( $actions );
+        return $actions;
+    }
+
+    /**
+     * Options of the Usage & logs action filter: value => name. The known actions first,
+     * then every other logged action by name, so a new action never goes missing.
+     *
+     * @param string[]|null $logged Logged actions (null reads them from the table).
+     * @return array<string,string>
+     */
+    public static function filter_options( ?array $logged = null ): array {
+        $options = self::known_actions();
+        $extra = [];
+        foreach ( null === $logged ? self::get_logged_actions() : $logged as $action ) {
+            $action = (string) $action;
+            if ( '' !== $action && ! isset( $options[ $action ] ) ) {
+                $extra[ $action ] = self::action_label( $action );
+            }
+        }
+        asort( $extra, SORT_NATURAL | SORT_FLAG_CASE );
+        return $options + $extra;
+    }
+
+    /**
+     * Mark a logged request as failed after the fact: the provider answered, but the
+     * caller could not use the answer (e.g. broken JSON). Tokens stay as logged.
+     *
+     * @param int    $log_id Row ID returned by log_llm_request() (also in get_last_llm_request()['log_id']).
+     * @param string $error  Why the response was not usable.
+     * @return bool True when the row was updated.
+     */
+    public static function mark_failed( int $log_id, string $error ): bool {
+        global $wpdb;
+        if ( $log_id <= 0 || ! isset( $wpdb ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'update' ) ) {
+            return false;
+        }
+        $result = $wpdb->update(
+            self::get_table_name(),
+            [ 'status' => 'error', 'error_message' => sanitize_textarea_field( $error ) ],
+            [ 'id' => $log_id ],
+            [ '%s', '%s' ],
+            [ '%d' ]
+        );
+        return is_int( $result ) && $result > 0;
     }
 
     /**

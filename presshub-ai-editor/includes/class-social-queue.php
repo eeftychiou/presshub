@@ -14,7 +14,7 @@ class PressHub_Social_Queue {
     /**
      * Allowed social platforms.
      */
-    public const VALID_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+    public const VALID_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok', 'youtube' ];
 
     /**
      * Allowed dispatch engines.
@@ -234,9 +234,13 @@ class PressHub_Social_Queue {
      * @param int         $limit     Maximum number of jobs to fetch.
      * @param string|null $engine    Optional engine filter (e.g. 'automation' or 'api').
      * @param array       $platforms Optional list of platforms to filter by.
+     * @param array       $exclude_ids    Job ids to leave out.
+     * @param string|null $exclude_engine 2.76.1: leave out jobs of this engine (the cron passes
+     *                                    'automation' in Pull Mode, so worker jobs waiting for the
+     *                                    worker never take the batch from the API jobs behind them).
      * @return array<int, array>
      */
-    public static function get_due_pending_jobs( int $limit = 0, ?string $engine = null, array $platforms = [], array $exclude_ids = [] ): array {
+    public static function get_due_pending_jobs( int $limit = 0, ?string $engine = null, array $platforms = [], array $exclude_ids = [], ?string $exclude_engine = null ): array {
         $exclude_ids = array_values( array_filter( array_map( 'intval', $exclude_ids ), fn( $id ) => $id > 0 ) );
         if ( $limit <= 0 ) {
             $limit = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_batch_size' )
@@ -263,6 +267,11 @@ class PressHub_Social_Queue {
             if ( ! empty( $engine ) ) {
                 $where    .= " AND engine = %s";
                 $params[] = sanitize_key( $engine );
+            }
+
+            if ( ! empty( $exclude_engine ) ) {
+                $where    .= ' AND engine <> %s';
+                $params[] = sanitize_key( $exclude_engine );
             }
 
             if ( ! empty( $clean_platforms ) ) {
@@ -299,6 +308,9 @@ class PressHub_Social_Queue {
             if ( ! empty( $engine ) && ( $job['engine'] ?? 'api' ) !== $engine ) {
                 continue;
             }
+            if ( ! empty( $exclude_engine ) && ( $job['engine'] ?? 'api' ) === $exclude_engine ) {
+                continue;
+            }
             if ( ! empty( $clean_platforms ) && ! in_array( $job['platform'] ?? '', $clean_platforms, true ) ) {
                 continue;
             }
@@ -319,7 +331,9 @@ class PressHub_Social_Queue {
     /**
      * Query jobs with flexible filters.
      *
-     * @param array $filters Supported: status, platform, post_id, limit, offset.
+     * @param array $filters Supported: status, statuses (a list of statuses), platform,
+     *                       post_id, since (a UTC 'Y-m-d H:i:s': jobs dispatched, or not yet
+     *                       dispatched and scheduled, at or after it), limit, offset.
      * @return array<int, array>
      */
     public static function query_jobs( array $filters = [] ): array {
@@ -337,6 +351,14 @@ class PressHub_Social_Queue {
                 $args[]  = $filters['status'];
             }
 
+            if ( ! empty( $filters['statuses'] ) && is_array( $filters['statuses'] ) ) {
+                $statuses = array_values( array_intersect( $filters['statuses'], self::VALID_STATUSES ) );
+                if ( ! empty( $statuses ) ) {
+                    $where[] = 'status IN (' . implode( ',', array_fill( 0, count( $statuses ), '%s' ) ) . ')';
+                    $args    = array_merge( $args, $statuses );
+                }
+            }
+
             if ( ! empty( $filters['platform'] ) && in_array( $filters['platform'], self::VALID_PLATFORMS, true ) ) {
                 $where[] = 'platform = %s';
                 $args[]  = $filters['platform'];
@@ -345,6 +367,11 @@ class PressHub_Social_Queue {
             if ( ! empty( $filters['post_id'] ) ) {
                 $where[] = 'post_id = %d';
                 $args[]  = (int) $filters['post_id'];
+            }
+
+            if ( ! empty( $filters['since'] ) && is_string( $filters['since'] ) ) {
+                $where[] = 'COALESCE(dispatched_at, scheduled_at) >= %s';
+                $args[]  = $filters['since'];
             }
 
             $where_sql = implode( ' AND ', $where );
@@ -362,11 +389,17 @@ class PressHub_Social_Queue {
         if ( ! empty( $filters['status'] ) ) {
             $items = array_filter( $items, fn( $j ) => $j['status'] === $filters['status'] );
         }
+        if ( ! empty( $filters['statuses'] ) && is_array( $filters['statuses'] ) ) {
+            $items = array_filter( $items, fn( $j ) => in_array( $j['status'] ?? '', $filters['statuses'], true ) );
+        }
         if ( ! empty( $filters['platform'] ) ) {
             $items = array_filter( $items, fn( $j ) => $j['platform'] === $filters['platform'] );
         }
         if ( ! empty( $filters['post_id'] ) ) {
             $items = array_filter( $items, fn( $j ) => (int) $j['post_id'] === (int) $filters['post_id'] );
+        }
+        if ( ! empty( $filters['since'] ) && is_string( $filters['since'] ) ) {
+            $items = array_filter( $items, fn( $j ) => (string) ( ( $j['dispatched_at'] ?? '' ) ?: ( $j['scheduled_at'] ?? '' ) ) >= $filters['since'] );
         }
 
         usort( $items, fn( $a, $b ) => $b['id'] <=> $a['id'] );
@@ -796,7 +829,17 @@ class PressHub_Social_Queue {
             : null;
         if ( is_array( $repost_meta ) ) {
             unset( $repost_meta['instagram_creation_id'], $repost_meta['instagram_container_started_at'] );
+            // A re-post is a new upload: the earlier video's results do not carry over.
+            unset( $repost_meta['youtube_playlist_error'], $repost_meta['youtube_playlist_item_id'], $repost_meta['youtube_kind'], $repost_meta['youtube_error_reason'], $repost_meta['youtube_episode_note'] );
+            // A re-posted episode waits for story images from now, not from the first queueing.
+            if ( isset( $repost_meta['youtube_episode'] ) && is_array( $repost_meta['youtube_episode'] ) ) {
+                $repost_meta['youtube_episode']['queued_at'] = gmdate( 'c' );
+            }
         }
+
+        // Reposted by hand: the operator chose to post it, so the social post gate lets it go.
+        $repost_meta = is_array( $repost_meta ) ? $repost_meta : [];
+        $repost_meta['gate_bypass'] = true;
 
         $new_job_data = [
             'post_id'      => (int) $source['post_id'],

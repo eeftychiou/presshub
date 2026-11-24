@@ -33,7 +33,7 @@ class ChatRoutingAdminGateTest
             'chat_admin'    => [ [ 'edit_posts', 'manage_options', 'edit_others_posts' ], 'chat',  'allowed' ],
         ] as $key => [ $caps, $intent, $expectation ] ) {
             self::reset_world();
-            $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'openai-key';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'openai-key' );
             $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
             // Stub Google Cloud key so image / report paths don't bail.
             $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'gc-key';

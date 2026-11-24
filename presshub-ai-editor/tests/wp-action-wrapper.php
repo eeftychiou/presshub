@@ -25,4 +25,4 @@ if ( ! function_exists( 'has_action' ) ) {
         }
         return in_array( $callback_to_check, $GLOBALS['ACTIONS'][ $hook ], true );
     }
-}
+}

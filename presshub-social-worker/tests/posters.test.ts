@@ -12,6 +12,8 @@ import {
   resolveInstagramPermalink,
   resolveFacebookPermalink,
   parseFacebookPermalink,
+  waitForFacebookVideoReady,
+  isFacebookVideoFile,
   markTikTokAiGenerated,
   getTwitterWeightedLength,
   sanitizeTwitterCopy,
@@ -26,7 +28,10 @@ import {
   splitTikTokCaption,
   typeTikTokCaption,
   fitInstagramCaption,
-  INSTAGRAM_REEL_CAPTION_MAX_BYTES
+  INSTAGRAM_REEL_CAPTION_MAX_BYTES,
+  waitForTwitterVideo,
+  TWITTER_UPLOAD_PROGRESS_SELECTOR,
+  TWITTER_VIDEO_READY_SELECTOR
 } from '../src/automation/posters';
 import { ChromeConnection } from '../src/automation/browser-helper';
 import { markSessionInvalid, clearSessionInvalid, verifySession } from '../src/automation/session-manager';
@@ -280,6 +285,56 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       .rejects.toThrow(/"Post" button not found/);
   }, 30000);
 
+  test('postFacebook waits for a video upload, goes through Next and posts the Reel', async () => {
+    const fs = require('fs');
+    const os = require('os');
+    const pathMod = require('path');
+    const dir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'ph-fb-video-'));
+    const video = pathMod.join(dir, 'short.mp4');
+    fs.writeFileSync(video, 'video');
+    const page = await context.newPage();
+    page.goto = async (url: string) => {
+      if (url.includes('/me/')) {
+        await page.setContent(`<html><body><div role="article"><span>Reel caption text for the test</span>
+          <a href="https://www.facebook.com/reel/1234567890123?__cft__=1">Just now</a></div></body></html>`);
+      } else {
+        // Upload "finishes" 1.5s after a file is chosen: the progress bar goes and Next is enabled.
+        // Next swaps in the Post button.
+        await page.setContent(`<html><body><div role="dialog">
+          <div role="textbox" contenteditable="true"></div>
+          <input type="file" accept="image/*,video/*" onchange="var d=document.querySelector('[role=dialog]');var p=document.createElement('div');p.setAttribute('role','progressbar');d.appendChild(p);setTimeout(function(){p.remove();document.getElementById('next').setAttribute('aria-disabled','false');},1500);" />
+          <div id="next" role="button" aria-label="Next" aria-disabled="true" onclick="this.outerHTML='<div role=&quot;button&quot; aria-label=&quot;Post&quot; onclick=&quot;window.__posted=1&quot;>Post</div>'">Next</div>
+        </div></body></html>`);
+      }
+      return null as any;
+    };
+    const mockSession = { browser, isExternalCdp: false, context: { newPage: async () => page } as any, close: async () => {} } as ChromeConnection;
+    const res = await postFacebook({ platform: 'facebook', copy: 'Reel caption text for the test', mediaPath: video, browserSession: mockSession, timeoutMs: 5000, videoUploadTimeoutMs: 20000 });
+    expect(res.success).toBe(true);
+    expect(res.externalPostUrl).toBe('https://www.facebook.com/reel/1234567890123');
+    expect(res.externalPostId).toBe('1234567890123');
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 60000);
+
+  test('waitForFacebookVideoReady fails when the upload never finishes', async () => {
+    const page = await context.newPage();
+    try {
+      await page.setContent('<html><body><div role="dialog"><div role="progressbar"></div><div role="button" aria-label="Post" aria-disabled="true">Post</div></div></body></html>');
+      await expect(waitForFacebookVideoReady(page, 1500, 200)).rejects.toThrow(/did not finish uploading/);
+      await page.setContent('<html><body><div role="dialog"><div role="button" aria-label="Post">Post</div></div></body></html>');
+      await expect(waitForFacebookVideoReady(page, 1500, 200)).resolves.toBeUndefined();
+    } finally {
+      await page.close();
+    }
+  }, 30000);
+
+  test('isFacebookVideoFile tells a rendered short from a post image', () => {
+    expect(isFacebookVideoFile('/out/short-1.mp4')).toBe(true);
+    expect(isFacebookVideoFile('C:\\out\\SHORT.MOV')).toBe(true);
+    expect(isFacebookVideoFile('/out/image.jpg')).toBe(false);
+    expect(isFacebookVideoFile('')).toBe(false);
+  });
+
   test('parseFacebookPermalink keeps the post id and drops tracking parameters', () => {
     expect(parseFacebookPermalink('/PressHub.cy/posts/pfbid0abc?__cft__[0]=x&__tn__=R')).toEqual({
       url: 'https://www.facebook.com/PressHub.cy/posts/pfbid0abc',
@@ -361,8 +416,8 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
   });
 
   test('parseTikTokVideoHref / parseTikTokProfileHref read handles and video ids (#191)', () => {
-    expect(parseTikTokVideoHref('https://www.tiktok.com/@presshub.cy/video/7312345678901234567')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567' });
-    expect(parseTikTokVideoHref('/@presshub.cy/video/7312345678901234567?is_from_webapp=1')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567' });
+    expect(parseTikTokVideoHref('https://www.tiktok.com/@presshub.cy/video/7312345678901234567')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567', kind: 'video' });
+    expect(parseTikTokVideoHref('/@presshub.cy/video/7312345678901234567?is_from_webapp=1')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567', kind: 'video' });
     expect(parseTikTokVideoHref('https://www.tiktok.com/@creator/video/tt-123')).toBeNull();
     expect(parseTikTokProfileHref('/@presshub.cy')).toBe('presshub.cy');
     expect(parseTikTokProfileHref('https://www.tiktok.com/@presshub.cy?lang=el')).toBe('presshub.cy');
@@ -387,6 +442,15 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     </body></html>`);
     const res = await resolveTikTokPostUrl(page, 'Σήμερα στην Κύπρο: τα νέα της ημέρας #cyprus', 3000);
     expect(res).toEqual({ kind: 'video', url: 'https://www.tiktok.com/@presshub.cy/video/7300000000000000001', videoId: '7300000000000000001' });
+    await page.close();
+  });
+
+  test('resolveTikTokPostUrl reports a photo post as a photo (#333)', async () => {
+    const page = await studioPage(`<html><body>
+      <div class="row"><a href="/@presshub.cy/photo/7300000000000000003">open</a><span>Φωτογραφίες της ημέρας #news</span></div>
+    </body></html>`);
+    const res = await resolveTikTokPostUrl(page, 'Φωτογραφίες της ημέρας #news', 3000);
+    expect(res).toEqual({ kind: 'photo', url: 'https://www.tiktok.com/@presshub.cy/photo/7300000000000000003', videoId: '7300000000000000003' });
     await page.close();
   });
 
@@ -1906,5 +1970,68 @@ describe('fitInstagramCaption', () => {
     const fitted = fitInstagramCaption('Λέξη '.repeat(800), 500);
     expect(bytes(fitted)).toBeLessThanOrEqual(500);
     expect(fitted.endsWith('…')).toBe(true);
+  });
+});
+
+describe('waitForTwitterVideo', () => {
+  type State = { ariaDisabled: string | null; progress: number; ready?: boolean; counter?: number };
+  const fakeScope = (states: State[]) => {
+    let i = 0;
+    const current = () => states[Math.min(i, states.length - 1)];
+    const button = {
+      getAttribute: async (name: string) => (name === 'aria-disabled' ? current().ariaDisabled : null),
+      count: async () => 1
+    };
+    const selectors: string[] = [];
+    return {
+      selectors,
+      locator: (sel: string) => {
+        selectors.push(sel);
+        if (sel === TWITTER_UPLOAD_PROGRESS_SELECTOR) return { count: async () => current().progress };
+        if (sel === TWITTER_VIDEO_READY_SELECTOR) return { count: async () => (current().ready ? 1 : 0) };
+        // A bare progress bar outside the attachment, like X's character counter ring.
+        if (sel === '[role="progressbar"]') return { count: async () => current().counter ?? 0 };
+        return { filter: () => ({ filter: () => ({ first: () => button }) }) };
+      },
+      page: { waitForTimeout: async () => { i++; }, locator: () => ({}) }
+    };
+  };
+
+  test('waits until Post is enabled and the upload bar is gone', async () => {
+    const scope = fakeScope([
+      { ariaDisabled: 'true', progress: 1 },
+      { ariaDisabled: null, progress: 1 },
+      { ariaDisabled: null, progress: 0 }
+    ]);
+    await expect(waitForTwitterVideo(scope.page, scope, 5000, 1)).resolves.toBeGreaterThanOrEqual(0);
+  });
+
+  test('fails when X never finishes the upload', async () => {
+    const scope = fakeScope([{ ariaDisabled: 'true', progress: 1 }]);
+    await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).rejects.toThrow('X did not finish uploading the video');
+  });
+
+  test('only counts progress bars inside the attachment, never the character counter', async () => {
+    const scope = fakeScope([{ ariaDisabled: null, progress: 0, counter: 1 }]);
+    await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).resolves.toBeGreaterThanOrEqual(0);
+    expect(scope.selectors).not.toContain('[role="progressbar"]');
+    expect(TWITTER_UPLOAD_PROGRESS_SELECTOR.split(',').every((s) => s.trim().startsWith('[data-testid="attachments"]'))).toBe(true);
+  });
+
+  test('X saying "<file>: Ready" ends the wait even while a bar is still shown', async () => {
+    const scope = fakeScope([{ ariaDisabled: null, progress: 1, ready: true }]);
+    await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).resolves.toBeGreaterThanOrEqual(0);
+  });
+
+  test('a ready video still waits for Post to be enabled', async () => {
+    const scope = fakeScope([{ ariaDisabled: 'true', progress: 0, ready: true }]);
+    await expect(waitForTwitterVideo(scope.page, scope, 30, 1)).rejects.toThrow('X did not finish uploading the video');
+  });
+
+  test('the ready selector matches X\'s ready line for a video file', () => {
+    const body = TWITTER_VIDEO_READY_SELECTOR.replace(/^text=\//, '').replace(/\/i$/, '');
+    const re = new RegExp(body, 'i');
+    expect(re.test('b7dcf243bba90d90e94bfab66cf1d766.mp4: Ready')).toBe(true);
+    expect(re.test('short.mp4: Uploading (45%)')).toBe(false);
   });
 });

@@ -93,12 +93,19 @@ jobs:
           set -e
           php tests/run-social-tests.php
 
-      # #246: the settings renderers style through assets/css/settings.css.
+      # #246, #309 (E6): every settings renderer styles through assets/css/settings.css.
       - name: No inline style= in the settings renderers
         run: |
           if grep -nE '(^|[^-[:alnum:]_])style[[:space:]]*=' \
               presshub-ai-editor/includes/class-settings-render.php \
-              presshub-ai-editor/includes/class-social-settings-render.php; then
+              presshub-ai-editor/includes/class-social-settings-render.php \
+              presshub-ai-editor/includes/class-social-settings.php \
+              presshub-ai-editor/includes/class-model-tasks.php \
+              presshub-ai-editor/includes/class-secret-field.php \
+              presshub-ai-editor/includes/class-setup-check.php \
+              presshub-ai-editor/includes/class-connection-status.php \
+              presshub-ai-editor/includes/class-settings-cleanup.php \
+              presshub-ai-editor/includes/class-log-exposure-check.php; then
             echo "Inline style= found above. Use a class in presshub-ai-editor/assets/css/settings.css." >&2
             exit 1
           fi

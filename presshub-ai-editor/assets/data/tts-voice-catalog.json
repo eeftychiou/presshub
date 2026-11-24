@@ -89,7 +89,24 @@
         { "name": "el-GR-Chirp3-HD-Achird",    "label": "el-GR Chirp3-HD Achird",          "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" },
         { "name": "el-GR-Chirp3-HD-Algenib",   "label": "el-GR Chirp3-HD Algenib",         "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" },
         { "name": "el-GR-Chirp3-HD-Algieba",   "label": "el-GR Chirp3-HD Algieba",         "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" },
-        { "name": "el-GR-Chirp3-HD-Alnilam",   "label": "el-GR Chirp3-HD Alnilam",         "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" }
+        { "name": "el-GR-Chirp3-HD-Alnilam",   "label": "el-GR Chirp3-HD Alnilam",         "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" },
+        { "name": "en-GB-Wavenet-A",          "label": "en-GB Wavenet A (Female)",       "gender": "female",  "language": "en-GB", "engine_version": "v1" },
+        { "name": "en-GB-Wavenet-B",          "label": "en-GB Wavenet B (Male)",         "gender": "male",    "language": "en-GB", "engine_version": "v1" },
+        { "name": "en-GB-Wavenet-C",          "label": "en-GB Wavenet C (Female)",       "gender": "female",  "language": "en-GB", "engine_version": "v1" },
+        { "name": "en-GB-Wavenet-D",          "label": "en-GB Wavenet D (Male)",         "gender": "male",    "language": "en-GB", "engine_version": "v1" },
+        { "name": "en-GB-Chirp3-HD-Aoede",    "label": "en-GB Chirp3-HD Aoede",          "gender": "female",  "language": "en-GB", "engine_version": "chirp3-hd" },
+        { "name": "en-GB-Chirp3-HD-Kore",     "label": "en-GB Chirp3-HD Kore",           "gender": "female",  "language": "en-GB", "engine_version": "chirp3-hd" },
+        { "name": "en-GB-Chirp3-HD-Charon",   "label": "en-GB Chirp3-HD Charon",         "gender": "male",    "language": "en-GB", "engine_version": "chirp3-hd" },
+        { "name": "en-GB-Chirp3-HD-Puck",     "label": "en-GB Chirp3-HD Puck",           "gender": "male",    "language": "en-GB", "engine_version": "chirp3-hd" },
+        { "name": "tr-TR-Wavenet-A",          "label": "tr-TR Wavenet A (Female)",       "gender": "female",  "language": "tr-TR", "engine_version": "v1" },
+        { "name": "tr-TR-Wavenet-B",          "label": "tr-TR Wavenet B (Male)",         "gender": "male",    "language": "tr-TR", "engine_version": "v1" },
+        { "name": "tr-TR-Wavenet-C",          "label": "tr-TR Wavenet C (Female)",       "gender": "female",  "language": "tr-TR", "engine_version": "v1" },
+        { "name": "tr-TR-Wavenet-D",          "label": "tr-TR Wavenet D (Female)",       "gender": "female",  "language": "tr-TR", "engine_version": "v1" },
+        { "name": "tr-TR-Wavenet-E",          "label": "tr-TR Wavenet E (Male)",         "gender": "male",    "language": "tr-TR", "engine_version": "v1" },
+        { "name": "tr-TR-Chirp3-HD-Aoede",    "label": "tr-TR Chirp3-HD Aoede",          "gender": "female",  "language": "tr-TR", "engine_version": "chirp3-hd" },
+        { "name": "tr-TR-Chirp3-HD-Kore",     "label": "tr-TR Chirp3-HD Kore",           "gender": "female",  "language": "tr-TR", "engine_version": "chirp3-hd" },
+        { "name": "tr-TR-Chirp3-HD-Charon",   "label": "tr-TR Chirp3-HD Charon",         "gender": "male",    "language": "tr-TR", "engine_version": "chirp3-hd" },
+        { "name": "tr-TR-Chirp3-HD-Puck",     "label": "tr-TR Chirp3-HD Puck",           "gender": "male",    "language": "tr-TR", "engine_version": "chirp3-hd" }
       ]
     },
     "openai-tts": {

@@ -31,6 +31,19 @@ require_once __DIR__ . '/class-capabilities.php';
 
 class PressHub_Settings_Sections {
 
+    /** admin-post action of the Settings form when JavaScript is off (#309, E2). */
+    const POST_ACTION = 'presshub_save_settings_section';
+
+    /** Nonce action for one section's no-JS form. */
+    public static function post_nonce( string $section ): string {
+        return 'presshub_save_settings_section_' . $section;
+    }
+
+    /** Transient holding the result of a no-JS save until the redirect shows it. */
+    public static function post_result_key( int $user_id ): string {
+        return 'presshub_settings_post_result_' . $user_id;
+    }
+
     /** Admin page slug of the one Settings page (unchanged from 3a). */
     const PAGE_SLUG = 'presshub-ai';
 
@@ -70,10 +83,7 @@ class PressHub_Settings_Sections {
     const KEY_SECTIONS = [
         'presshub_ai_remove_github_token'          => 'connections',
         'presshub_ai_remove_google_cloud_api_key'  => 'connections',
-        'presshub_social_github_token'             => 'connections',
         // #247: every secret is in Connections.
-        'presshub_ai_briefing_tts_api_key'         => 'connections',
-        'presshub_ai_remove_briefing_tts_api_key'  => 'connections',
         // #247: the press inbox login is in Connections; folders and filters stay in Daily Briefing.
         'presshub_ai_press_inbox_host'             => 'connections',
         'presshub_ai_press_inbox_port'             => 'connections',
@@ -83,6 +93,39 @@ class PressHub_Settings_Sections {
         'presshub_ai_press_inbox_password'         => 'connections',
         'presshub_ai_remove_press_inbox_password'  => 'connections',
         'presshub_ai_press_inbox_timeout'          => 'connections',
+        // #236: every model choice and its parameters are in the AI models table.
+        'presshub_ai_coauthor_provider'              => 'ai-models',
+        'presshub_ai_coauthor_model'                 => 'ai-models',
+        'presshub_ai_coauthor_temperature'           => 'ai-models',
+        'presshub_ai_coauthor_max_tokens'            => 'ai-models',
+        'presshub_ai_coauthor_timeout'               => 'ai-models',
+        'presshub_ai_qa_provider'                    => 'ai-models',
+        'presshub_ai_qa_model'                       => 'ai-models',
+        'presshub_ai_briefing_text_provider'         => 'ai-models',
+        'presshub_ai_briefing_text_model'            => 'ai-models',
+        'presshub_ai_briefing_text_temperature'      => 'ai-models',
+        'presshub_ai_briefing_text_max_tokens'       => 'ai-models',
+        'presshub_ai_briefing_text_timeout'          => 'ai-models',
+        'presshub_ai_briefing_podcast_provider'      => 'ai-models',
+        'presshub_ai_briefing_podcast_model'         => 'ai-models',
+        'presshub_ai_briefing_podcast_temperature'   => 'ai-models',
+        'presshub_ai_briefing_podcast_max_tokens'    => 'ai-models',
+        'presshub_ai_briefing_podcast_timeout'       => 'ai-models',
+        'presshub_ai_briefing_memory_provider'       => 'ai-models',
+        'presshub_ai_briefing_memory_model'          => 'ai-models',
+        'presshub_ai_image_prompt_provider'          => 'ai-models',
+        'presshub_ai_image_prompt_model'             => 'ai-models',
+        'presshub_ai_image_generation_provider'      => 'ai-models',
+        'presshub_social_ai_provider'                => 'ai-models',
+        'presshub_social_ai_model'                   => 'ai-models',
+        'presshub_social_ai_temperature'             => 'ai-models',
+        'presshub_social_ai_max_tokens'              => 'ai-models',
+        'presshub_social_ai_timeout'                 => 'ai-models',
+        'presshub_ai_briefing_podcast_tts_provider'  => 'ai-models',
+        'presshub_ai_briefing_tts_engine'            => 'ai-models',
+        'presshub_ai_briefing_tts_model'             => 'ai-models',
+        'presshub_ai_briefing_tts_timeout'           => 'ai-models',
+        'presshub_social_tiktok_shorts_music_model'  => 'ai-models',
         // Site & system → Logging & retention keeps all six retention periods in one table.
         'presshub_ai_memory_retention_days'        => 'site-system',
     ];
@@ -94,7 +137,7 @@ class PressHub_Settings_Sections {
     const LEGACY_TARGETS = [
         'ai'     => [
             'providers'        => [ 'connections', 'ai-providers' ],
-            'copilot'          => [ 'ai-models', 'copilot' ],
+            'copilot'          => [ 'ai-models', 'model-copilot' ],
             'coauthor'         => [ 'writing-qa', '' ],
             'coauthor-drafting' => [ 'writing-qa', 'drafting' ],
             'coauthor-qa'      => [ 'writing-qa', 'qa-gate' ],
@@ -158,9 +201,9 @@ class PressHub_Settings_Sections {
             ],
             'ai-models'           => [
                 'label'  => __( 'AI models', 'presshub-ai-editor' ),
-                'intro'  => __( 'The model behind the Copilot and the research assistant. AI provider keys are in Connections.', 'presshub-ai-editor' ),
+                'intro'  => __( 'Which provider and model each AI task uses, in one table. AI provider keys are in Connections.', 'presshub-ai-editor' ),
                 'groups' => [
-                    'copilot' => __( 'Copilot & research assistant', 'presshub-ai-editor' ),
+                    'task-models' => __( 'Models by task', 'presshub-ai-editor' ),
                 ],
             ],
             'writing-qa'          => [
@@ -183,6 +226,7 @@ class PressHub_Settings_Sections {
                     'briefing-text'       => __( 'Text story', 'presshub-ai-editor' ),
                     'briefing-podcast'    => __( 'Podcast script', 'presshub-ai-editor' ),
                     'briefing-voices'     => __( 'Voices & audio', 'presshub-ai-editor' ),
+                    'briefing-languages'  => __( 'Other languages', 'presshub-ai-editor' ),
                     'briefing-publishing' => __( 'Publishing', 'presshub-ai-editor' ),
                 ],
             ],

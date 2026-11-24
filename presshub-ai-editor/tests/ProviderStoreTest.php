@@ -314,6 +314,33 @@ class ProviderStoreTest {
         }
 
         // ==================================================================
+        // #309 (E1): headers posted as a JSON string (the Connections dialog)
+        // are kept; an empty string clears them; an unreadable one keeps the saved ones.
+        // ==================================================================
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [];
+        $hid = PressHub_AI_Provider_Store::save_provider( [
+            'id' => 'openai-h', 'type' => 'openai', 'name' => 'OpenAI H', 'api_key' => 'sk-h',
+            'headers' => '{"OpenAI-Organization":"org-JSON","X-Extra":"1"}',
+        ] );
+        $h = PressHub_AI_Provider_Store::get( $hid )['headers'] ?? null;
+        if ( [ 'OpenAI-Organization' => 'org-JSON', 'X-Extra' => '1' ] !== $h ) {
+            $failures[] = 'Headers sent as a JSON string should be saved; got ' . var_export( $h, true );
+        }
+        PressHub_AI_Provider_Store::save_provider( [ 'id' => $hid, 'type' => 'openai', 'name' => 'OpenAI H', 'headers' => '{not json' ] );
+        if ( 'org-JSON' !== ( PressHub_AI_Provider_Store::get( $hid )['headers']['OpenAI-Organization'] ?? null ) ) {
+            $failures[] = 'Unreadable headers JSON should keep the saved headers.';
+        }
+        PressHub_AI_Provider_Store::save_provider( [ 'id' => $hid, 'type' => 'openai', 'name' => 'OpenAI H' ] );
+        if ( 'org-JSON' !== ( PressHub_AI_Provider_Store::get( $hid )['headers']['OpenAI-Organization'] ?? null ) ) {
+            $failures[] = 'A save without headers should keep the saved headers.';
+        }
+        PressHub_AI_Provider_Store::save_provider( [ 'id' => $hid, 'type' => 'openai', 'name' => 'OpenAI H', 'headers' => '' ] );
+        if ( [] !== ( PressHub_AI_Provider_Store::get( $hid )['headers'] ?? null ) ) {
+            $failures[] = 'An empty headers string should clear the headers.';
+        }
+
+        // ==================================================================
         // Output Results
         // ==================================================================
         if ( $failures ) {
