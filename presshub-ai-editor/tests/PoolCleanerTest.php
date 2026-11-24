@@ -136,6 +136,27 @@ $s2 = $P::clean( $p2, $date, $now );
 pc_check( 'disabled: pool untouched', count( $pool ) === count( $p2['articles'] ) && false === $s2['enabled'] );
 remove_filter( 'presshub_ai_pool_cleanup_enabled', '__return_false' );
 
+// Undated pages are aged from the first harvest that saw the URL.
+delete_option( 'presshub_ai_pool_first_seen' );
+$undated = [ 'title' => 'Έρευνα για τους μεγάλους χρήστες νερού στην Κύπρο', 'content' => $long, 'url' => 'https://www.ciren.cy/investigation/water/', 'tier' => 'dom', 'published_at' => '', 'source' => 'ciren.cy' ];
+$day1 = strtotime( '2026-11-18 05:00:00 UTC' );
+$p3 = [ 'articles' => [ $undated ] ];
+$P::clean( $p3, '2026-11-18', $day1 );
+pc_check( 'first seen: kept on its first harvest', 1 === count( $p3['articles'] ) && gmdate( 'c', $day1 ) === ( $p3['articles'][0]['first_seen_at'] ?? '' ) );
+$p4 = [ 'articles' => [ array_merge( $undated, [ 'url' => 'https://ciren.cy/investigation/water' ] ) ] ];
+$P::clean( $p4, '2026-11-19', $day1 + 24 * 3600 );
+pc_check( 'first seen: still kept inside the age limit (same URL without www and slash)', 1 === count( $p4['articles'] ) && gmdate( 'c', $day1 ) === ( $p4['articles'][0]['first_seen_at'] ?? '' ) );
+$p5 = [ 'articles' => [ $undated ] ];
+$s5 = $P::clean( $p5, '2026-11-24', $day1 + 6 * 24 * 3600 );
+pc_check( 'first seen: dropped as stale after the age limit', 0 === count( $p5['articles'] ) && 1 === $s5['counts']['stale'] );
+$dated = array_merge( $undated, [ 'url' => 'https://ciren.cy/other', 'published_at' => gmdate( 'c', $day1 + 6 * 24 * 3600 - 3600 ) ] );
+$p6 = [ 'articles' => [ $dated ] ];
+$P::clean( $p6, '2026-11-24', $day1 + 6 * 24 * 3600 );
+$seen = get_option( 'presshub_ai_pool_first_seen', [] );
+pc_check( 'first seen: dated pages are not recorded', 1 === count( $p6['articles'] ) && ! isset( $seen[ $P::url_key( 'https://ciren.cy/other' ) ] ) );
+$P::clean( $p6, '2026-12-10', strtotime( '2026-12-10 05:00:00 UTC' ) );
+pc_check( 'first seen: old entries are pruned', [] === get_option( 'presshub_ai_pool_first_seen', [] ) );
+
 // wiring
 $src = file_get_contents( dirname( __DIR__ ) . '/includes/class-news-harvester.php' );
 $pos_clean = strpos( $src, 'PressHub_AI_Pool_Cleaner::clean( $payload, $date )' );

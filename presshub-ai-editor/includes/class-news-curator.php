@@ -295,6 +295,11 @@ class PressHub_AI_News_Curator {
             if ( ! empty( $url ) ) {
                 $block .= " | **URL:** {$url}";
             }
+            // The article's own date, so an old piece still on a homepage is not told as today's news.
+            $pub_ts = strtotime( (string) ( $article['published_at'] ?? '' ) );
+            if ( false !== $pub_ts && $pub_ts > 0 ) {
+                $block .= ' | **' . __( 'Δημοσίευση', 'presshub-ai-editor' ) . ':** ' . ( function_exists( 'wp_date' ) ? wp_date( 'j/n/Y', $pub_ts ) : gmdate( 'j/n/Y', $pub_ts ) );
+            }
             if ( PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT !== $priorities[ $index ] ) {
                 $block .= ' | **' . __( 'Προτεραιότητα πηγής', 'presshub-ai-editor' ) . ':** ' . self::priority_label( $priorities[ $index ] ) . ' (' . $priorities[ $index ] . '/5)';
             }

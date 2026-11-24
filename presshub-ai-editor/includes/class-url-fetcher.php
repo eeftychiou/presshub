@@ -340,7 +340,80 @@ class PressHub_AI_URL_Fetcher {
      * @return array Extracted article metadata & content array.
      */
     public static function extract_article_semantic( string $html, string $url = '' ): array {
-        $html = (string) $html;
+        $result = self::extract_article_tiers( (string) $html, $url );
+        // Only the JSON-LD and OpenGraph tiers read a date, so a page whose
+        // text comes from the DOM (ciren.cy) had no published_at and passed
+        // the pool's age check every day it stayed on the homepage.
+        if ( '' === (string) ( $result['published_at'] ?? '' ) ) {
+            $result['published_at'] = self::extract_published_date( (string) $html );
+        }
+        return $result;
+    }
+
+    /**
+     * The page's own publication date, whatever tier gives its text:
+     * meta article:published_time (or a few common equivalents), then
+     * JSON-LD datePublished anywhere in the page's graph, then
+     * itemprop="datePublished". '' when the page states none.
+     *
+     * @param string $html Raw HTML.
+     * @return string Date as written by the page.
+     */
+    public static function extract_published_date( string $html ): string {
+        foreach ( [ 'article:published_time', 'og:published_time', 'datePublished', 'pubdate', 'publish-date', 'publish_date', 'dc.date', 'dc.date.issued' ] as $name ) {
+            $q = preg_quote( $name, '/' );
+            if ( preg_match( '/<meta\s+[^>]*(?:property|name|itemprop)=["\']' . $q . '["\'][^>]*content=["\']([^"\']+)["\']/i', $html, $m )
+                || preg_match( '/<meta\s+[^>]*content=["\']([^"\']+)["\'][^>]*(?:property|name|itemprop)=["\']' . $q . '["\']/i', $html, $m ) ) {
+                $v = trim( html_entity_decode( $m[1], ENT_QUOTES, 'UTF-8' ) );
+                if ( '' !== $v && false !== strtotime( $v ) ) {
+                    return $v;
+                }
+            }
+        }
+
+        if ( preg_match_all( '#<script\s+[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>#is', $html, $matches ) ) {
+            foreach ( $matches[1] as $json_str ) {
+                $decoded = json_decode( trim( $json_str ), true );
+                if ( is_array( $decoded ) ) {
+                    $found = self::find_json_ld_date( $decoded );
+                    if ( '' !== $found ) {
+                        return $found;
+                    }
+                }
+            }
+        }
+
+        if ( preg_match( '/<[a-z]+\s+[^>]*itemprop=["\']datePublished["\'][^>]*(?:datetime|content)=["\']([^"\']+)["\']/i', $html, $m )
+            || preg_match( '/<[a-z]+\s+[^>]*(?:datetime|content)=["\']([^"\']+)["\'][^>]*itemprop=["\']datePublished["\']/i', $html, $m ) ) {
+            $v = trim( $m[1] );
+            if ( false !== strtotime( $v ) ) {
+                return $v;
+            }
+        }
+        return '';
+    }
+
+    /** First datePublished in a decoded JSON-LD value (object, list or @graph). */
+    private static function find_json_ld_date( array $node, int $depth = 0 ): string {
+        if ( $depth > 6 ) {
+            return '';
+        }
+        if ( isset( $node['datePublished'] ) && is_string( $node['datePublished'] ) && false !== strtotime( $node['datePublished'] ) ) {
+            return trim( $node['datePublished'] );
+        }
+        foreach ( $node as $child ) {
+            if ( is_array( $child ) ) {
+                $found = self::find_json_ld_date( $child, $depth + 1 );
+                if ( '' !== $found ) {
+                    return $found;
+                }
+            }
+        }
+        return '';
+    }
+
+    /** The content tiers of extract_article_semantic(). */
+    protected static function extract_article_tiers( string $html, string $url = '' ): array {
 
         // Default extracted title from <h1>, OpenGraph, or HTML <title>
         $page_title = '';

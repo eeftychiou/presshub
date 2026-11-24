@@ -246,9 +246,24 @@ utf_check( 'fetch_article_data: content contains stockwatch prose', false !== st
 
 unset( $GLOBALS['GET_RESPONSE_FILTER'] );
 
+// =========================================================================
+// Publication date for every tier (ciren.cy: DOM text, date only in meta / JSON-LD graph)
+// =========================================================================
+$body_p = '<article><p>' . str_repeat( 'Η Υπηρεσία Υδάτων αρνείται να δώσει τα ονόματα των μεγάλων χρηστών νερού. ', 8 ) . '</p></article>';
+$ciren_html = '<html><head><meta property="article:published_time" content="2026-10-01T10:35:49+00:00" />'
+    . '<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"CIReN"},{"@type":"Article","headline":"Water","datePublished":"2026-10-01T10:35:49+00:00"}]}</script>'
+    . '</head><body><h1>Do Cypriots have the right to know who uses the water?</h1>' . $body_p . '</body></html>';
+$ciren_res = PressHub_AI_URL_Fetcher::extract_article_semantic( $ciren_html );
+utf_check( 'date: DOM tier keeps the meta published date', 'dom' === ( $ciren_res['tier'] ?? '' ) && '2026-10-01T10:35:49+00:00' === ( $ciren_res['published_at'] ?? '' ) );
+$ld_only = '<html><head><script type="application/ld+json">{"@graph":[{"@type":"WebPage"},{"@type":"NewsArticle","datePublished":"2026-10-21T08:00:00+03:00"}]}</script></head><body><h1>Τίτλος άρθρου εδώ</h1>' . $body_p . '</body></html>';
+utf_check( 'date: JSON-LD graph date without articleBody', '2026-10-21T08:00:00+03:00' === PressHub_AI_URL_Fetcher::extract_published_date( $ld_only ) );
+$itemprop = '<html><body><time itemprop="datePublished" datetime="2026-11-20T09:00:00+02:00">20/11</time></body></html>';
+utf_check( 'date: itemprop datePublished', '2026-11-20T09:00:00+02:00' === PressHub_AI_URL_Fetcher::extract_published_date( $itemprop ) );
+utf_check( 'date: none stated gives empty', '' === PressHub_AI_URL_Fetcher::extract_published_date( '<html><body><p>κείμενο</p></body></html>' ) );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "URLFetcherMultiTierFallbackTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
 
-echo "URLFetcherMultiTierFallbackTest: OK (23 checks)\n";
+echo "URLFetcherMultiTierFallbackTest: OK (27 checks)\n";

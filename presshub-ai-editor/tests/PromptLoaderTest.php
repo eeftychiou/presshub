@@ -64,6 +64,7 @@ plt_check( 'memory instructions principle 1: Συνέχεια αντί για Ε
 plt_check( 'memory instructions principle 2: Σύνδεση με Προηγούμενα Γεγονότα', false !== strpos( $memory_prompt, 'Σύνδεση με Προηγούμενα Γεγονότα' ) );
 plt_check( 'memory instructions principle 3: Αυστηρή Ακρίβεια', false !== strpos( $memory_prompt, 'Αυστηρή Ακρίβεια' ) );
 plt_check( 'memory instructions principle 4: Φυσική Αρχειακή Αναφορά', false !== strpos( $memory_prompt, 'Φυσική Αρχειακή Αναφορά' ) );
+plt_check( 'memory instructions principle 5: Όχι Παλιές Ειδήσεις ως Νέες', false !== strpos( $memory_prompt, 'Όχι Παλιές Ειδήσεις ως Νέες' ) );
 
 // 4. Verify Zero-Silent-Fallback on missing template
 $caught_missing = false;

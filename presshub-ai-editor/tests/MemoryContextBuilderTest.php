@@ -506,7 +506,8 @@ mcb_check( 'trimming: first trimmed is oldest background', 'background' === $bg_
 mcb_check( 'trimming: background weekly rollup was trimmed', false === strpos( $bg_trim['text'], 'Παλιό ιστορικό παρασκήνιο' ) );
 
 // Set tight budget so that oldest recent day's resolved story is trimmed before developing story
-$tight_budget = 1400;
+// The instructions block plus room for about one day of stories.
+$tight_budget = mb_strlen( PressHub_AI_Prompt_Loader::get_memory_context_instructions(), "UTF-8" ) + 333;
 $tight_trim = PressHub_AI_Memory_Context_Builder::build( '2026-09-30', 'morning', 'briefing', $tight_budget );
 $reasons = array_column( $tight_trim['manifest']['trimmed'], 'reason' );
 mcb_check( 'trimming: background trimmed before recent', in_array( 'budget_oldest_background', $reasons, true ) );
