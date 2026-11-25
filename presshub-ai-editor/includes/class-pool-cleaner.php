@@ -15,6 +15,9 @@
  *     is aged from the first harvest that saw its URL (option
  *     FIRST_SEEN_OPTION), so an undated piece that stays on a homepage
  *     for weeks is not new news every day.
+ *  2b. Already told: a URL that a published daily brief or podcast linked
+ *     to inside the age limit ('told'), so the next edition does not tell
+ *     the same article again (filter presshub_ai_pool_drop_told).
  *  3. Promos and filler: titles that match the promo patterns, and scraped
  *     results stubs (a score-only title with little text). A general
  *     minimum length can be set with presshub_ai_pool_min_scraped_words.
@@ -89,7 +92,7 @@ class PressHub_AI_Pool_Cleaner {
             'chars_after'  => 0,
             'trimmed'      => 0,
             'dropped'      => [],
-            'counts'       => [ 'stale' => 0, 'promo' => 0, 'too_short' => 0, 'duplicate' => 0 ],
+            'counts'       => [ 'stale' => 0, 'told' => 0, 'promo' => 0, 'too_short' => 0, 'duplicate' => 0 ],
         ];
         if ( ! $enabled || empty( $articles ) ) {
             $payload['pool_cleanup'] = $summary;
@@ -121,6 +124,9 @@ class PressHub_AI_Pool_Cleaner {
         // Undated pages: age them from the first harvest that saw the URL.
         self::apply_first_seen( $articles, $now );
 
+        // URLs the recent briefs and podcasts already linked to.
+        $told = self::told_url_keys( $now );
+
         // 2–3. Per-item filters.
         $kept = [];
         foreach ( $articles as $art ) {
@@ -128,6 +134,9 @@ class PressHub_AI_Pool_Cleaner {
                 continue;
             }
             $reason = self::is_protected( $art ) ? '' : self::drop_reason( $art, $date, $now );
+            if ( '' === $reason && ! self::is_protected( $art ) && isset( $told[ self::url_key( (string) ( $art['url'] ?? '' ) ) ] ) ) {
+                $reason = 'told';
+            }
             if ( '' !== $reason ) {
                 self::record_drop( $summary, $art, $reason );
                 continue;
@@ -144,11 +153,12 @@ class PressHub_AI_Pool_Cleaner {
 
         if ( class_exists( 'PressHub_AI_Logger' ) && ( $summary['before'] !== $summary['after'] || $summary['trimmed'] > 0 ) ) {
             PressHub_AI_Logger::info( sprintf(
-                'Article pool cleaned for %s: %d -> %d articles (stale %d, promo %d, short %d, duplicate %d, trimmed %d)',
+                'Article pool cleaned for %s: %d -> %d articles (stale %d, already told %d, promo %d, short %d, duplicate %d, trimmed %d)',
                 $date,
                 $summary['before'],
                 $summary['after'],
                 $summary['counts']['stale'],
+                $summary['counts']['told'],
                 $summary['counts']['promo'],
                 $summary['counts']['too_short'],
                 $summary['counts']['duplicate'],
@@ -260,16 +270,62 @@ class PressHub_AI_Pool_Cleaner {
         return '' !== $p && false !== strtotime( $p );
     }
 
-    /** Short stable key for a URL: scheme, "www." and a trailing slash ignored. */
+    /**
+     * URL keys of every link in the daily briefs and podcasts published
+     * inside the age limit. Those articles were already told; an edition
+     * that tells them again repeats yesterday's news.
+     *
+     * @param int $now Unix time.
+     * @return array<string,true>
+     */
+    public static function told_url_keys( int $now ): array {
+        $on = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_pool_drop_told', true ) : true;
+        if ( ! $on || ! function_exists( 'get_posts' ) ) {
+            return [];
+        }
+        $posts = get_posts( [
+            'post_type'      => 'post',
+            'post_status'    => 'publish',
+            'posts_per_page' => 40,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'date_query'     => [ [ 'after' => gmdate( 'Y-m-d H:i:s', $now - max( 1, self::max_age_hours() ) * 3600 ), 'column' => 'post_date_gmt', 'inclusive' => true ] ],
+            'meta_query'     => [ [ 'key' => '_presshub_briefing_type', 'value' => [ 'text', 'podcast' ], 'compare' => 'IN' ] ],
+            'no_found_rows'  => true,
+        ] );
+        $keys = [];
+        foreach ( (array) $posts as $post ) {
+            $content = is_object( $post ) ? (string) ( $post->post_content ?? '' ) : (string) ( $post['post_content'] ?? '' );
+            if ( '' === $content || ! preg_match_all( '#href=["\'](https?://[^"\'\s>]+)["\']#i', $content, $m ) ) {
+                continue;
+            }
+            foreach ( $m[1] as $href ) {
+                $key = self::url_key( html_entity_decode( $href, ENT_QUOTES, 'UTF-8' ) );
+                if ( '' !== $key ) {
+                    $keys[ $key ] = true;
+                }
+            }
+        }
+        return $keys;
+    }
+
+    /** Short stable key for a URL: scheme, "www.", a trailing slash, the fragment and tracking parameters ignored. */
     public static function url_key( string $url ): string {
         $url = strtolower( trim( $url ) );
         if ( '' === $url ) {
             return '';
         }
-        $url = preg_replace( '#^https?://(www\.)?#', '', $url );
-        $url = preg_replace( '/#.*$/', '', $url );
-        $url = rtrim( $url, '/' );
-        return substr( md5( $url ), 0, 16 );
+        $url   = preg_replace( '#^https?://(www\.)?#', '', preg_replace( '/#.*$/', '', $url ) );
+        $parts = explode( '?', $url, 2 );
+        $path  = rtrim( $parts[0], '/' );
+        $query = '';
+        if ( isset( $parts[1] ) ) {
+            $keep = array_filter( explode( '&', $parts[1] ), static function ( $kv ) {
+                return '' !== $kv && ! preg_match( '/^(utm_[a-z_]+|fbclid|gclid)(=|$)/', $kv );
+            } );
+            $query = $keep ? '?' . implode( '&', $keep ) : '';
+        }
+        return substr( md5( $path . $query ), 0, 16 );
     }
 
     /** '' to keep, otherwise 'stale' | 'promo' | 'too_short'. */
