@@ -2284,6 +2284,11 @@ class PressHub_Social_TikTok_Shorts {
             $parts[] = (string) PressHub_AI_Settings_Storage::get_voice_pitch();
             $parts[] = (string) PressHub_AI_Settings_Storage::get_briefing_tts_turn_pause_ms();
         }
+        // 2.89.0: an edited pronunciation list voices the short again. An empty list
+        // adds nothing, so shorts made before it keep their audio.
+        if ( class_exists( 'PressHub_AI_TTS_Pronunciations' ) && '' !== trim( PressHub_AI_TTS_Pronunciations::get() ) ) {
+            $parts[] = 'pron:' . md5( PressHub_AI_TTS_Pronunciations::get() );
+        }
         if ( class_exists( 'PressHub_AI_Audio_Synthesizer' ) ) {
             $parts[] = implode( ',', self::voices( new PressHub_AI_Audio_Synthesizer() ) );
         }

@@ -1032,6 +1032,11 @@ class PressHub_AI_Audio_Synthesizer {
             }, $speakers ) );
         }
 
+        // 2.89.0: the pronunciation list changes only what the voice is sent, never the
+        // script that is stored or shown in captions. Before the cache key, so editing
+        // the list re-synthesizes the turns it changes.
+        $text = $this->apply_pronunciations( $text, $two_voices ? $speakers : null );
+
         // Deterministic cache key (a single-voice turn keeps the key it always had).
         $cache_key = hash( 'sha256', implode( '|', [ $engine, $model_id, $voice_key, $style, number_format( $speed, 2 ), number_format( $pitch, 1 ), $payload_mode, trim( $text ) ] ) );
 
@@ -1124,6 +1129,38 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         return $result;
+    }
+
+    /**
+     * The text of a speech request with the pronunciation list applied (2.89.0), in
+     * the language being voiced (the podcast language of a translated episode, else
+     * Greek). In a labelled two-voice request the "label:" in front of each line is
+     * left alone.
+     *
+     * @param array|null $speakers Two speakers of a labelled request, or null.
+     */
+    public function apply_pronunciations( string $text, ?array $speakers = null ): string {
+        if ( ! class_exists( 'PressHub_AI_TTS_Pronunciations' ) ) {
+            require_once __DIR__ . '/class-tts-pronunciations.php';
+        }
+        $language = is_array( $this->audio_only ) ? (string) ( $this->audio_only['language'] ?? '' ) : '';
+        if ( ! is_array( $speakers ) ) {
+            return PressHub_AI_TTS_Pronunciations::apply( $text, $language );
+        }
+        $labels = array_filter( array_map( static function ( $sp ) {
+            return is_array( $sp ) ? (string) ( $sp['speaker'] ?? '' ) : '';
+        }, $speakers ) );
+        $lines = explode( "\n", $text );
+        foreach ( $lines as $i => $line ) {
+            $pos   = strpos( $line, ':' );
+            $label = false === $pos ? '' : trim( substr( $line, 0, $pos ) );
+            if ( '' !== $label && in_array( $label, $labels, true ) ) {
+                $lines[ $i ] = substr( $line, 0, $pos + 1 ) . PressHub_AI_TTS_Pronunciations::apply( substr( $line, $pos + 1 ), $language );
+            } else {
+                $lines[ $i ] = PressHub_AI_TTS_Pronunciations::apply( $line, $language );
+            }
+        }
+        return implode( "\n", $lines );
     }
 
     /**

@@ -700,7 +700,7 @@ class PressHub_Social_Settings_Storage {
         }
 
         $article_short_prompt = get_option( 'presshub_social_prompt_tiktok_article_short', false );
-        if ( false === $article_short_prompt || '' === trim( (string) $article_short_prompt ) ) {
+        if ( false === $article_short_prompt || '' === trim( (string) $article_short_prompt ) || self::is_legacy_tiktok_article_short_prompt( (string) $article_short_prompt ) ) {
             try {
                 update_option( 'presshub_social_prompt_tiktok_article_short', PressHub_Social_Prompt_Loader::load( 'social_tiktok_article_short.txt' ) );
             } catch ( Exception $e ) {
@@ -1920,6 +1920,7 @@ class PressHub_Social_Settings_Storage {
         '0b3aeaf0ced22fa1acecf5735d32369f72e129a1859c03cdbb214bb6ce838339', // v2.18, saved.
         '415fd9abe5d71a667702ccb123e3f2704d7c5999239edf65cf9bf22f6db8e377', // v2.21, saved.
         'c86b10c3c659cbd194b493c313790b5bb22f77a0e809ed369d13c6d49dbf8745', // v2.22, saved.
+        '6f50824edfa17511b28790ae93f586a34d3d24df0c8c2a998d02518e979c6f08', // v2.87: numbers spelled out in the script (2.89.0 uses digits).
     ];
 
     public static function is_legacy_tiktok_shorts_prompt( string $prompt ): bool {
@@ -1996,13 +1997,26 @@ class PressHub_Social_Settings_Storage {
     }
 
     /**
+     * sha256 of earlier default article short prompts (trimmed, LF line endings). A stored
+     * prompt that still equals one was never edited, so it is replaced by the current
+     * default; an edited prompt is kept.
+     */
+    private const LEGACY_TIKTOK_ARTICLE_SHORT_PROMPT_HASHES = [
+        'eab98fe50a21e798f0eac1a1ad09c681fd4c590dcd3365794e747df40e1f043a', // v2.87: numbers spelled out in the script (2.89.0 uses digits).
+    ];
+
+    public static function is_legacy_tiktok_article_short_prompt( string $prompt ): bool {
+        return in_array( hash( 'sha256', trim( str_replace( "\r\n", "\n", $prompt ) ) ), self::LEGACY_TIKTOK_ARTICLE_SHORT_PROMPT_HASHES, true );
+    }
+
+    /**
      * Prompt that writes the one short of an article. Seeds from
      * social_tiktok_article_short.txt if the option does not exist yet; an emptied
      * prompt is kept (the article is then posted the classic way).
      */
     public static function get_tiktok_article_short_prompt(): string {
         $val = get_option( 'presshub_social_prompt_tiktok_article_short', false );
-        if ( false === $val ) {
+        if ( false === $val || ( is_string( $val ) && self::is_legacy_tiktok_article_short_prompt( $val ) ) ) {
             try {
                 $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_article_short.txt' );
                 update_option( 'presshub_social_prompt_tiktok_article_short', $val );
@@ -2025,6 +2039,7 @@ class PressHub_Social_Settings_Storage {
      */
     private const LEGACY_TIKTOK_BRIEF_PROMPT_HASHES = [
         'bd9e3d5cd3516c56c7e51571a15579943e7781be951692510f398ef2b65975de', // v2.82: 6 to 8 stories (2.85.0 asks for the 3-4 main ones).
+        '5134e11090cf21ab2ba9eada15b76bdd8d7833c88476e09a1897f8b7d081f76f', // v2.85: numbers spelled out in the script (2.89.0 uses digits).
     ];
 
     public static function is_legacy_tiktok_brief_prompt( string $prompt ): bool {

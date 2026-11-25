@@ -13,12 +13,12 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Connections (`connections`) | 27 | 3 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 81 | 0 | 0 |
+| Daily Briefing (`daily-briefing`) | 82 | 0 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 17 | 0 | 0 |
 | Social publishing (`social-publishing`) | 83 | 0 | 0 |
 | Social listening (`social-listening`) | 35 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **323** | | |
+| **Total** | **324** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 34 option(s); both lists are at the end.
 
@@ -129,7 +129,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 | `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
-## Daily Briefing (`daily-briefing`, 81)
+## Daily Briefing (`daily-briefing`, 82)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -176,6 +176,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_tts_custom_style` | Custom Speaking Style Prompt | string |  | ai / briefing |  |
 | `presshub_ai_briefing_tts_payload_mode` | Gemini Speech Payload Structure | string |  | ai / briefing |  |
 | `presshub_ai_briefing_tts_system_instruction` | Gemini Speech System Instruction | string |  | ai / briefing |  |
+| `presshub_ai_tts_pronunciations` | Pronunciation list | string |  | ai / briefing | was: Pronunciation dictionary; TTS pronunciation |
 | `presshub_ai_briefing_tts_turn_pause_ms` | Turn Pause Duration (ms) | integer | ms | ai / briefing |  |
 | `presshub_ai_briefing_tts_topic_pause_ms` | Topic Transition Pause (ms) | integer | ms | ai / briefing |  |
 | `presshub_ai_briefing_tts_request_delay_ms` | Inter-Turn Throttle Delay (ms) | integer | ms | ai / briefing |  |

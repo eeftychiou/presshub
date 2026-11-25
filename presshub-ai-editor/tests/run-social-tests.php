@@ -2030,7 +2030,11 @@ assert_equals( 380, PressHub_Social_Settings_Storage::sanitize_tiktok_brief_max_
 assert_equals( 150, PressHub_Social_Settings_Storage::sanitize_tiktok_brief_max_words( 5 ), 'Daily brief script length clamps to 150 words' );
 assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), '"stories"' ), 'The daily brief prompt seeds from its asset file' );
 assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), '3 έως 4 κύριες ειδήσεις' ), 'The daily brief prompt asks for the 3-4 main stories' );
-$legacy_brief = str_replace( [ 'με τις 3 έως 4 κύριες ειδήσεις της ημέρας', '50 έως 70 λέξεις' ], [ 'με τις 6 έως 8 πιο σημαντικές ειδήσεις', '30 έως 45 λέξεις' ], PressHub_Social_Prompt_Loader::load( 'social_tiktok_brief.txt' ) );
+$legacy_brief = str_replace(
+    [ 'με τις 3 έως 4 κύριες ειδήσεις της ημέρας', '50 έως 70 λέξεις', 'Αριθμοί με ψηφία, όπως σε ειδησεογραφικό κείμενο (π.χ. 45, 15%, 1.200 ευρώ, 2,5 εκατομμύρια), χωρίς συντομογραφίες όπως «εκατ.» ή «χλμ.». Ημερομηνίες με τον μήνα σε λέξη (π.χ. «3 Μαΐου»), ποτέ 03/05. Χωρίς άλλα σύμβολα, emoji ή συνδέσμους.' ],
+    [ 'με τις 6 έως 8 πιο σημαντικές ειδήσεις', '30 έως 45 λέξεις', 'Ημερομηνίες και αριθμοί γραμμένοι όπως εκφωνούνται (π.χ. «3 Μαΐου»), χωρίς σύμβολα, emoji ή συνδέσμους.' ],
+    PressHub_Social_Prompt_Loader::load( 'social_tiktok_brief.txt' )
+);
 update_option( 'presshub_social_prompt_tiktok_brief', $legacy_brief );
 assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), '3 έως 4 κύριες ειδήσεις' ), 'An unedited 6-8 story brief prompt is upgraded to the 3-4 story default' );
 update_option( 'presshub_social_prompt_tiktok_brief', 'Δικό μου prompt "stories"' );

@@ -808,6 +808,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_tts_pronunciations"><?php echo esc_html__( 'Pronunciation list', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_tts_pronunciations_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_tts_turn_pause_ms"><?php echo __( 'Turn Pause Duration (ms)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_turn_pause_ms_field(); ?>
@@ -3964,6 +3970,19 @@ class PressHub_AI_Settings_Render {
                 PressHub_AI_Settings_Storage::TTS_REQUEST_MAX_CHARS_MAX,
                 PressHub_AI_Settings_Storage::TTS_REQUEST_MAX_CHARS_DEFAULT
             ) ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_tts_pronunciations_field() {
+        $option = 'presshub_ai_tts_pronunciations';
+        $value  = class_exists( 'PressHub_AI_TTS_Pronunciations' ) ? PressHub_AI_TTS_Pronunciations::get() : '';
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr( "Brexit = Μπρέξιτ\nCERN = Σερν\nen: Paphos = Pafos" ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <p class="description">
+            <?php echo esc_html__( 'Words the voice gets wrong, one per line as word = how to say it (for example Brexit = Μπρέξιτ, or the word with the stress where it should be). Start a line with a language code (el, en, tr) and a colon to use it only in that language; lines starting with # are notes.', 'presshub-ai-editor' ); ?>
+            <br />
+            <?php echo esc_html__( 'Used only for what the voice reads: podcasts, shorts and TikTok narration. Captions, slides and the saved script keep the real spelling. Whole words match, in any case. Try a line with the speech test below after saving.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }
