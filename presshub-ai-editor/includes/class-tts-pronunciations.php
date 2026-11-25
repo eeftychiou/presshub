@@ -1,6 +1,6 @@
 <?php
 /**
- * Pronunciation list for text-to-speech (2.88.0).
+ * Pronunciation list for text-to-speech (2.89.0).
  *
  * Words the voice keeps getting wrong, each with how it should be said. The list
  * is applied to the text sent to the TTS engine only (podcast turns, shorts,

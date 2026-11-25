@@ -570,7 +570,7 @@ __( "Most words in the daily brief script, about 150 words a minute. 300 is abou
 __( 'TikTok Full Podcast', 'presshub-ai-editor' );
 __( "With Podcast Shorts Format on Daily brief and TikTok Shorts on, also post the whole podcast to TikTok as one video over the podcast's image, half the Time Between Shorts after the brief. Default: on.", 'presshub-ai-editor' );
 __( 'TikTok Story Posts', 'presshub-ai-editor' );
-__( "With Podcast Shorts Format on Daily brief, how many of each podcast's top stories also go to TikTok as their own post of 30-60 seconds, after the brief and the Time Between Shorts apart. Each story is checked by the social post gate first, so a story already posted is not posted again. 0 posts none.", 'presshub-ai-editor' );
+__( "With Podcast Shorts Format on Daily brief, how many of each podcast's top stories also go to TikTok as their own post of 30-60 seconds, after the brief and the Time Between Shorts apart. With YouTube Shorts on, each also goes to YouTube as a Short (always a video). Each story is checked by the social post gate first, so a story already posted is not posted again. 0 posts none.", 'presshub-ai-editor' );
 __( 'TikTok Story Post Format', 'presshub-ai-editor' );
 __( 'What each TikTok Story Post is: a voiced video short with captions, or photo slides with the story as text and a TikTok sound. Random picks one for each post. Photo slides need worker 1.10.0 or later. Default: Random.', 'presshub-ai-editor' );
 __( 'Words per Photo Slide', 'presshub-ai-editor' );

@@ -1032,7 +1032,7 @@ class PressHub_AI_Audio_Synthesizer {
             }, $speakers ) );
         }
 
-        // 2.88.0: the pronunciation list changes only what the voice is sent, never the
+        // 2.89.0: the pronunciation list changes only what the voice is sent, never the
         // script that is stored or shown in captions. Before the cache key, so editing
         // the list re-synthesizes the turns it changes.
         $text = $this->apply_pronunciations( $text, $two_voices ? $speakers : null );
@@ -1132,7 +1132,7 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
-     * The text of a speech request with the pronunciation list applied (2.88.0), in
+     * The text of a speech request with the pronunciation list applied (2.89.0), in
      * the language being voiced (the podcast language of a translated episode, else
      * Greek). In a labelled two-voice request the "label:" in front of each line is
      * left alone.

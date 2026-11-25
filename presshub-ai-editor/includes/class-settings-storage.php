@@ -3645,7 +3645,7 @@ class PressHub_AI_Settings_Storage {
         return substr( trim( $value ), 0, 10000 );
     }
 
-    /** Pronunciation list for the voice (2.88.0), see PressHub_AI_TTS_Pronunciations::sanitize(). */
+    /** Pronunciation list for the voice (2.89.0), see PressHub_AI_TTS_Pronunciations::sanitize(). */
     public static function sanitize_tts_pronunciations( $value ): string {
         if ( ! class_exists( 'PressHub_AI_TTS_Pronunciations' ) ) {
             require_once __DIR__ . '/class-tts-pronunciations.php';

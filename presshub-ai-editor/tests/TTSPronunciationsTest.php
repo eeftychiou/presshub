@@ -1,6 +1,6 @@
 <?php
 /**
- * TTSPronunciationsTest — pronunciation list for the voice (2.88.0).
+ * TTSPronunciationsTest — pronunciation list for the voice (2.89.0).
  *
  * Test cases:
  *   1. parse(): "word = say", language prefixes, comments and broken lines skipped.

@@ -4127,7 +4127,7 @@ escort
     'group' => 'script',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'TikTok Story Posts',
-    'help' => 'With Podcast Shorts Format on Daily brief, how many of each podcast\'s top stories also go to TikTok as their own post of 30-60 seconds, after the brief and the Time Between Shorts apart. Each story is checked by the social post gate first, so a story already posted is not posted again. 0 posts none.',
+    'help' => 'With Podcast Shorts Format on Daily brief, how many of each podcast\'s top stories also go to TikTok as their own post of 30-60 seconds, after the brief and the Time Between Shorts apart. With YouTube Shorts on, each also goes to YouTube as a Short (always a video). Each story is checked by the social post gate first, so a story already posted is not posted again. 0 posts none.',
     'checkbox' => false,
     'secret' => false,
     'type' => 'integer',

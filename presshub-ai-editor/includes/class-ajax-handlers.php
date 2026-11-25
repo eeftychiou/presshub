@@ -1814,7 +1814,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
         }
 
-        // 2.88.0: the test speaks the saved pronunciation list too, so a new line can be tried.
+        // 2.89.0: the test speaks the saved pronunciation list too, so a new line can be tried.
         if ( ! class_exists( 'PressHub_AI_TTS_Pronunciations' ) ) {
             require_once __DIR__ . '/class-tts-pronunciations.php';
         }

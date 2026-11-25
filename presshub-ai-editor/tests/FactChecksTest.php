@@ -129,6 +129,7 @@ fc_seed( $today_real, [ $munich ], 'active', 'noon' );
 fc_check( 'apply: memory building untouched', 'SYS' === $F::apply( 'SYS', $tweet, 'briefing_memory' ) && null === $F::last_applied() );
 fc_check( 'apply: nothing matched, untouched', 'SYS' === $F::apply( 'SYS', 'Καιρός.', 'social_copy_x' ) && null === $F::last_applied() );
 $out = $F::apply( 'SYS', $tweet, 'social_copy_x' );
+fc_check( 'apply: a check already told is not news again', false !== strpos( $out, 'Ένας έλεγχος που ήδη αναφέραμε δεν είναι σημερινή είδηση' ) );
 fc_check( 'apply: block appended', 0 === strpos( $out, "SYS\n\n=== ΕΛΕΓΧΟΙ ΓΕΓΟΝΟΤΩΝ" ) && false !== strpos( $out, '[FC1] «Φωτογραφία με γκράφιτι «Free Cyprus» στο Μόναχο» — παραποιημένο (FactCheck Cyprus' ) && false !== strpos( $out, '=== ΤΕΛΟΣ ΕΛΕΓΧΩΝ ΓΕΓΟΝΟΤΩΝ ===' ) );
 $last = $F::last_applied();
 fc_check( 'apply: last_applied has refs and the prompt', is_array( $last ) && isset( $last['refs']['FC1'] ) && $out === $last['prompt'] && md5( 'SYS' ) === $last['original_hash'] );

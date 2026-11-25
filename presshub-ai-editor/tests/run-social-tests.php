@@ -2672,6 +2672,70 @@ assert_equals( 6, count( $sp_brief_prep['stories'] ?? [] ), 'The brief is still 
 PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 assert_equals( 2, count( $sp_calls ), 'Preparing again makes no AI call: both plans are kept' );
 
+// YouTube Shorts get the TikTok story posts too (2.88.0): always as videos, the platform
+// stagger after their TikTok post, from the same plan, voice and images.
+$ys_sessions = get_option( 'presshub_social_worker_sessions', null );
+$ys_yt_on    = PressHub_Social_Settings_Storage::is_platform_enabled( 'youtube' );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', true );
+update_option( 'presshub_social_worker_sessions', array_merge( is_array( $ys_sessions ) ? $ys_sessions : [], [ 'tiktok' => true, 'youtube' => true ] ) );
+update_option( 'presshub_social_youtube_client_id', '123-abc.apps.googleusercontent.com' );
+update_option( 'presshub_social_youtube_client_secret', 'GOCSPX-secret' );
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+update_option( 'presshub_social_youtube_shorts_enabled', true );
+update_option( 'presshub_social_youtube_podcast_enabled', false );
+update_option( 'presshub_social_tiktok_story_posts_format', 'slides' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::STORY_POSTS_PLAN_META, '' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+PressHub_Social_Queue::reset_memory_store();
+$ys_ids  = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok', 'youtube' ] );
+$ys_jobs = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), $ys_ids );
+$ys_tt   = array_values( array_filter( $ys_jobs, fn( $j ) => 'tiktok' === $j['platform'] && PressHub_Social_TikTok_Shorts::is_story_post_job( $j ) ) );
+$ys_yt   = array_values( array_filter( $ys_jobs, fn( $j ) => 'youtube' === $j['platform'] && PressHub_Social_TikTok_Shorts::is_story_post_job( $j ) ) );
+$ys_ytb  = array_values( array_filter( $ys_jobs, fn( $j ) => 'youtube' === $j['platform'] && ! empty( json_decode( (string) ( $j['metadata'] ?? '' ), true )['tiktok_short']['brief'] ) ) );
+assert_equals( [ 3, 3, 1 ], [ count( $ys_tt ), count( $ys_yt ), count( $ys_ytb ) ], 'YouTube gets the daily brief and the same 3 story posts as TikTok' );
+$ys_stagger = PressHub_Social_Dispatcher::shorts_stagger_minutes() * 60;
+foreach ( $ys_yt as $k => $j ) {
+    assert_true( PressHub_Social_TikTok_Shorts::is_slides_job( $ys_tt[ $k ] ) && ! PressHub_Social_TikTok_Shorts::is_slides_job( $j ), 'YouTube story post ' . ( $k + 1 ) . ' is a video even when TikTok posts photo slides' );
+    assert_true( abs( strtotime( $j['scheduled_at'] . ' UTC' ) - ( strtotime( $ys_tt[ $k ]['scheduled_at'] . ' UTC' ) + $ys_stagger ) ) <= 2, 'YouTube story post ' . ( $k + 1 ) . ' goes out the platform stagger after its TikTok post' );
+}
+$ys_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$ys_calls, $brief_json, $short_json ) {
+    $ys_calls[] = $user;
+    return str_contains( $user, '"stories"' ) ? $brief_json( 6 ) : $short_json( 3 );
+} );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, count( $ys_calls ), 'TikTok and YouTube story posts share one plan (and the brief its own)' );
+foreach ( $ys_yt as $k => $j ) {
+    $yp = PressHub_Social_Queue::get_job( (int) $j['id'] );
+    $tp = PressHub_Social_Queue::get_job( (int) $ys_tt[ $k ]['id'] );
+    $ym = json_decode( (string) $yp['metadata'], true )['tiktok_short'] ?? [];
+    $tm = json_decode( (string) $tp['metadata'], true )['tiktok_short'] ?? [];
+    assert_true( PressHub_Social_TikTok_Shorts::is_ready( $yp ) && ! empty( $ym['audio']['audio_url'] ), 'YouTube story post ' . ( $k + 1 ) . ' is prepared with a voice track' );
+    assert_equals( $tm['hook'] ?? 'tt', $ym['hook'] ?? 'yt', 'YouTube story post ' . ( $k + 1 ) . ' tells the same story as TikTok\'s' );
+    assert_equals( $tm['images_hash'] ?? 'tt', $ym['images_hash'] ?? 'yt', 'YouTube story post ' . ( $k + 1 ) . ' uses the same images as TikTok\'s' );
+}
+update_option( 'presshub_social_youtube_shorts_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+$ys_off = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok', 'youtube' ] ) );
+assert_equals( 0, count( array_filter( $ys_off, fn( $j ) => 'youtube' === $j['platform'] && PressHub_Social_TikTok_Shorts::is_story_post_job( $j ) ) ), 'With YouTube Shorts off YouTube gets no story posts' );
+delete_option( 'presshub_social_youtube_shorts_enabled' );
+delete_option( 'presshub_social_youtube_podcast_enabled' );
+delete_option( 'presshub_social_youtube_client_id' );
+delete_option( 'presshub_social_youtube_client_secret' );
+delete_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', $ys_yt_on );
+if ( null === $ys_sessions ) {
+    delete_option( 'presshub_social_worker_sessions' );
+} else {
+    update_option( 'presshub_social_worker_sessions', $ys_sessions );
+}
+update_option( 'presshub_social_tiktok_story_posts_format', 'video' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::STORY_POSTS_PLAN_META, '' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
+PressHub_Social_Queue::reset_memory_store();
+
 // Photo slides format, and the switches off.
 update_option( 'presshub_social_tiktok_story_posts_format', 'slides' );
 $sp_slides = PressHub_Social_TikTok_Shorts::build_story_post_jobs( 880, time() );
