@@ -1654,7 +1654,7 @@ class PressHub_AI_News_Harvester {
         $this->merge_social_posts( $payload, $date, $edition );
         // Issue #190: clean content and drop stale, promo, too-short and duplicate items.
         if ( class_exists( 'PressHub_AI_Pool_Cleaner' ) ) {
-            PressHub_AI_Pool_Cleaner::clean( $payload, $date );
+            PressHub_AI_Pool_Cleaner::clean( $payload, $date, 0, $edition );
         }
 
         $duration_ms                 = (int) round( ( microtime( true ) - $start_time ) * 1000 );

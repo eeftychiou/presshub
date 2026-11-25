@@ -76,9 +76,10 @@ class PressHub_AI_Pool_Cleaner {
      * @param array  $payload Harvest payload with 'articles'.
      * @param string $date    Briefing date (Y-m-d).
      * @param int    $now     Unix time (tests).
+     * @param string $edition Edition being harvested ('morning', 'noon'); its own brief and podcast never count as told.
      * @return array Summary (also stored in $payload['pool_cleanup']).
      */
-    public static function clean( array &$payload, string $date, int $now = 0 ): array {
+    public static function clean( array &$payload, string $date, int $now = 0, string $edition = '' ): array {
         $now      = $now > 0 ? $now : time();
         $articles = isset( $payload['articles'] ) && is_array( $payload['articles'] ) ? array_values( $payload['articles'] ) : [];
         $enabled  = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_cleanup_enabled() : true;
@@ -125,7 +126,7 @@ class PressHub_AI_Pool_Cleaner {
         self::apply_first_seen( $articles, $now );
 
         // URLs the recent briefs and podcasts already linked to.
-        $told = self::told_url_keys( $now );
+        $told = self::told_url_keys( $now, $date, $edition );
 
         // 2–3. Per-item filters.
         $kept = [];
@@ -275,10 +276,15 @@ class PressHub_AI_Pool_Cleaner {
      * inside the age limit. Those articles were already told; an edition
      * that tells them again repeats yesterday's news.
      *
-     * @param int $now Unix time.
+     * The brief and podcast of the edition being harvested are skipped, so a
+     * re-harvest of an edition that is already out keeps its own sources.
+     *
+     * @param int    $now     Unix time.
+     * @param string $date    Briefing date being harvested.
+     * @param string $edition Edition being harvested.
      * @return array<string,true>
      */
-    public static function told_url_keys( int $now ): array {
+    public static function told_url_keys( int $now, string $date = '', string $edition = '' ): array {
         $on = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_pool_drop_told', true ) : true;
         if ( ! $on || ! function_exists( 'get_posts' ) ) {
             return [];
@@ -294,7 +300,14 @@ class PressHub_AI_Pool_Cleaner {
             'no_found_rows'  => true,
         ] );
         $keys = [];
+        $edition = 'noon' === $edition ? 'noon' : 'morning';
         foreach ( (array) $posts as $post ) {
+            $pid = is_object( $post ) ? (int) ( $post->ID ?? 0 ) : (int) ( $post['ID'] ?? 0 );
+            if ( '' !== $date && $pid > 0 && function_exists( 'get_post_meta' )
+                && $date === (string) get_post_meta( $pid, '_presshub_briefing_date', true )
+                && $edition === ( 'noon' === get_post_meta( $pid, '_presshub_briefing_edition', true ) ? 'noon' : 'morning' ) ) {
+                continue;
+            }
             $content = is_object( $post ) ? (string) ( $post->post_content ?? '' ) : (string) ( $post['post_content'] ?? '' );
             if ( '' === $content || ! preg_match_all( '#href=["\'](https?://[^"\'\s>]+)["\']#i', $content, $m ) ) {
                 continue;
@@ -323,6 +336,7 @@ class PressHub_AI_Pool_Cleaner {
             $keep = array_filter( explode( '&', $parts[1] ), static function ( $kv ) {
                 return '' !== $kv && ! preg_match( '/^(utm_[a-z_]+|fbclid|gclid)(=|$)/', $kv );
             } );
+            sort( $keep );
             $query = $keep ? '?' . implode( '&', $keep ) : '';
         }
         return substr( md5( $path . $query ), 0, 16 );

@@ -203,12 +203,21 @@ $p13 = [ 'articles' => [ array_merge( $undated, [ 'url' => 'https://factcheckcyp
 $P::clean( $p13, '2026-11-18', $day1 );
 pc_check( 'told: the filter turns it off', 1 === count( $p13['articles'] ) );
 remove_filter( 'presshub_ai_pool_drop_told', '__return_false' );
-unset( $GLOBALS['GET_POSTS_RESULT'] );
+// A re-harvest of an edition that is already out keeps its own brief's sources.
+$GLOBALS['GET_POSTS_RESULT'] = [ (object) [ 'ID' => 901, 'post_content' => '<a href="https://politis.com.cy/b/2">x</a>' ] ];
+$GLOBALS['POST_META_STORE'][901] = [ '_presshub_briefing_date' => '2026-11-18', '_presshub_briefing_edition' => 'morning' ];
+$p14 = [ 'articles' => [ array_merge( $undated, [ 'url' => 'https://politis.com.cy/b/2', 'published_at' => $fresh, 'content' => pc_words( 400, 'βουλή' ) ] ) ] ];
+$P::clean( $p14, '2026-11-18', $day1, 'morning' );
+pc_check( 'told: the edition being harvested does not count its own brief', 1 === count( $p14['articles'] ) );
+$p15 = [ 'articles' => $p14['articles'] ];
+$P::clean( $p15, '2026-11-18', $day1, 'noon' );
+pc_check( 'told: the next edition drops what the morning brief told', 0 === count( $p15['articles'] ) );
+unset( $GLOBALS['GET_POSTS_RESULT'], $GLOBALS['POST_META_STORE'][901] );
 pc_check( 'url_key: query kept, tracking dropped', $P::url_key( 'https://x.cy/a/?utm_source=fb&id=3' ) === $P::url_key( 'http://www.x.cy/a?id=3' ) && $P::url_key( 'https://x.cy/a?id=3' ) !== $P::url_key( 'https://x.cy/a?id=4' ) );
 
 // wiring
 $src = file_get_contents( dirname( __DIR__ ) . '/includes/class-news-harvester.php' );
-$pos_clean = strpos( $src, 'PressHub_AI_Pool_Cleaner::clean( $payload, $date )' );
+$pos_clean = strpos( $src, 'PressHub_AI_Pool_Cleaner::clean( $payload, $date, 0, $edition )' );
 pc_check( 'wiring: harvest_all cleans after merging social posts and before the snapshot', false !== $pos_clean && $pos_clean > strpos( $src, '$this->merge_social_posts( $payload, $date, $edition );' ) && $pos_clean < strpos( $src, '$this->save_snapshot( $date, $payload, $edition );', $pos_clean ) );
 
 if ( $failures > 0 ) {
