@@ -184,9 +184,40 @@ $P::clean( $p11, '2026-11-29', $day1 + 11 * 24 * 3600 );
 pc_check( 'first seen: dropped after the filtered limit, not reset', 0 === count( $p11['articles'] ) );
 remove_filter( 'presshub_ai_pool_max_age_hours', $long_age );
 
+// Already told: URLs a recent brief or podcast linked to are dropped.
+delete_option( 'presshub_ai_pool_first_seen' );
+$GLOBALS['GET_POSTS_RESULT'] = [ (object) [ 'post_content' => '<p>Το <a href="https://www.factcheckcyprus.org/el/visegrad-24/?utm_source=x">FactCheck Cyprus</a> και <a href="https://politis.com.cy/a/1">Πολίτης</a></p>' ] ];
+$fresh = gmdate( 'c', $day1 - 3600 );
+$p12 = [ 'articles' => [
+    array_merge( $undated, [ 'url' => 'https://factcheckcyprus.org/el/visegrad-24', 'published_at' => $fresh, 'title' => 'Το δίκτυο Visegrad 24 και τα γκράφιτι Free Cyprus' ] ),
+    array_merge( $undated, [ 'url' => 'https://politis.com.cy/b/2', 'published_at' => $fresh, 'title' => 'Άλλο θέμα της ημέρας από τον Πολίτη εδώ', 'content' => pc_words( 400, 'βουλή' ) ] ),
+    array_merge( $undated, [ 'url' => 'https://politis.com.cy/a/1', 'published_at' => $fresh, 'is_manual' => true, 'title' => 'Χειροκίνητο', 'content' => pc_words( 400, 'λιμάνι' ) ] ),
+] ];
+$s12 = $P::clean( $p12, '2026-11-18', $day1 );
+$urls12 = array_column( $p12['articles'], 'url' );
+pc_check( 'told: a URL the last brief linked to is dropped (www, slash and utm ignored)', ! in_array( 'https://factcheckcyprus.org/el/visegrad-24', $urls12, true ) && 1 === $s12['counts']['told'] );
+pc_check( 'told: other articles are kept', in_array( 'https://politis.com.cy/b/2', $urls12, true ) );
+pc_check( 'told: manual uploads are never dropped', in_array( 'https://politis.com.cy/a/1', $urls12, true ) );
+add_filter( 'presshub_ai_pool_drop_told', '__return_false' );
+$p13 = [ 'articles' => [ array_merge( $undated, [ 'url' => 'https://factcheckcyprus.org/el/visegrad-24', 'published_at' => $fresh ] ) ] ];
+$P::clean( $p13, '2026-11-18', $day1 );
+pc_check( 'told: the filter turns it off', 1 === count( $p13['articles'] ) );
+remove_filter( 'presshub_ai_pool_drop_told', '__return_false' );
+// A re-harvest of an edition that is already out keeps its own brief's sources.
+$GLOBALS['GET_POSTS_RESULT'] = [ (object) [ 'ID' => 901, 'post_content' => '<a href="https://politis.com.cy/b/2">x</a>' ] ];
+$GLOBALS['POST_META_STORE'][901] = [ '_presshub_briefing_date' => '2026-11-18', '_presshub_briefing_edition' => 'morning' ];
+$p14 = [ 'articles' => [ array_merge( $undated, [ 'url' => 'https://politis.com.cy/b/2', 'published_at' => $fresh, 'content' => pc_words( 400, 'βουλή' ) ] ) ] ];
+$P::clean( $p14, '2026-11-18', $day1, 'morning' );
+pc_check( 'told: the edition being harvested does not count its own brief', 1 === count( $p14['articles'] ) );
+$p15 = [ 'articles' => $p14['articles'] ];
+$P::clean( $p15, '2026-11-18', $day1, 'noon' );
+pc_check( 'told: the next edition drops what the morning brief told', 0 === count( $p15['articles'] ) );
+unset( $GLOBALS['GET_POSTS_RESULT'], $GLOBALS['POST_META_STORE'][901] );
+pc_check( 'url_key: query kept, tracking dropped', $P::url_key( 'https://x.cy/a/?utm_source=fb&id=3' ) === $P::url_key( 'http://www.x.cy/a?id=3' ) && $P::url_key( 'https://x.cy/a?id=3' ) !== $P::url_key( 'https://x.cy/a?id=4' ) );
+
 // wiring
 $src = file_get_contents( dirname( __DIR__ ) . '/includes/class-news-harvester.php' );
-$pos_clean = strpos( $src, 'PressHub_AI_Pool_Cleaner::clean( $payload, $date )' );
+$pos_clean = strpos( $src, 'PressHub_AI_Pool_Cleaner::clean( $payload, $date, 0, $edition )' );
 pc_check( 'wiring: harvest_all cleans after merging social posts and before the snapshot', false !== $pos_clean && $pos_clean > strpos( $src, '$this->merge_social_posts( $payload, $date, $edition );' ) && $pos_clean < strpos( $src, '$this->save_snapshot( $date, $payload, $edition );', $pos_clean ) );
 
 if ( $failures > 0 ) {

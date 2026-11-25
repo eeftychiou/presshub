@@ -437,6 +437,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_policy_fiches_budgets` | `presshub_ai_policy_fiches_budgets` |
 | `presshub_ai_policy_fiches_enabled` | `presshub_ai_policy_fiches_enabled` |
 | `presshub_ai_pool_cleanup_enabled` | `presshub_ai_pool_cleanup_enabled` |
+| `presshub_ai_pool_drop_told` | code only |
 | `presshub_ai_pool_duplicate_similarity` | `presshub_ai_pool_duplicate_similarity` |
 | `presshub_ai_pool_max_age_hours` | `presshub_ai_pool_max_age_hours` |
 | `presshub_ai_pool_min_scraped_words` | code only |
