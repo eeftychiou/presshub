@@ -734,6 +734,30 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
+     * The YouTube Shorts of a podcast's story posts (2.88.0): one per TikTok story post job
+     * in $tiktok_jobs, the same story (index and count) $offset seconds after it, always a
+     * video short (YouTube takes no photo posts).
+     *
+     * @param array<int, array> $tiktok_jobs Job data from build_story_post_jobs().
+     * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().
+     */
+    public static function youtube_story_post_jobs( array $tiktok_jobs, string $engine, int $offset ): array {
+        $jobs = [];
+        foreach ( $tiktok_jobs as $job ) {
+            $meta = (array) ( $job['metadata'][ self::JOB_META_KEY ] ?? [] );
+            unset( $meta['format'] );
+            $at     = strtotime( (string) $job['scheduled_at'] . ' UTC' ) ?: time();
+            $jobs[] = array_merge( $job, [
+                'platform'     => 'youtube',
+                'engine'       => $engine,
+                'scheduled_at' => gmdate( 'Y-m-d H:i:s', $at + max( 0, $offset ) ),
+                'metadata'     => [ self::JOB_META_KEY => $meta ],
+            ] );
+        }
+        return $jobs;
+    }
+
+    /**
      * The script of a short cut into slide texts: speaker tags removed, whole sentences
      * grouped to about $words words each. When that makes more than $max slides, each
      * slide takes more words so the whole script still fits; a sentence much longer than

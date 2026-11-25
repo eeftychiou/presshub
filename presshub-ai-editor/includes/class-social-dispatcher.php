@@ -370,8 +370,9 @@ class PressHub_Social_Dispatcher {
             $job_ids = array_merge( $job_ids, self::enqueue_shorts( $post_id, $short_targets, $media_url, $media_type, $base_time, $short_copies, $facebook_link_time, $twitter_link_time ) );
         }
         // TikTok story posts (2.85.0): instant news of one story each, after the daily brief.
+        // YouTube Shorts get the same stories as videos (2.88.0).
         if ( isset( $short_targets['tiktok'] ) ) {
-            $job_ids = array_merge( $job_ids, self::enqueue_tiktok_story_posts( $post_id, (string) $short_targets['tiktok'], $base_time ) );
+            $job_ids = array_merge( $job_ids, self::enqueue_tiktok_story_posts( $post_id, (string) $short_targets['tiktok'], $base_time, $short_targets['youtube'] ?? null ) );
         }
 
         if ( ! empty( $needs_images ) ) {
@@ -447,21 +448,31 @@ class PressHub_Social_Dispatcher {
      * Time Between Shorts after the brief ($start_time). Their stories are planned and
      * checked against the story ledger when prepared.
      *
+     * With YouTube Shorts on ($youtube_engine set), each story post also goes to YouTube as
+     * a Short (2.88.0), the platform stagger after its TikTok post: always a video, also when
+     * TikTok posts that story as photo slides (YouTube takes only videos). Both share the
+     * story posts' plan, voice and images, so the worker renders a video story once.
+     *
+     * @param string|null $youtube_engine The YouTube engine when YouTube gets the post's shorts.
      * @return int[] IDs of the queued story post jobs.
      */
-    public static function enqueue_tiktok_story_posts( int $post_id, string $engine, int $start_time ): array {
+    public static function enqueue_tiktok_story_posts( int $post_id, string $engine, int $start_time, ?string $youtube_engine = null ): array {
         if ( ! class_exists( 'PressHub_Social_TikTok_Shorts' ) || ! PressHub_Social_TikTok_Shorts::story_posts_wanted( $post_id, $engine ) ) {
             return [];
         }
+        $story_jobs = PressHub_Social_TikTok_Shorts::build_story_post_jobs( $post_id, $start_time );
+        if ( null !== $youtube_engine ) {
+            $story_jobs = array_merge( $story_jobs, PressHub_Social_TikTok_Shorts::youtube_story_post_jobs( $story_jobs, $youtube_engine, self::shorts_stagger_minutes() * 60 ) );
+        }
         $ids = [];
-        foreach ( PressHub_Social_TikTok_Shorts::build_story_post_jobs( $post_id, $start_time ) as $story_job ) {
+        foreach ( $story_jobs as $story_job ) {
             $job_id = PressHub_Social_Queue::enqueue( $story_job );
             if ( is_wp_error( $job_id ) ) {
-                PressHub_Social_Logger::error( sprintf( 'Failed to enqueue a TikTok story post for post #%d: %s', $post_id, $job_id->get_error_message() ) );
+                PressHub_Social_Logger::error( sprintf( 'Failed to enqueue a %s story post for post #%d: %s', PressHub_Social_TikTok_Shorts::platform_label( (string) $story_job['platform'] ), $post_id, $job_id->get_error_message() ) );
             } elseif ( $job_id > 0 ) {
                 $ids[] = (int) $job_id;
                 $format = PressHub_Social_TikTok_Shorts::FORMAT_SLIDES === ( $story_job['metadata'][ PressHub_Social_TikTok_Shorts::JOB_META_KEY ]['format'] ?? '' ) ? 'photo slides' : 'video short';
-                PressHub_Social_Logger::info( sprintf( 'Enqueued TikTok story post job #%d for post #%d (%s, scheduled: %s)', $job_id, $post_id, $format, $story_job['scheduled_at'] ) );
+                PressHub_Social_Logger::info( sprintf( 'Enqueued %s story post job #%d for post #%d (%s, scheduled: %s)', PressHub_Social_TikTok_Shorts::platform_label( (string) $story_job['platform'] ), $job_id, $post_id, $format, $story_job['scheduled_at'] ) );
             }
         }
         if ( $ids ) {
