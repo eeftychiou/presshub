@@ -643,7 +643,7 @@ class PressHub_AI_Generation_Recorder {
     private static function encode_json( $value ): string {
         $json = wp_json_encode( $value, self::JSON_FLAGS );
         if ( false === $json ) {
-            throw new \RuntimeException( 'JSON encoding failed: ' . json_last_error_msg() );
+            throw new \RuntimeException( 'JSON encoding failed: ' . esc_html( json_last_error_msg() ) );
         }
         return $json;
     }

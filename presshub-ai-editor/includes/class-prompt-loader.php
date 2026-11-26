@@ -78,7 +78,7 @@ class PressHub_AI_Prompt_Loader {
                 );
             }
             throw new RuntimeException(
-                sprintf( 'Prompt template asset file missing or unreadable: %s', $clean_path )
+                sprintf( 'Prompt template asset file missing or unreadable: %s', esc_html( $clean_path ) )
             );
         }
 
@@ -94,7 +94,7 @@ class PressHub_AI_Prompt_Loader {
                 );
             }
             throw new RuntimeException(
-                sprintf( 'Prompt template asset file is empty: %s', $clean_path )
+                sprintf( 'Prompt template asset file is empty: %s', esc_html( $clean_path ) )
             );
         }
 

@@ -2423,7 +2423,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             header( 'Expires: 0' );
         }
 
-        echo $csv;
+        echo $csv; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- file download body (CSV / text), not HTML.
         exit;
     }
 
@@ -2538,7 +2538,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             header( 'Expires: 0' );
         }
 
-        echo $csv;
+        echo $csv; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- file download body (CSV / text), not HTML.
         exit;
     }
 
@@ -2882,7 +2882,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
             foreach ( $files_to_zip as $name => $path ) {
                 echo "=================================================================\n";
-                echo "FILE: {$name}\n";
+                echo "FILE: {$name}\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- file download body (CSV / text), not HTML.
                 echo "=================================================================\n";
                 if ( file_exists( $path ) && is_readable( $path ) ) {
                     readfile( $path );
@@ -2927,7 +2927,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         header( 'Pragma: public' );
         header( 'Content-Length: ' . strlen( $content ) );
 
-        echo $content;
+        echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- file download body (CSV / text), not HTML.
         exit;
     }
 

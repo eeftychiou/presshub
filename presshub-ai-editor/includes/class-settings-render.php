@@ -4,7 +4,7 @@
  *
  * Extracted from class-settings.php in T3. Contains every public/private
  * method whose responsibility is to produce HTML for the admin settings
- * page, plus the esc_attr_safe / esc_html_safe / mask_key helpers used
+ * page, plus the mask_key helper used
  * inside those render methods.
  *
  * Status: dead code in T3. The PressHub_AI_Settings facade still owns
@@ -93,7 +93,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_settings_page() {
         if ( ! current_user_can( $this->settings_cap() ) ) {
-            wp_die( __( 'You do not have permission to view PressHub AI settings.', 'presshub-ai-editor' ) );
+            wp_die( esc_html__( 'You do not have permission to view PressHub AI settings.', 'presshub-ai-editor' ) );
         }
 
         $this->register_help_tab();
@@ -109,7 +109,7 @@ class PressHub_AI_Settings_Render {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- notice after the Social prompts reset.
         $prompts_reset = isset( $_GET['message'] ) && 'prompts_reset' === $_GET['message'];
         ?>
-        <div class="wrap presshub-ai-settings-wrap presshub-settings-page" id="presshub-settings-page" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
+        <div class="wrap presshub-ai-settings-wrap presshub-settings-page" id="presshub-settings-page" data-section="<?php echo esc_attr( $section ); ?>">
             <h1><?php echo esc_html__( 'PressHub — Settings', 'presshub-ai-editor' ); ?></h1>
             <hr class="wp-header-end" />
             <?php $this->render_section_post_result( $section ); ?>
@@ -122,8 +122,8 @@ class PressHub_AI_Settings_Render {
                 <?php $this->render_section_nav( $section ); ?>
 
                 <div class="presshub-settings-main" id="presshub-settings-main">
-                    <h2 class="presshub-settings-section-title" id="presshub-settings-section-title"><?php echo self::esc_html_safe( $label ); ?></h2>
-                    <p class="presshub-settings-section-intro"><?php echo self::esc_html_safe( (string) ( $defs[ $section ]['intro'] ?? '' ) ); ?></p>
+                    <h2 class="presshub-settings-section-title" id="presshub-settings-section-title"><?php echo esc_html( $label ); ?></h2>
+                    <p class="presshub-settings-section-intro"><?php echo esc_html( (string) ( $defs[ $section ]['intro'] ?? '' ) ); ?></p>
 
                     <div id="presshub-settings-error-summary" class="notice notice-error presshub-error-summary" tabindex="-1" hidden>
                         <h3 class="presshub-error-summary-title"><?php echo esc_html__( 'There is a problem', 'presshub-ai-editor' ); ?></h3>
@@ -134,7 +134,7 @@ class PressHub_AI_Settings_Render {
                         <nav class="presshub-on-this-page" aria-label="<?php echo esc_attr__( 'On this page', 'presshub-ai-editor' ); ?>">
                             <span class="presshub-on-this-page-label"><?php echo esc_html__( 'On this page:', 'presshub-ai-editor' ); ?></span>
                             <?php foreach ( $groups as $anchor => $group_label ) : ?>
-                                <a href="#<?php echo self::esc_attr_safe( $anchor ); ?>" class="presshub-group-link"><?php echo self::esc_html_safe( $group_label ); ?></a>
+                                <a href="#<?php echo esc_attr( $anchor ); ?>" class="presshub-group-link"><?php echo esc_html( $group_label ); ?></a>
                             <?php endforeach; ?>
                         </nav>
                     <?php endif; ?>
@@ -152,9 +152,9 @@ class PressHub_AI_Settings_Render {
                             <?php $this->render_section( $section ); ?>
                         </div>
 
-                        <div id="presshub-sticky-save-bar" class="presshub-sticky-save-bar presshub-settings-savebar" data-active-tab="<?php echo self::esc_attr_safe( $section ); ?>" role="region" aria-label="<?php echo esc_attr__( 'Save changes', 'presshub-ai-editor' ); ?>">
+                        <div id="presshub-sticky-save-bar" class="presshub-sticky-save-bar presshub-settings-savebar" data-active-tab="<?php echo esc_attr( $section ); ?>" role="region" aria-label="<?php echo esc_attr__( 'Save changes', 'presshub-ai-editor' ); ?>">
                             <button type="submit" id="presshub-sticky-save-btn" class="button button-primary presshub-sticky-save-btn">
-                                <?php echo self::esc_html_safe( sprintf( /* translators: %s: section name */ __( 'Save %s', 'presshub-ai-editor' ), $label ) ); ?>
+                                <?php echo esc_html( sprintf( /* translators: %s: section name */ __( 'Save %s', 'presshub-ai-editor' ), $label ) ); ?>
                             </button>
                             <span id="presshub-sticky-save-spinner" class="spinner presshub-sticky-save-spinner"></span>
                             <span id="presshub-sticky-unsaved-badge" class="presshub-sticky-unsaved-badge" role="status" aria-live="polite" hidden></span>
@@ -197,14 +197,14 @@ class PressHub_AI_Settings_Render {
                 <label for="presshub-settings-section-select"><?php echo esc_html__( 'Section', 'presshub-ai-editor' ); ?></label>
                 <select id="presshub-settings-section-select" class="presshub-settings-nav-select presshub-no-dirty">
                     <?php foreach ( $visible as $slug ) : ?>
-                        <option value="<?php echo self::esc_attr_safe( PressHub_Settings_Sections::url( $slug ) ); ?>"<?php echo $slug === $current ? ' selected="selected"' : ''; ?>><?php echo self::esc_html_safe( PressHub_Settings_Sections::label( $slug ) ); ?></option>
+                        <option value="<?php echo esc_attr( PressHub_Settings_Sections::url( $slug ) ); ?>"<?php echo $slug === $current ? ' selected="selected"' : ''; ?>><?php echo esc_html( PressHub_Settings_Sections::label( $slug ) ); ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <ul class="presshub-settings-nav-list">
                 <?php foreach ( $visible as $slug ) : ?>
                     <li>
-                        <a href="<?php echo self::esc_attr_safe( PressHub_Settings_Sections::url( $slug ) ); ?>" class="presshub-settings-nav-link<?php echo $slug === $current ? ' is-current' : ''; ?>" data-section="<?php echo self::esc_attr_safe( $slug ); ?>"<?php echo $slug === $current ? ' aria-current="page"' : ''; ?>><?php echo self::esc_html_safe( PressHub_Settings_Sections::label( $slug ) ); ?></a>
+                        <a href="<?php echo esc_attr( PressHub_Settings_Sections::url( $slug ) ); ?>" class="presshub-settings-nav-link<?php echo $slug === $current ? ' is-current' : ''; ?>" data-section="<?php echo esc_attr( $slug ); ?>"<?php echo $slug === $current ? ' aria-current="page"' : ''; ?>><?php echo esc_html( PressHub_Settings_Sections::label( $slug ) ); ?></a>
                     </li>
                 <?php endforeach; ?>
             </ul>
@@ -229,7 +229,7 @@ class PressHub_AI_Settings_Render {
             <h2 class="presshub-whats-new-title"><?php echo esc_html__( "What's new in settings", 'presshub-ai-editor' ); ?></h2>
             <ul class="presshub-whats-new-list">
                 <?php foreach ( (array) $payload['whats_new'] as $item ) : ?>
-                    <li><?php echo self::esc_html_safe( (string) $item ); ?></li>
+                    <li><?php echo esc_html( (string) $item ); ?></li>
                 <?php endforeach; ?>
             </ul>
             <p><a href="#presshub-settings-search-input" class="presshub-whats-new-search"><?php echo esc_html__( 'Search for a setting', 'presshub-ai-editor' ); ?></a></p>
@@ -239,10 +239,10 @@ class PressHub_AI_Settings_Render {
 
     /** Opens a group: a heading the "On this page" bar links to. */
     private function group_start( string $id, string $title, string $intro = '' ) {
-        echo '<section id="' . self::esc_attr_safe( $id ) . '" class="presshub-settings-group" aria-labelledby="' . self::esc_attr_safe( $id . '-title' ) . '">';
-        echo '<h3 id="' . self::esc_attr_safe( $id . '-title' ) . '" class="presshub-settings-group-title">' . self::esc_html_safe( $title ) . '</h3>';
+        echo '<section id="' . esc_attr( $id ) . '" class="presshub-settings-group" aria-labelledby="' . esc_attr( $id . '-title' ) . '">';
+        echo '<h3 id="' . esc_attr( $id . '-title' ) . '" class="presshub-settings-group-title">' . esc_html( $title ) . '</h3>';
         if ( '' !== $intro ) {
-            echo '<p class="description presshub-settings-group-intro">' . self::esc_html_safe( $intro ) . '</p>';
+            echo '<p class="description presshub-settings-group-intro">' . esc_html( $intro ) . '</p>';
         }
     }
 
@@ -342,15 +342,15 @@ class PressHub_AI_Settings_Render {
                                     <td><?php echo $this->model_line( 'coauthor' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line(). ?></td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><label for="presshub_ai_coauthor_max_source_chars"><?php echo __( 'Max Source Material Characters', 'presshub-ai-editor' ); ?></label></th>
+                                    <th scope="row"><label for="presshub_ai_coauthor_max_source_chars"><?php echo esc_html__( 'Max Source Material Characters', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
                                         <?php $cur_max_chars = PressHub_AI_Settings_Storage::get_coauthor_max_source_chars(); ?>
-                                        <input type="number" min="1000" max="1000000" step="1000" name="presshub_ai_coauthor_max_source_chars" id="presshub_ai_coauthor_max_source_chars" value="<?php echo self::esc_attr_safe( (string) $cur_max_chars ); ?>" class="regular-text" />
-                                        <p class="description"><?php echo __( 'Maximum character limit allowed for pasted source material and research notes (1,000 – 1,000,000). Default 200,000 characters.', 'presshub-ai-editor' ); ?></p>
+                                        <input type="number" min="1000" max="1000000" step="1000" name="presshub_ai_coauthor_max_source_chars" id="presshub_ai_coauthor_max_source_chars" value="<?php echo esc_attr( (string) $cur_max_chars ); ?>" class="regular-text" />
+                                        <p class="description"><?php echo esc_html__( 'Maximum character limit allowed for pasted source material and research notes (1,000 – 1,000,000). Default 200,000 characters.', 'presshub-ai-editor' ); ?></p>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><?php echo __( 'Source Processing', 'presshub-ai-editor' ); ?></th>
+                                    <th scope="row"><?php echo esc_html__( 'Source Processing', 'presshub-ai-editor' ); ?></th>
                                     <td>
                                         <?php $this->render_fetch_urls_field(); ?>
                                     </td>
@@ -377,7 +377,7 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><?php echo __( 'Include Daily Briefings', 'presshub-ai-editor' ); ?></th>
+                                    <th scope="row"><?php echo esc_html__( 'Include Daily Briefings', 'presshub-ai-editor' ); ?></th>
                                     <td>
                                         <?php $this->render_qa_include_briefings_field(); ?>
                                     </td>
@@ -425,7 +425,7 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><label for="presshub_ai_qa_editor_email"><?php echo __( 'Editor Notification Email', 'presshub-ai-editor' ); ?></label></th>
+                                    <th scope="row"><label for="presshub_ai_qa_editor_email"><?php echo esc_html__( 'Editor Notification Email', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
                                         <?php $this->render_qa_editor_email_field(); ?>
                                     </td>
@@ -540,7 +540,7 @@ class PressHub_AI_Settings_Render {
         $presets_url = class_exists( 'PressHub_Admin_Menu' ) ? PressHub_Admin_Menu::url( 'presshub-ai-presets' ) : admin_url( 'admin.php?page=presshub-ai-presets' );
         ?>
         <p><?php echo esc_html__( 'Presets bundle a prompt, model and tone for the Co-Author. They have their own page because each preset is edited on its own.', 'presshub-ai-editor' ); ?></p>
-        <p><a class="button" href="<?php echo self::esc_attr_safe( $presets_url ); ?>"><?php echo esc_html__( 'Open Presets', 'presshub-ai-editor' ); ?></a></p>
+        <p><a class="button" href="<?php echo esc_attr( $presets_url ); ?>"><?php echo esc_html__( 'Open Presets', 'presshub-ai-editor' ); ?></a></p>
         <?php
         $this->group_end();
     }
@@ -557,19 +557,19 @@ class PressHub_AI_Settings_Render {
                     <table class="form-table" role="presentation">
                         <tbody>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo esc_html__( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_schedule_enabled_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_harvest_time"><?php echo __( 'Morning Harvest Time', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_harvest_time"><?php echo esc_html__( 'Morning Harvest Time', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_harvest_time_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_generation_time"><?php echo __( 'Generation Trigger Time', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_generation_time"><?php echo esc_html__( 'Generation Trigger Time', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_generation_time_field(); ?>
                                 </td>
@@ -582,19 +582,19 @@ class PressHub_AI_Settings_Render {
                     <table class="form-table" role="presentation">
                         <tbody>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_schedule_enabled"><?php echo __( 'Enable Noon Briefing Schedule', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_schedule_enabled"><?php echo esc_html__( 'Enable Noon Briefing Schedule', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_noon_schedule_enabled_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_harvest_time"><?php echo __( 'Noon Harvest Time', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_harvest_time"><?php echo esc_html__( 'Noon Harvest Time', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_noon_harvest_time_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_generation_time"><?php echo __( 'Noon Generation Time', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_generation_time"><?php echo esc_html__( 'Noon Generation Time', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_noon_generation_time_field(); ?>
                                 </td>
@@ -610,13 +610,13 @@ class PressHub_AI_Settings_Render {
                     <table class="form-table" role="presentation">
                         <tbody>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_sources"><?php echo __( 'News Source URLs', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_sources"><?php echo esc_html__( 'News Source URLs', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_sources_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_harvest_time_budget"><?php echo __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_harvest_time_budget"><?php echo esc_html__( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_harvest_time_budget_field(); ?>
                                 </td>
@@ -632,25 +632,25 @@ class PressHub_AI_Settings_Render {
                     <table class="form-table" role="presentation">
                         <tbody>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_curation_max_articles"><?php echo __( 'Maximum Articles Sent to Curation LLM', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_curation_max_articles"><?php echo esc_html__( 'Maximum Articles Sent to Curation LLM', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_curation_max_articles_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_curation_max_chars_per_article"><?php echo __( 'Maximum Characters per Article (Curation)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_curation_max_chars_per_article"><?php echo esc_html__( 'Maximum Characters per Article (Curation)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_curation_max_chars_per_article_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_preset"><?php echo __( 'Text Instruction Preset', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_text_preset"><?php echo esc_html__( 'Text Instruction Preset', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_preset_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_prompt"><?php echo __( 'Curator System Prompt', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_text_prompt"><?php echo esc_html__( 'Curator System Prompt', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_prompt_field(); ?>
                                 </td>
@@ -662,7 +662,7 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><?php echo __( 'AI QA Review Gate', 'presshub-ai-editor' ); ?></th>
+                                <th scope="row"><?php echo esc_html__( 'AI QA Review Gate', 'presshub-ai-editor' ); ?></th>
                                 <td>
                                     <?php $this->render_briefing_qa_gate_notice(); ?>
                                 </td>
@@ -680,19 +680,19 @@ class PressHub_AI_Settings_Render {
                     <table class="form-table" role="presentation">
                         <tbody>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_target_duration"><?php echo __( 'Target Podcast Duration', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_target_duration"><?php echo esc_html__( 'Target Podcast Duration', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_target_duration_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_host_count"><?php echo __( 'Podcast Presenters Count', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_host_count"><?php echo esc_html__( 'Podcast Presenters Count', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_host_count_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_preset"><?php echo __( 'Podcast dialogue preset', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_preset"><?php echo esc_html__( 'Podcast dialogue preset', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_preset_field(); ?>
                                 </td>
@@ -728,43 +728,43 @@ class PressHub_AI_Settings_Render {
                             </tr>
                             <?php $cur_host_count = PressHub_AI_Settings_Storage::get_briefing_host_count(); ?>
                             <tr id="presshub-host-female-row">
-                                <th scope="row"><label for="presshub_ai_briefing_host_female"><?php echo __( 'Presenter 1 Name', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_host_female"><?php echo esc_html__( 'Presenter 1 Name', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_host_female_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-host-male-row" class="<?php echo ( $cur_host_count >= 2 ) ? '' : ' presshub-is-hidden'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_host_male"><?php echo __( 'Presenter 2 Name', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_host_male"><?php echo esc_html__( 'Presenter 2 Name', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_host_male_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-host-tertiary-row" class="<?php echo ( $cur_host_count >= 3 ) ? '' : ' presshub-is-hidden'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_host_tertiary"><?php echo __( 'Presenter 3 Name', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_host_tertiary"><?php echo esc_html__( 'Presenter 3 Name', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_host_tertiary_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-voice-female-row">
-                                <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo __( 'Presenter 1 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo esc_html__( 'Presenter 1 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_female_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-voice-male-row" class="<?php echo ( $cur_host_count >= 2 ) ? '' : ' presshub-is-hidden'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_voice_male"><?php echo __( 'Presenter 2 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_male"><?php echo esc_html__( 'Presenter 2 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_male_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-voice-tertiary-row" class="<?php echo ( $cur_host_count >= 3 ) ? '' : ' presshub-is-hidden'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_voice_tertiary"><?php echo __( 'Presenter 3 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_tertiary"><?php echo esc_html__( 'Presenter 3 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_tertiary_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-voice-speed-row" class="<?php echo $speed_inactive ? 'presshub-setting-inactive' : ''; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_voice_speed"><?php echo __( 'Speaking Rate / Speed', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_speed"><?php echo esc_html__( 'Speaking Rate / Speed', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <div class="presshub-inactive-mode-badge<?php echo $speed_inactive ? '' : ' presshub-is-hidden'; ?>">
                                         <span class="ph-color-646970 ph-font-size-16px ph-width-16px ph-height-16px ph-vertical-align-text-bottom dashicons dashicons-info"></span>
@@ -774,7 +774,7 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr id="presshub-voice-pitch-row" class="<?php echo $pitch_inactive ? 'presshub-setting-inactive' : ''; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_voice_pitch"><?php echo __( 'Voice Pitch Tuning', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_pitch"><?php echo esc_html__( 'Voice Pitch Tuning', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <div class="presshub-inactive-mode-badge<?php echo $pitch_inactive ? '' : ' presshub-is-hidden'; ?>">
                                         <span class="ph-color-646970 ph-font-size-16px ph-width-16px ph-height-16px ph-vertical-align-text-bottom dashicons dashicons-info"></span>
@@ -784,13 +784,13 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo __( 'Speaking Delivery Style (logosAI)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo esc_html__( 'Speaking Delivery Style (logosAI)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_style_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-custom-tts-style-row" class="<?php echo ( get_option( 'presshub_ai_briefing_tts_style', 'formal' ) === 'custom' ) ? '' : ' presshub-is-hidden'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_tts_custom_style"><?php echo __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_custom_style"><?php echo esc_html__( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_custom_style_field(); ?>
                                 </td>
@@ -820,31 +820,31 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_topic_pause_ms"><?php echo __( 'Topic Transition Pause (ms)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_topic_pause_ms"><?php echo esc_html__( 'Topic Transition Pause (ms)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_topic_pause_ms_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_audio_split_by_topic"><?php echo __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_split_by_topic"><?php echo esc_html__( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_audio_split_by_topic_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_audio_intro_sfx"><?php echo __( 'Podcast Intro SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_intro_sfx"><?php echo esc_html__( 'Podcast Intro SFX', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_audio_intro_sfx_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_audio_transition_sfx"><?php echo __( 'Topic Transition SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_transition_sfx"><?php echo esc_html__( 'Topic Transition SFX', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_audio_transition_sfx_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_audio_outro_sfx"><?php echo __( 'Podcast Outro SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_outro_sfx"><?php echo esc_html__( 'Podcast Outro SFX', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_audio_outro_sfx_field(); ?>
                                 </td>
@@ -868,13 +868,13 @@ class PressHub_AI_Settings_Render {
                     <table class="form-table" role="presentation">
                         <tbody>
                             <tr id="presshub-tts-payload-mode-row">
-                                <th scope="row"><label for="presshub_ai_briefing_tts_payload_mode"><?php echo __( 'Gemini Speech Payload Structure', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_payload_mode"><?php echo esc_html__( 'Gemini Speech Payload Structure', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_payload_mode_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-tts-system-instruction-row" class="<?php echo $sys_inactive ? 'presshub-setting-inactive' : ''; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_tts_system_instruction"><?php echo __( 'Gemini Speech System Instruction', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_system_instruction"><?php echo esc_html__( 'Gemini Speech System Instruction', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <div class="presshub-inactive-mode-badge<?php echo $sys_inactive ? '' : ' presshub-is-hidden'; ?>">
                                         <span class="ph-color-646970 ph-font-size-16px ph-width-16px ph-height-16px ph-vertical-align-text-bottom dashicons dashicons-info"></span>
@@ -885,37 +885,37 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_request_delay_ms"><?php echo __( 'Inter-Turn Throttle Delay (ms)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_request_delay_ms"><?php echo esc_html__( 'Inter-Turn Throttle Delay (ms)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_request_delay_ms_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_max_retries"><?php echo __( 'Speech API Max Retries (429/5xx)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_max_retries"><?php echo esc_html__( 'Speech API Max Retries (429/5xx)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_max_retries_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_retry_backoff_ms"><?php echo __( 'Speech API Retry Backoff (ms)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_retry_backoff_ms"><?php echo esc_html__( 'Speech API Retry Backoff (ms)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_retry_backoff_ms_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_requests_per_minute"><?php echo __( 'Speech API Requests per Minute', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_requests_per_minute"><?php echo esc_html__( 'Speech API Requests per Minute', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_requests_per_minute_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_max_retry_wait_ms"><?php echo __( 'Speech API Max Retry Wait (ms)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_max_retry_wait_ms"><?php echo esc_html__( 'Speech API Max Retry Wait (ms)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_max_retry_wait_ms_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_cron_retry_delay_min"><?php echo __( 'Scheduled Synthesis Retry Delay (min)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_cron_retry_delay_min"><?php echo esc_html__( 'Scheduled Synthesis Retry Delay (min)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_cron_retry_delay_min_field(); ?>
                                 </td>
@@ -960,49 +960,49 @@ class PressHub_AI_Settings_Render {
                     <table class="form-table" role="presentation">
                         <tbody>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_category"><?php echo __( 'Text Briefing Category', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_text_category"><?php echo esc_html__( 'Text Briefing Category', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_category_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_status"><?php echo __( 'Text Post Status', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_text_status"><?php echo esc_html__( 'Text Post Status', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_status_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_title_prefix"><?php echo __( 'Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_text_title_prefix"><?php echo esc_html__( 'Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_title_prefix_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_title_date_format"><?php echo __( 'Text Story Title Date Format', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_text_title_date_format"><?php echo esc_html__( 'Text Story Title Date Format', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_title_date_format_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_text_title_prefix"><?php echo __( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_text_title_prefix"><?php echo esc_html__( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_noon_text_title_prefix_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_category"><?php echo __( 'Podcast Category', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_category"><?php echo esc_html__( 'Podcast Category', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_category_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_status"><?php echo __( 'Podcast Post Status', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_status"><?php echo esc_html__( 'Podcast Post Status', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_status_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_podcast_show_notes_enabled"><?php echo __( 'Podcast show notes', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_podcast_show_notes_enabled"><?php echo esc_html__( 'Podcast show notes', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_switch_field( 'presshub_ai_podcast_show_notes_enabled', __( 'Add show notes under each podcast post', 'presshub-ai-editor' ), __( 'Chapter times, a link to the written brief and its sources. Default: on.', 'presshub-ai-editor' ) ); ?>
                                 </td>
@@ -1020,7 +1020,7 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_podcast_title_prefix"><?php echo __( 'Noon Podcast Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_podcast_title_prefix"><?php echo esc_html__( 'Noon Podcast Title Prefix', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_noon_podcast_title_prefix_field(); ?>
                                 </td>
@@ -1038,13 +1038,13 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_featured_image_source"><?php echo __( 'Text Briefing Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_featured_image_source"><?php echo esc_html__( 'Text Briefing Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_featured_image_source_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_featured_image_source"><?php echo __( 'Podcast Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_featured_image_source"><?php echo esc_html__( 'Podcast Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_featured_image_source_field(); ?>
                                 </td>
@@ -1278,7 +1278,7 @@ class PressHub_AI_Settings_Render {
             <tbody>
                 <?php foreach ( $rows as $option => $row ) : ?>
                     <tr>
-                        <th scope="row"><label for="<?php echo self::esc_attr_safe( $option ); ?>"><?php echo self::esc_html_safe( $row[0] ); ?></label></th>
+                        <th scope="row"><label for="<?php echo esc_attr( $option ); ?>"><?php echo esc_html( $row[0] ); ?></label></th>
                         <td><?php $this->{$row[1]}(); ?></td>
                     </tr>
                 <?php endforeach; ?>
@@ -1368,19 +1368,19 @@ class PressHub_AI_Settings_Render {
         ?>
         <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-margin-bottom-20px presshub-providers-header">
             <div>
-                <h2><?php echo __( 'Configured AI Providers', 'presshub-ai-editor' ); ?></h2>
-                <p><?php echo __( 'Manage standard AI engines (OpenAI, Anthropic, Gemini, Google Cloud TTS, Groq, Mistral, DeepSeek, Local Ollama) and custom OpenAI-compatible endpoints.', 'presshub-ai-editor' ); ?></p>
+                <h2><?php echo esc_html__( 'Configured AI Providers', 'presshub-ai-editor' ); ?></h2>
+                <p><?php echo esc_html__( 'Manage standard AI engines (OpenAI, Anthropic, Gemini, Google Cloud TTS, Groq, Mistral, DeepSeek, Local Ollama) and custom OpenAI-compatible endpoints.', 'presshub-ai-editor' ); ?></p>
             </div>
             <button type="button" class="ph-display-inline-flex ph-align-items-center ph-gap-6px button button-primary presshub-add-provider-btn" id="presshub-add-provider-btn">
                 <span class="ph-font-size-16px ph-width-16px ph-height-16px dashicons dashicons-plus-alt2"></span>
-                <?php echo __( 'Add Provider', 'presshub-ai-editor' ); ?>
+                <?php echo esc_html__( 'Add Provider', 'presshub-ai-editor' ); ?>
             </button>
         </div>
 
         <div class="presshub-providers-grid" id="presshub-providers-grid">
             <?php if ( empty( $providers ) ) : ?>
                 <div class="ph-grid-column-1-1 ph-padding-30px ph-text-align-center ph-background-fff ph-border-1px-dashed-ccd0d4 ph-border-radius-6px presshub-no-providers">
-                    <p><?php echo __( 'No AI providers configured yet. Click "Add Provider" above to create one.', 'presshub-ai-editor' ); ?></p>
+                    <p><?php echo esc_html__( 'No AI providers configured yet. Click "Add Provider" above to create one.', 'presshub-ai-editor' ); ?></p>
                 </div>
             <?php else : ?>
                 <?php foreach ( $providers as $provider ) :
@@ -1403,22 +1403,22 @@ class PressHub_AI_Settings_Render {
                         </div>
                         <div class="presshub-card-status">
                             <span class="presshub-status-pill <?php echo $enabled ? 'pill-active' : 'pill-inactive'; ?>">
-                                <?php echo $enabled ? __( 'Active', 'presshub-ai-editor' ) : __( 'Disabled', 'presshub-ai-editor' ); ?>
+                                <?php echo $enabled ? esc_html__( 'Active', 'presshub-ai-editor' ) : esc_html__( 'Disabled', 'presshub-ai-editor' ); ?>
                             </span>
                         </div>
                     </div>
 
                     <div class="presshub-card-body">
                         <div class="presshub-meta-row">
-                            <span class="presshub-meta-label"><?php echo __( 'Default Model:', 'presshub-ai-editor' ); ?></span>
+                            <span class="presshub-meta-label"><?php echo esc_html__( 'Default Model:', 'presshub-ai-editor' ); ?></span>
                             <span class="presshub-meta-val code"><strong><?php echo esc_html( $model ?: '-' ); ?></strong></span>
                         </div>
                         <div class="presshub-meta-row">
-                            <span class="presshub-meta-label"><?php echo __( 'Tuning:', 'presshub-ai-editor' ); ?></span>
+                            <span class="presshub-meta-label"><?php echo esc_html__( 'Tuning:', 'presshub-ai-editor' ); ?></span>
                             <span class="presshub-meta-val"><?php echo sprintf( 'Temp: %s | Max Output: %s | %ss', esc_html( (string) $temp ), esc_html( function_exists( 'number_format_i18n' ) ? number_format_i18n( $max_tokens ) : number_format( $max_tokens ) ), esc_html( (string) $timeout ) ); ?></span>
                         </div>
                         <div class="presshub-meta-row">
-                            <span class="presshub-meta-label"><?php echo __( 'Credentials:', 'presshub-ai-editor' ); ?></span>
+                            <span class="presshub-meta-label"><?php echo esc_html__( 'Credentials:', 'presshub-ai-editor' ); ?></span>
                             <span class="presshub-meta-val"><?php echo $has_key ? '<span class="code">' . esc_html( self::mask_key( $provider['api_key'] ) ) . '</span>' : ( 'ollama_local' === $type ? esc_html__( 'Not required', 'presshub-ai-editor' ) : '<span class="ph-color-d63638 presshub-missing-key">' . esc_html__( 'No API Key set', 'presshub-ai-editor' ) . '</span>' ); ?></span>
                         </div>
                     </div>
@@ -1431,14 +1431,14 @@ class PressHub_AI_Settings_Render {
                     <div class="presshub-card-footer">
                         <button type="button" class="button button-secondary presshub-test-provider-btn" data-provider-id="<?php echo esc_attr( $id ); ?>">
                             <span class="ph-vertical-align-middle ph-margin-top-2px dashicons dashicons-update"></span>
-                            <?php echo __( 'Test Connection', 'presshub-ai-editor' ); ?>
+                            <?php echo esc_html__( 'Test Connection', 'presshub-ai-editor' ); ?>
                         </button>
                         <button type="button" class="button button-secondary presshub-edit-provider-btn" data-provider-id="<?php echo esc_attr( $id ); ?>">
-                            <?php echo __( 'Edit', 'presshub-ai-editor' ); ?>
+                            <?php echo esc_html__( 'Edit', 'presshub-ai-editor' ); ?>
                         </button>
                         <?php if ( ! $is_system ) : ?>
                         <button type="button" class="button button-link-delete presshub-delete-provider-btn" data-provider-id="<?php echo esc_attr( $id ); ?>" data-provider-name="<?php echo esc_attr( $name ); ?>">
-                            <?php echo __( 'Delete', 'presshub-ai-editor' ); ?>
+                            <?php echo esc_html__( 'Delete', 'presshub-ai-editor' ); ?>
                         </button>
                         <?php endif; ?>
                         <span class="spinner presshub-card-spinner" role="status"></span>
@@ -1461,7 +1461,7 @@ class PressHub_AI_Settings_Render {
         <div id="presshub-provider-modal" class="ph-display-none presshub-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="presshub-provider-modal-title">
             <div class="presshub-modal presshub-provider-modal-content">
                 <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-padding-14px-20px ph-border-bottom-1px-solid-dcdcde presshub-modal-header">
-                    <h2 id="presshub-provider-modal-title" class="ph-margin-0 ph-font-size-16px"><?php echo __( 'Add / Edit AI Provider', 'presshub-ai-editor' ); ?></h2>
+                    <h2 id="presshub-provider-modal-title" class="ph-margin-0 ph-font-size-16px"><?php echo esc_html__( 'Add / Edit AI Provider', 'presshub-ai-editor' ); ?></h2>
                     <button type="button" class="ph-background-none ph-border-none ph-font-size-20px ph-cursor-pointer ph-color-666 presshub-modal-close" aria-label="<?php echo esc_attr__( 'Close', 'presshub-ai-editor' ); ?>">&times;</button>
                 </div>
                 <div class="ph-padding-20px ph-max-height-70vh ph-overflow-y-auto presshub-modal-body">
@@ -1478,23 +1478,23 @@ class PressHub_AI_Settings_Render {
                         <input type="hidden" id="provider-form-id" name="id" value="" />
 
                         <div class="ph-margin-bottom-15px presshub-form-group">
-                            <label for="provider-form-template"><strong><?php echo __( 'Provider Preset Template:', 'presshub-ai-editor' ); ?></strong></label>
+                            <label for="provider-form-template"><strong><?php echo esc_html__( 'Provider Preset Template:', 'presshub-ai-editor' ); ?></strong></label>
                             <select id="provider-form-template" class="ph-margin-top-4px widefat">
-                                <option value=""><?php echo __( '-- Select Template Preset (Auto-fills defaults) --', 'presshub-ai-editor' ); ?></option>
+                                <option value=""><?php echo esc_html__( '-- Select Template Preset (Auto-fills defaults) --', 'presshub-ai-editor' ); ?></option>
                                 <?php foreach ( $templates as $tmpl_key => $tmpl ) : ?>
                                     <option value="<?php echo esc_attr( $tmpl_key ); ?>"><?php echo esc_html( $tmpl['name'] ); ?> (<?php echo esc_html( $tmpl_key ); ?>)</option>
                                 <?php endforeach; ?>
                             </select>
-                            <p class="description"><?php echo __( 'Selecting a preset template automatically sets the base URL, default model and tuning parameters.', 'presshub-ai-editor' ); ?></p>
+                            <p class="description"><?php echo esc_html__( 'Selecting a preset template automatically sets the base URL, default model and tuning parameters.', 'presshub-ai-editor' ); ?></p>
                         </div>
 
                         <div class="ph-display-flex ph-gap-15px ph-margin-bottom-15px presshub-form-row">
                             <div class="ph-flex-1 presshub-form-group">
-                                <label for="provider-form-name"><strong><?php echo __( 'Display Name:', 'presshub-ai-editor' ); ?></strong></label>
+                                <label for="provider-form-name"><strong><?php echo esc_html__( 'Display Name:', 'presshub-ai-editor' ); ?></strong></label>
                                 <input type="text" id="provider-form-name" name="name" class="ph-margin-top-4px widefat" required placeholder="e.g. OpenAI Production" />
                             </div>
                             <div class="ph-flex-1 presshub-form-group">
-                                <label for="provider-form-type"><strong><?php echo __( 'Provider Type:', 'presshub-ai-editor' ); ?></strong></label>
+                                <label for="provider-form-type"><strong><?php echo esc_html__( 'Provider Type:', 'presshub-ai-editor' ); ?></strong></label>
                                 <select id="provider-form-type" name="type" class="ph-margin-top-4px widefat">
                                     <?php foreach ( $templates as $tmpl_key => $tmpl ) : ?>
                                         <option value="<?php echo esc_attr( $tmpl_key ); ?>"><?php echo esc_html( $tmpl['name'] ); ?></option>
@@ -1504,22 +1504,22 @@ class PressHub_AI_Settings_Render {
                         </div>
 
                         <div class="ph-margin-bottom-15px presshub-form-group">
-                            <label for="provider-form-base-url"><strong><?php echo __( 'Base URL / Endpoint:', 'presshub-ai-editor' ); ?></strong></label>
+                            <label for="provider-form-base-url"><strong><?php echo esc_html__( 'Base URL / Endpoint:', 'presshub-ai-editor' ); ?></strong></label>
                             <input type="url" id="provider-form-base-url" name="base_url" class="ph-margin-top-4px widefat code" placeholder="https://api.openai.com/v1" />
                         </div>
 
                         <div class="ph-margin-bottom-15px presshub-form-group">
-                            <label for="provider-form-api-key"><strong><?php echo __( 'API Key / Secret Token:', 'presshub-ai-editor' ); ?></strong></label>
+                            <label for="provider-form-api-key"><strong><?php echo esc_html__( 'API Key / Secret Token:', 'presshub-ai-editor' ); ?></strong></label>
                             <input type="password" id="provider-form-api-key" name="api_key" class="ph-margin-top-4px widefat" autocomplete="new-password" placeholder="<?php echo esc_attr__( 'Enter API Key (or leave blank to preserve saved)', 'presshub-ai-editor' ); ?>" />
-                            <p class="description"><?php echo __( 'Stored securely with autoload disabled. Leave blank when editing to keep current secret.', 'presshub-ai-editor' ); ?></p>
+                            <p class="description"><?php echo esc_html__( 'Stored securely with autoload disabled. Leave blank when editing to keep current secret.', 'presshub-ai-editor' ); ?></p>
                         </div>
 
                         <div class="ph-margin-bottom-15px presshub-form-group">
                             <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-margin-bottom-4px">
-                                <label for="provider-form-default-model"><strong><?php echo __( 'Model:', 'presshub-ai-editor' ); ?></strong></label>
+                                <label for="provider-form-default-model"><strong><?php echo esc_html__( 'Model:', 'presshub-ai-editor' ); ?></strong></label>
                                 <label class="ph-font-weight-normal ph-font-size-12px ph-cursor-pointer ph-display-inline-flex ph-align-items-center ph-gap-4px">
                                     <input type="checkbox" id="provider-form-toggle-manual" />
-                                    <?php echo __( 'Enter model manually', 'presshub-ai-editor' ); ?>
+                                    <?php echo esc_html__( 'Enter model manually', 'presshub-ai-editor' ); ?>
                                 </label>
                             </div>
                             <div id="provider-model-select-wrap">
@@ -1527,7 +1527,7 @@ class PressHub_AI_Settings_Render {
                                     <select id="provider-form-default-model" name="default_model" class="ph-flex-1 ph-margin-0 widefat code"></select>
                                     <button type="button" class="ph-display-inline-flex ph-align-items-center ph-gap-4px ph-white-space-nowrap button button-secondary" id="provider-form-fetch-models">
                                         <span class="ph-font-size-14px ph-width-14px ph-height-14px ph-margin-top-1px dashicons dashicons-update"></span>
-                                        <?php echo __( 'Fetch Models', 'presshub-ai-editor' ); ?>
+                                        <?php echo esc_html__( 'Fetch Models', 'presshub-ai-editor' ); ?>
                                     </button>
                                     <span class="ph-float-none ph-margin-0 spinner" id="provider-form-fetch-spinner" role="status"></span>
                                 </div>
@@ -1536,21 +1536,21 @@ class PressHub_AI_Settings_Render {
                                 <input type="text" id="provider-form-manual-model" class="ph-margin-top-0 widefat code" placeholder="<?php echo esc_attr__( 'e.g. gpt-4o, claude-3-5-sonnet-20241022, fine-tune-xyz', 'presshub-ai-editor' ); ?>" />
                             </div>
                             <input type="hidden" id="provider-form-available-models" name="available_models" value="" />
-                            <p class="description"><?php echo __( 'Select the active model for this provider or fetch latest models directly via the provider API.', 'presshub-ai-editor' ); ?></p>
+                            <p class="description"><?php echo esc_html__( 'Select the active model for this provider or fetch latest models directly via the provider API.', 'presshub-ai-editor' ); ?></p>
                         </div>
 
                         <div class="ph-display-flex ph-gap-15px ph-margin-bottom-15px presshub-form-row">
                             <div class="ph-flex-1 presshub-form-group">
-                                <label for="provider-form-temperature"><strong><?php echo __( 'Temperature (0.0 - 2.0):', 'presshub-ai-editor' ); ?></strong></label>
+                                <label for="provider-form-temperature"><strong><?php echo esc_html__( 'Temperature (0.0 - 2.0):', 'presshub-ai-editor' ); ?></strong></label>
                                 <input type="number" id="provider-form-temperature" name="temperature" class="ph-margin-top-4px widefat" step="0.05" min="0" max="2" value="0.7" />
                             </div>
                             <div class="ph-flex-1 presshub-form-group">
-                                <label for="provider-form-max-tokens"><strong><?php echo __( 'Max Output Tokens:', 'presshub-ai-editor' ); ?></strong></label>
+                                <label for="provider-form-max-tokens"><strong><?php echo esc_html__( 'Max Output Tokens:', 'presshub-ai-editor' ); ?></strong></label>
                                 <input type="number" id="provider-form-max-tokens" name="max_tokens" class="ph-margin-top-4px widefat" step="100" min="1" max="65536" value="20000" />
-                                <p class="ph-margin-top-4px ph-font-size-11px description"><?php echo __( 'Maximum tokens generated in model responses (completion tokens). Does not limit input prompt tokens.', 'presshub-ai-editor' ); ?></p>
+                                <p class="ph-margin-top-4px ph-font-size-11px description"><?php echo esc_html__( 'Maximum tokens generated in model responses (completion tokens). Does not limit input prompt tokens.', 'presshub-ai-editor' ); ?></p>
                             </div>
                             <div class="ph-flex-1 presshub-form-group">
-                                <label for="provider-form-timeout"><strong><?php echo __( 'Timeout (seconds):', 'presshub-ai-editor' ); ?></strong></label>
+                                <label for="provider-form-timeout"><strong><?php echo esc_html__( 'Timeout (seconds):', 'presshub-ai-editor' ); ?></strong></label>
                                 <input type="number" id="provider-form-timeout" name="timeout" class="ph-margin-top-4px widefat" min="10" max="300" value="300" />
                             </div>
                         </div>
@@ -1568,14 +1568,14 @@ class PressHub_AI_Settings_Render {
                         </div>
 
                         <div class="ph-margin-bottom-15px presshub-form-group">
-                            <label for="provider-form-headers"><strong><?php echo __( 'Custom HTTP Headers (JSON optional):', 'presshub-ai-editor' ); ?></strong></label>
+                            <label for="provider-form-headers"><strong><?php echo esc_html__( 'Custom HTTP Headers (JSON optional):', 'presshub-ai-editor' ); ?></strong></label>
                             <textarea id="provider-form-headers" name="headers" class="ph-margin-top-4px widefat code" rows="2" placeholder='{"HTTP-Referer": "https://mysite.com"}'></textarea>
                         </div>
 
                         <div class="presshub-form-group">
                             <label>
                                 <input type="checkbox" id="provider-form-enabled" name="enabled" value="1" checked="checked" />
-                                <strong><?php echo __( 'Enable this provider for module assignment', 'presshub-ai-editor' ); ?></strong>
+                                <strong><?php echo esc_html__( 'Enable this provider for module assignment', 'presshub-ai-editor' ); ?></strong>
                             </label>
                         </div>
                     </form>
@@ -1584,11 +1584,11 @@ class PressHub_AI_Settings_Render {
                 <div class="ph-padding-12px-20px ph-border-top-1px-solid-dcdcde ph-display-flex ph-align-items-center ph-gap-8px presshub-modal-footer">
                     <button type="button" class="button button-secondary" id="presshub-provider-form-test">
                         <span class="ph-vertical-align-middle ph-margin-top-2px dashicons dashicons-update"></span>
-                        <?php echo __( 'Test Connection', 'presshub-ai-editor' ); ?>
+                        <?php echo esc_html__( 'Test Connection', 'presshub-ai-editor' ); ?>
                     </button>
                     <div class="ph-margin-left-auto ph-display-flex ph-gap-8px">
-                        <button type="button" class="button button-secondary presshub-modal-cancel"><?php echo __( 'Cancel', 'presshub-ai-editor' ); ?></button>
-                        <button type="button" class="button button-primary" id="presshub-provider-form-save"><?php echo __( 'Save Provider', 'presshub-ai-editor' ); ?></button>
+                        <button type="button" class="button button-secondary presshub-modal-cancel"><?php echo esc_html__( 'Cancel', 'presshub-ai-editor' ); ?></button>
+                        <button type="button" class="button button-primary" id="presshub-provider-form-save"><?php echo esc_html__( 'Save Provider', 'presshub-ai-editor' ); ?></button>
                     </div>
                     <span class="spinner" id="presshub-provider-form-spinner" role="status"></span>
                 </div>
@@ -1636,50 +1636,50 @@ class PressHub_AI_Settings_Render {
         require_once __DIR__ . '/class-token-logger.php';
         ?>
         <div class="presshub-token-dashboard">
-            <h2><?php echo __( 'Token & Activity Analytics Dashboard', 'presshub-ai-editor' ); ?></h2>
-            <p><?php echo __( 'Monitor live token usage, Text-to-Speech character volumes, news crawling metrics, API latencies, and success rates.', 'presshub-ai-editor' ); ?></p>
+            <h2><?php echo esc_html__( 'Token & Activity Analytics Dashboard', 'presshub-ai-editor' ); ?></h2>
+            <p><?php echo esc_html__( 'Monitor live token usage, Text-to-Speech character volumes, news crawling metrics, API latencies, and success rates.', 'presshub-ai-editor' ); ?></p>
 
             <div class="presshub-token-kpis" id="presshub-token-kpis">
                 <div class="presshub-kpi-card">
-                    <span class="kpi-title"><?php echo __( 'Total Requests', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-title"><?php echo esc_html__( 'Total Requests', 'presshub-ai-editor' ); ?></span>
                     <span class="kpi-value" id="kpi-total-requests">-</span>
-                    <span class="kpi-subtitle"><?php echo __( 'API executions', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-subtitle"><?php echo esc_html__( 'API executions', 'presshub-ai-editor' ); ?></span>
                 </div>
                 <div class="presshub-kpi-card">
-                    <span class="kpi-title"><?php echo __( 'Total Tokens', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-title"><?php echo esc_html__( 'Total Tokens', 'presshub-ai-editor' ); ?></span>
                     <span class="kpi-value" id="kpi-total-tokens">-</span>
-                    <span class="kpi-subtitle"><?php echo __( 'Prompt & completions', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-subtitle"><?php echo esc_html__( 'Prompt & completions', 'presshub-ai-editor' ); ?></span>
                 </div>
                 <div class="presshub-kpi-card">
-                    <span class="kpi-title"><?php echo __( 'TTS Characters', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-title"><?php echo esc_html__( 'TTS Characters', 'presshub-ai-editor' ); ?></span>
                     <span class="kpi-value" id="kpi-tts-chars">-</span>
-                    <span class="kpi-subtitle"><?php echo __( 'Voice audio synthesized', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-subtitle"><?php echo esc_html__( 'Voice audio synthesized', 'presshub-ai-editor' ); ?></span>
                 </div>
                 <div class="presshub-kpi-card">
-                    <span class="kpi-title"><?php echo __( 'Scraped Articles', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-title"><?php echo esc_html__( 'Scraped Articles', 'presshub-ai-editor' ); ?></span>
                     <span class="kpi-value" id="kpi-scraped-articles">-</span>
-                    <span class="kpi-subtitle"><?php echo __( 'Harvested from sources', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-subtitle"><?php echo esc_html__( 'Harvested from sources', 'presshub-ai-editor' ); ?></span>
                 </div>
                 <div class="presshub-kpi-card">
-                    <span class="kpi-title"><?php echo __( 'Success Rate', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-title"><?php echo esc_html__( 'Success Rate', 'presshub-ai-editor' ); ?></span>
                     <span class="kpi-value" id="kpi-success-rate">100%</span>
-                    <span class="kpi-subtitle"><?php echo __( 'Error-free runs', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-subtitle"><?php echo esc_html__( 'Error-free runs', 'presshub-ai-editor' ); ?></span>
                 </div>
             </div>
 
             <div class="presshub-token-filters">
                 <div class="filter-group">
-                    <label for="token-filter-range"><?php echo __( 'Date Range:', 'presshub-ai-editor' ); ?></label>
+                    <label for="token-filter-range"><?php echo esc_html__( 'Date Range:', 'presshub-ai-editor' ); ?></label>
                     <select id="token-filter-range">
-                        <option value="today"><?php echo __( 'Today', 'presshub-ai-editor' ); ?></option>
-                        <option value="7d"><?php echo __( 'Last 7 Days', 'presshub-ai-editor' ); ?></option>
-                        <option value="30d" selected="selected"><?php echo __( 'Last 30 Days', 'presshub-ai-editor' ); ?></option>
-                        <option value="90d"><?php echo __( 'Last 90 Days', 'presshub-ai-editor' ); ?></option>
-                        <option value="all"><?php echo __( 'All Time', 'presshub-ai-editor' ); ?></option>
+                        <option value="today"><?php echo esc_html__( 'Today', 'presshub-ai-editor' ); ?></option>
+                        <option value="7d"><?php echo esc_html__( 'Last 7 Days', 'presshub-ai-editor' ); ?></option>
+                        <option value="30d" selected="selected"><?php echo esc_html__( 'Last 30 Days', 'presshub-ai-editor' ); ?></option>
+                        <option value="90d"><?php echo esc_html__( 'Last 90 Days', 'presshub-ai-editor' ); ?></option>
+                        <option value="all"><?php echo esc_html__( 'All Time', 'presshub-ai-editor' ); ?></option>
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label for="token-filter-action"><?php echo __( 'Action:', 'presshub-ai-editor' ); ?></label>
+                    <label for="token-filter-action"><?php echo esc_html__( 'Action:', 'presshub-ai-editor' ); ?></label>
                     <select id="token-filter-action">
                         <option value=""><?php echo __( 'All Actions', 'presshub-ai-editor' ); ?></option>
                         <?php foreach ( ( class_exists( 'PressHub_AI_Token_Logger' ) ? PressHub_AI_Token_Logger::filter_options() : [] ) as $presshub_action => $presshub_label ) : ?>
@@ -1688,9 +1688,9 @@ class PressHub_AI_Settings_Render {
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label for="token-filter-provider"><?php echo __( 'Provider:', 'presshub-ai-editor' ); ?></label>
+                    <label for="token-filter-provider"><?php echo esc_html__( 'Provider:', 'presshub-ai-editor' ); ?></label>
                     <select id="token-filter-provider">
-                        <option value=""><?php echo __( 'All Providers', 'presshub-ai-editor' ); ?></option>
+                        <option value=""><?php echo esc_html__( 'All Providers', 'presshub-ai-editor' ); ?></option>
                         <option value="openai">OpenAI</option>
                         <option value="anthropic">Anthropic</option>
                         <option value="gemini">Gemini</option>
@@ -1703,21 +1703,21 @@ class PressHub_AI_Settings_Render {
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label for="token-filter-status"><?php echo __( 'Status:', 'presshub-ai-editor' ); ?></label>
+                    <label for="token-filter-status"><?php echo esc_html__( 'Status:', 'presshub-ai-editor' ); ?></label>
                     <select id="token-filter-status">
-                        <option value=""><?php echo __( 'All Statuses', 'presshub-ai-editor' ); ?></option>
-                        <option value="success"><?php echo __( 'Success', 'presshub-ai-editor' ); ?></option>
-                        <option value="error"><?php echo __( 'Error', 'presshub-ai-editor' ); ?></option>
+                        <option value=""><?php echo esc_html__( 'All Statuses', 'presshub-ai-editor' ); ?></option>
+                        <option value="success"><?php echo esc_html__( 'Success', 'presshub-ai-editor' ); ?></option>
+                        <option value="error"><?php echo esc_html__( 'Error', 'presshub-ai-editor' ); ?></option>
                     </select>
                 </div>
                 <div class="ph-flex-1 filter-group filter-search">
-                    <label for="token-filter-search"><?php echo __( 'Search:', 'presshub-ai-editor' ); ?></label>
+                    <label for="token-filter-search"><?php echo esc_html__( 'Search:', 'presshub-ai-editor' ); ?></label>
                     <input type="text" id="token-filter-search" placeholder="<?php echo esc_attr__( 'Search model, action, metadata...', 'presshub-ai-editor' ); ?>" />
                 </div>
                 <div class="ph-display-flex ph-gap-6px ph-align-items-flex-end filter-actions">
-                    <button type="button" class="button button-secondary" id="token-filter-refresh"><?php echo __( 'Filter', 'presshub-ai-editor' ); ?></button>
-                    <button type="button" class="button button-secondary" id="token-export-csv"><?php echo __( 'Export CSV', 'presshub-ai-editor' ); ?></button>
-                    <button type="button" class="button button-link-delete" id="token-clear-logs"><?php echo __( 'Clear Logs', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary" id="token-filter-refresh"><?php echo esc_html__( 'Filter', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary" id="token-export-csv"><?php echo esc_html__( 'Export CSV', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-link-delete" id="token-clear-logs"><?php echo esc_html__( 'Clear Logs', 'presshub-ai-editor' ); ?></button>
                     <span class="spinner" id="token-logs-spinner" role="status"></span>
                 </div>
             </div>
@@ -1726,28 +1726,28 @@ class PressHub_AI_Settings_Render {
                 <table class="wp-list-table widefat fixed striped presshub-token-table">
                     <thead>
                         <tr>
-                            <th class="ph-width-140px"><?php echo __( 'Date / Time', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-130px"><?php echo __( 'Action', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-110px"><?php echo __( 'Provider', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-140px"><?php echo __( 'Model', 'presshub-ai-editor' ); ?></th>
-                            <th><?php echo __( 'Tokens / Metrics', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-90px"><?php echo __( 'Latency', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-90px"><?php echo __( 'Status', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-80px"><?php echo __( 'Details', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-140px"><?php echo esc_html__( 'Date / Time', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-130px"><?php echo esc_html__( 'Action', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-110px"><?php echo esc_html__( 'Provider', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-140px"><?php echo esc_html__( 'Model', 'presshub-ai-editor' ); ?></th>
+                            <th><?php echo esc_html__( 'Tokens / Metrics', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-90px"><?php echo esc_html__( 'Latency', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-90px"><?php echo esc_html__( 'Status', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-80px"><?php echo esc_html__( 'Details', 'presshub-ai-editor' ); ?></th>
                         </tr>
                     </thead>
                     <tbody id="presshub-token-logs-tbody">
-                        <tr><td colspan="8" class="ph-text-align-center ph-padding-20px"><?php echo __( 'Loading token usage logs...', 'presshub-ai-editor' ); ?></td></tr>
+                        <tr><td colspan="8" class="ph-text-align-center ph-padding-20px"><?php echo esc_html__( 'Loading token usage logs...', 'presshub-ai-editor' ); ?></td></tr>
                     </tbody>
                 </table>
             </div>
 
             <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-margin-top-12px presshub-pagination-wrap" id="presshub-token-pagination">
-                <span class="pagination-info" id="token-pagination-info"><?php echo __( 'Showing 0 items', 'presshub-ai-editor' ); ?></span>
+                <span class="pagination-info" id="token-pagination-info"><?php echo esc_html__( 'Showing 0 items', 'presshub-ai-editor' ); ?></span>
                 <div class="ph-display-flex ph-gap-8px pagination-buttons">
-                    <button type="button" class="button button-secondary" id="token-page-prev" disabled="disabled">&laquo; <?php echo __( 'Previous', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary" id="token-page-prev" disabled="disabled">&laquo; <?php echo esc_html__( 'Previous', 'presshub-ai-editor' ); ?></button>
                     <span id="token-page-current" class="ph-display-flex ph-align-items-center ph-font-weight-600">1 / 1</span>
-                    <button type="button" class="button button-secondary" id="token-page-next" disabled="disabled"><?php echo __( 'Next', 'presshub-ai-editor' ); ?> &raquo;</button>
+                    <button type="button" class="button button-secondary" id="token-page-next" disabled="disabled"><?php echo esc_html__( 'Next', 'presshub-ai-editor' ); ?> &raquo;</button>
                 </div>
             </div>
 
@@ -1765,42 +1765,42 @@ class PressHub_AI_Settings_Render {
         <hr class="ph-margin-35px-0-25px ph-border-0 ph-border-top-1px-solid-ccd0d4">
 
         <div class="presshub-audit-dashboard" id="presshub-audit-dashboard">
-            <h2><?php echo __( 'Configuration & Provider Audit Trail', 'presshub-ai-editor' ); ?></h2>
-            <p><?php echo __( 'Track and audit mutations to AI providers, news sources, and settings with actor details, timestamps, and sanitized changes.', 'presshub-ai-editor' ); ?></p>
+            <h2><?php echo esc_html__( 'Configuration & Provider Audit Trail', 'presshub-ai-editor' ); ?></h2>
+            <p><?php echo esc_html__( 'Track and audit mutations to AI providers, news sources, and settings with actor details, timestamps, and sanitized changes.', 'presshub-ai-editor' ); ?></p>
 
             <div class="ph-display-flex ph-gap-12px ph-flex-wrap-wrap ph-align-items-flex-end ph-margin-bottom-15px presshub-token-filters presshub-audit-filters">
                 <div class="filter-group">
-                    <label for="audit-filter-event"><?php echo __( 'Event Type:', 'presshub-ai-editor' ); ?></label>
+                    <label for="audit-filter-event"><?php echo esc_html__( 'Event Type:', 'presshub-ai-editor' ); ?></label>
                     <select id="audit-filter-event">
-                        <option value=""><?php echo __( 'All Events', 'presshub-ai-editor' ); ?></option>
-                        <option value="settings_saved"><?php echo __( 'Settings Saved', 'presshub-ai-editor' ); ?></option>
-                        <option value="provider_added"><?php echo __( 'Provider Added', 'presshub-ai-editor' ); ?></option>
-                        <option value="provider_updated"><?php echo __( 'Provider Updated', 'presshub-ai-editor' ); ?></option>
-                        <option value="provider_deleted"><?php echo __( 'Provider Deleted', 'presshub-ai-editor' ); ?></option>
-                        <option value="provider_toggled"><?php echo __( 'Provider Toggled', 'presshub-ai-editor' ); ?></option>
-                        <option value="news_source_added"><?php echo __( 'News Source Added', 'presshub-ai-editor' ); ?></option>
-                        <option value="news_source_updated"><?php echo __( 'News Source Updated', 'presshub-ai-editor' ); ?></option>
-                        <option value="news_source_deleted"><?php echo __( 'News Source Deleted', 'presshub-ai-editor' ); ?></option>
-                        <option value="news_source_toggled"><?php echo __( 'News Source Toggled', 'presshub-ai-editor' ); ?></option>
+                        <option value=""><?php echo esc_html__( 'All Events', 'presshub-ai-editor' ); ?></option>
+                        <option value="settings_saved"><?php echo esc_html__( 'Settings Saved', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider_added"><?php echo esc_html__( 'Provider Added', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider_updated"><?php echo esc_html__( 'Provider Updated', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider_deleted"><?php echo esc_html__( 'Provider Deleted', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider_toggled"><?php echo esc_html__( 'Provider Toggled', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source_added"><?php echo esc_html__( 'News Source Added', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source_updated"><?php echo esc_html__( 'News Source Updated', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source_deleted"><?php echo esc_html__( 'News Source Deleted', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source_toggled"><?php echo esc_html__( 'News Source Toggled', 'presshub-ai-editor' ); ?></option>
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label for="audit-filter-entity"><?php echo __( 'Entity Type:', 'presshub-ai-editor' ); ?></label>
+                    <label for="audit-filter-entity"><?php echo esc_html__( 'Entity Type:', 'presshub-ai-editor' ); ?></label>
                     <select id="audit-filter-entity">
-                        <option value=""><?php echo __( 'All Entities', 'presshub-ai-editor' ); ?></option>
-                        <option value="provider"><?php echo __( 'AI Provider', 'presshub-ai-editor' ); ?></option>
-                        <option value="settings"><?php echo __( 'Settings', 'presshub-ai-editor' ); ?></option>
-                        <option value="news_source"><?php echo __( 'News Source', 'presshub-ai-editor' ); ?></option>
+                        <option value=""><?php echo esc_html__( 'All Entities', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider"><?php echo esc_html__( 'AI Provider', 'presshub-ai-editor' ); ?></option>
+                        <option value="settings"><?php echo esc_html__( 'Settings', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source"><?php echo esc_html__( 'News Source', 'presshub-ai-editor' ); ?></option>
                     </select>
                 </div>
                 <div class="ph-flex-1 ph-min-width-200px filter-group filter-search">
-                    <label for="audit-filter-search"><?php echo __( 'Search:', 'presshub-ai-editor' ); ?></label>
+                    <label for="audit-filter-search"><?php echo esc_html__( 'Search:', 'presshub-ai-editor' ); ?></label>
                     <input type="text" id="audit-filter-search" placeholder="<?php echo esc_attr__( 'Search actor, entity, details...', 'presshub-ai-editor' ); ?>" />
                 </div>
                 <div class="ph-display-flex ph-gap-6px ph-align-items-flex-end filter-actions">
-                    <button type="button" class="button button-secondary" id="audit-filter-refresh"><?php echo __( 'Filter', 'presshub-ai-editor' ); ?></button>
-                    <button type="button" class="button button-secondary" id="audit-export-csv"><?php echo __( 'Export CSV', 'presshub-ai-editor' ); ?></button>
-                    <button type="button" class="button button-link-delete" id="audit-clear-logs"><?php echo __( 'Clear Audit Logs', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary" id="audit-filter-refresh"><?php echo esc_html__( 'Filter', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary" id="audit-export-csv"><?php echo esc_html__( 'Export CSV', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-link-delete" id="audit-clear-logs"><?php echo esc_html__( 'Clear Audit Logs', 'presshub-ai-editor' ); ?></button>
                     <span class="spinner" id="audit-logs-spinner" role="status"></span>
                 </div>
             </div>
@@ -1809,27 +1809,27 @@ class PressHub_AI_Settings_Render {
                 <table class="wp-list-table widefat fixed striped presshub-audit-table">
                     <thead>
                         <tr>
-                            <th class="ph-width-140px"><?php echo __( 'Date / Time', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-120px"><?php echo __( 'Actor', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-150px"><?php echo __( 'Event Type', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-110px"><?php echo __( 'Entity Type', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-140px"><?php echo __( 'Entity ID', 'presshub-ai-editor' ); ?></th>
-                            <th><?php echo __( 'Changes & Details Summary', 'presshub-ai-editor' ); ?></th>
-                            <th class="ph-width-110px"><?php echo __( 'IP Address', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-140px"><?php echo esc_html__( 'Date / Time', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-120px"><?php echo esc_html__( 'Actor', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-150px"><?php echo esc_html__( 'Event Type', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-110px"><?php echo esc_html__( 'Entity Type', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-140px"><?php echo esc_html__( 'Entity ID', 'presshub-ai-editor' ); ?></th>
+                            <th><?php echo esc_html__( 'Changes & Details Summary', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-110px"><?php echo esc_html__( 'IP Address', 'presshub-ai-editor' ); ?></th>
                         </tr>
                     </thead>
                     <tbody id="presshub-audit-logs-tbody">
-                        <tr><td colspan="7" class="ph-text-align-center ph-padding-20px"><?php echo __( 'Loading configuration audit logs...', 'presshub-ai-editor' ); ?></td></tr>
+                        <tr><td colspan="7" class="ph-text-align-center ph-padding-20px"><?php echo esc_html__( 'Loading configuration audit logs...', 'presshub-ai-editor' ); ?></td></tr>
                     </tbody>
                 </table>
             </div>
 
             <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-margin-top-12px presshub-pagination-wrap" id="presshub-audit-pagination">
-                <span class="pagination-info" id="audit-pagination-info"><?php echo __( 'Showing 0 items', 'presshub-ai-editor' ); ?></span>
+                <span class="pagination-info" id="audit-pagination-info"><?php echo esc_html__( 'Showing 0 items', 'presshub-ai-editor' ); ?></span>
                 <div class="ph-display-flex ph-gap-8px pagination-buttons">
-                    <button type="button" class="button button-secondary" id="audit-page-prev" disabled="disabled">&laquo; <?php echo __( 'Previous', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary" id="audit-page-prev" disabled="disabled">&laquo; <?php echo esc_html__( 'Previous', 'presshub-ai-editor' ); ?></button>
                     <span id="audit-page-current" class="ph-display-flex ph-align-items-center ph-font-weight-600">1 / 1</span>
-                    <button type="button" class="button button-secondary" id="audit-page-next" disabled="disabled"><?php echo __( 'Next', 'presshub-ai-editor' ); ?> &raquo;</button>
+                    <button type="button" class="button button-secondary" id="audit-page-next" disabled="disabled"><?php echo esc_html__( 'Next', 'presshub-ai-editor' ); ?> &raquo;</button>
                 </div>
             </div>
         </div>
@@ -1844,59 +1844,59 @@ class PressHub_AI_Settings_Render {
         <div id="presshub-log-details-modal" class="ph-display-none presshub-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="presshub-log-details-modal-title">
             <div class="ph-max-width-650px ph-width-95pct presshub-modal">
                 <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-padding-14px-20px ph-border-bottom-1px-solid-dcdcde presshub-modal-header">
-                    <h2 id="presshub-log-details-modal-title" class="ph-margin-0 ph-font-size-16px"><?php echo __( 'Request Log & Error Details', 'presshub-ai-editor' ); ?></h2>
+                    <h2 id="presshub-log-details-modal-title" class="ph-margin-0 ph-font-size-16px"><?php echo esc_html__( 'Request Log & Error Details', 'presshub-ai-editor' ); ?></h2>
                     <button type="button" class="ph-background-none ph-border-none ph-font-size-20px ph-cursor-pointer ph-color-666 presshub-modal-close" aria-label="<?php echo esc_attr__( 'Close', 'presshub-ai-editor' ); ?>">&times;</button>
                 </div>
                 <div class="ph-padding-20px ph-max-height-70vh ph-overflow-y-auto presshub-modal-body">
                     <div class="ph-display-grid ph-grid-template-columns-1fr-1fr ph-gap-12px ph-margin-bottom-16px ph-font-size-13px presshub-log-info-grid">
                         <div>
-                            <strong><?php echo __( 'Timestamp:', 'presshub-ai-editor' ); ?></strong>
+                            <strong><?php echo esc_html__( 'Timestamp:', 'presshub-ai-editor' ); ?></strong>
                             <div id="log-detail-timestamp" class="ph-color-555 ph-margin-top-2px">-</div>
                         </div>
                         <div>
-                            <strong><?php echo __( 'Status:', 'presshub-ai-editor' ); ?></strong>
+                            <strong><?php echo esc_html__( 'Status:', 'presshub-ai-editor' ); ?></strong>
                             <div id="log-detail-status" class="ph-margin-top-2px">-</div>
                         </div>
                         <div>
-                            <strong><?php echo __( 'Action:', 'presshub-ai-editor' ); ?></strong>
+                            <strong><?php echo esc_html__( 'Action:', 'presshub-ai-editor' ); ?></strong>
                             <div id="log-detail-action" class="ph-color-555 ph-margin-top-2px">-</div>
                         </div>
                         <div>
-                            <strong><?php echo __( 'Provider:', 'presshub-ai-editor' ); ?></strong>
+                            <strong><?php echo esc_html__( 'Provider:', 'presshub-ai-editor' ); ?></strong>
                             <div id="log-detail-provider" class="ph-color-555 ph-margin-top-2px">-</div>
                         </div>
                         <div>
-                            <strong><?php echo __( 'Model:', 'presshub-ai-editor' ); ?></strong>
+                            <strong><?php echo esc_html__( 'Model:', 'presshub-ai-editor' ); ?></strong>
                             <div id="log-detail-model" class="ph-color-555 ph-margin-top-2px"><code class="ph-font-size-12px">-</code></div>
                         </div>
                         <div>
-                            <strong><?php echo __( 'Duration:', 'presshub-ai-editor' ); ?></strong>
+                            <strong><?php echo esc_html__( 'Duration:', 'presshub-ai-editor' ); ?></strong>
                             <div id="log-detail-duration" class="ph-color-555 ph-margin-top-2px">-</div>
                         </div>
                         <div class="ph-grid-column-span-2">
-                            <strong><?php echo __( 'Tokens / Metrics:', 'presshub-ai-editor' ); ?></strong>
+                            <strong><?php echo esc_html__( 'Tokens / Metrics:', 'presshub-ai-editor' ); ?></strong>
                             <div id="log-detail-metrics" class="ph-color-555 ph-margin-top-2px">-</div>
                         </div>
                     </div>
 
                     <div id="presshub-log-error-container" class="ph-display-none ph-margin-bottom-16px">
                         <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-margin-bottom-6px">
-                            <strong class="ph-color-d63638"><?php echo __( 'Error Message / Diagnostics:', 'presshub-ai-editor' ); ?></strong>
+                            <strong class="ph-color-d63638"><?php echo esc_html__( 'Error Message / Diagnostics:', 'presshub-ai-editor' ); ?></strong>
                             <button type="button" class="ph-display-inline-flex ph-align-items-center ph-gap-4px button button-small" id="presshub-copy-log-error">
                                 <span class="ph-font-size-14px ph-width-14px ph-height-14px dashicons dashicons-clipboard"></span>
-                                <span class="copy-btn-text"><?php echo __( 'Copy Error', 'presshub-ai-editor' ); ?></span>
+                                <span class="copy-btn-text"><?php echo esc_html__( 'Copy Error', 'presshub-ai-editor' ); ?></span>
                             </button>
                         </div>
                         <pre id="log-detail-error" class="ph-background-fcf0f1 ph-border-1px-solid-f5c6cb ph-color-721c24 ph-padding-10px ph-border-radius-4px ph-font-size-12px ph-white-space-pre-wrap ph-word-break-break-word ph-max-height-180px ph-overflow-y-auto ph-margin-0"></pre>
                     </div>
 
                     <div id="presshub-log-metadata-container" class="ph-display-none ph-margin-bottom-10px">
-                        <strong><?php echo __( 'Additional Metadata:', 'presshub-ai-editor' ); ?></strong>
+                        <strong><?php echo esc_html__( 'Additional Metadata:', 'presshub-ai-editor' ); ?></strong>
                         <pre id="log-detail-metadata" class="ph-background-f6f7f7 ph-border-1px-solid-dcdcde ph-color-333 ph-padding-10px ph-border-radius-4px ph-font-size-11px ph-white-space-pre-wrap ph-word-break-break-word ph-max-height-180px ph-overflow-y-auto ph-margin-top-6px"></pre>
                     </div>
                 </div>
                 <div class="ph-padding-12px-20px ph-border-top-1px-solid-dcdcde ph-display-flex ph-justify-content-flex-end presshub-modal-footer">
-                    <button type="button" class="button button-secondary presshub-modal-close"><?php echo __( 'Close', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary presshub-modal-close"><?php echo esc_html__( 'Close', 'presshub-ai-editor' ); ?></button>
                 </div>
             </div>
         </div>
@@ -1947,15 +1947,15 @@ class PressHub_AI_Settings_Render {
     }
 
     public function render_github_section() {
-        echo '<p>' . __( 'Configure GitHub Personal Access Token for private repository plugin updates and release tracking.', 'presshub-ai-editor' ) . '</p>';
+        echo '<p>' . esc_html__( 'Configure GitHub Personal Access Token for private repository plugin updates and release tracking.', 'presshub-ai-editor' ) . '</p>';
     }
 
     public function render_media_section() {
-        echo '<p>' . __( 'Google Cloud credentials used for Imagen image generation and Text-to-Speech.', 'presshub-ai-editor' ) . '</p>';
+        echo '<p>' . esc_html__( 'Google Cloud credentials used for Imagen image generation and Text-to-Speech.', 'presshub-ai-editor' ) . '</p>';
     }
 
     public function render_rate_limits_section() {
-        echo '<p>' . __( 'Cap the AI endpoints so a single user cannot rack up unbounded API costs. Disabled by default — opt-in only.', 'presshub-ai-editor' ) . '</p>';
+        echo '<p>' . esc_html__( 'Cap the AI endpoints so a single user cannot rack up unbounded API costs. Disabled by default — opt-in only.', 'presshub-ai-editor' ) . '</p>';
     }
 
     public function render_logging_section() {
@@ -2002,9 +2002,9 @@ class PressHub_AI_Settings_Render {
         $option  = 'presshub_ai_debug_prompts';
         $enabled = PressHub_AI_Settings_Storage::get_debug_prompts();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label for="presshub_ai_debug_prompts">
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_debug_prompts" value="1" <?php checked( true, $enabled ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_debug_prompts" value="1" <?php checked( true, $enabled ); ?> />
             <?php echo esc_html__( 'Append every SYSTEM and USER prompt exchange to the protected log folder (prompts channel) as structured JSONL.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
@@ -2043,8 +2043,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_gcloud_project_id';
         $value  = (string) get_option( $option, 'presshub-ai' );
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Google Cloud project ID used in the Vertex AI Imagen endpoint URL. Defaults to presshub-ai.', 'presshub-ai-editor' ); ?></p>
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Google Cloud project ID used in the Vertex AI Imagen endpoint URL. Defaults to presshub-ai.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2052,8 +2052,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_imagen_region';
         $value  = (string) get_option( $option, 'us-central1' );
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Vertex AI region for Imagen. Default us-central1. European tenants may use e.g. europe-west4 for data residency.', 'presshub-ai-editor' ); ?></p>
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Vertex AI region for Imagen. Default us-central1. European tenants may use e.g. europe-west4 for data residency.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2061,10 +2061,10 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_rate_limit_enabled';
         $value  = (int) get_option( $option, 0 );
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label>
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php echo $value ? 'checked="checked"' : ''; ?> />
-            <?php echo __( 'Throttle AI actions when a user exceeds the configured budget', 'presshub-ai-editor' ); ?>
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php echo $value ? 'checked="checked"' : ''; ?> />
+            <?php echo esc_html__( 'Throttle AI actions when a user exceeds the configured budget', 'presshub-ai-editor' ); ?>
         </label>
         <?php
     }
@@ -2073,8 +2073,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_rate_limit_per_hour';
         $value  = (int) get_option( $option, 30 );
         ?>
-        <input type="number" min="1" max="10000" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Maximum number of AI actions (draft, review, chat, research) a single user may make within the window. Defaults to 30.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="1" max="10000" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Maximum number of AI actions (draft, review, chat, research) a single user may make within the window. Defaults to 30.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2082,8 +2082,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_rate_limit_window_seconds';
         $value  = (int) get_option( $option, 3600 );
         ?>
-        <input type="number" min="1" max="86400" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Length of the rolling window in seconds. Defaults to 3600 (1 hour).', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="1" max="86400" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Length of the rolling window in seconds. Defaults to 3600 (1 hour).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2094,8 +2094,8 @@ class PressHub_AI_Settings_Render {
             : 30;
         $value   = (int) get_option( $option, $default );
         ?>
-        <input type="number" min="1" max="3650" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'How long completed or failed research logs are kept before the daily cleanup deletes them. Defaults to 30 days.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="1" max="3650" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How long completed or failed research logs are kept before the daily cleanup deletes them. Defaults to 30 days.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2103,7 +2103,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_generation_record_retention_days';
         $value  = PressHub_AI_Settings_Storage::get_generation_record_retention_days();
         ?>
-        <input type="number" min="7" max="365" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <input type="number" min="7" max="365" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'How long to keep generation records (prompts, settings, inputs and responses for each briefing and podcast generation). 7–365 days, default 90.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -2112,7 +2112,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_log_file_retention_days';
         $value  = PressHub_AI_Settings_Storage::get_log_file_retention_days();
         ?>
-        <input type="number" min="1" max="90" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <input type="number" min="1" max="90" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'How long rotated log files (application, prompt and TTS logs) are kept before the daily cleanup deletes them. 1-90 days, default 14.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -2121,7 +2121,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_token_log_retention_days';
         $value  = PressHub_AI_Settings_Storage::get_token_log_retention_days();
         ?>
-        <input type="number" min="7" max="365" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <input type="number" min="7" max="365" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'How long token usage rows are kept before the daily cleanup deletes them. 7-365 days, default 60.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -2139,7 +2139,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_audit_log_retention_days';
         $value  = PressHub_AI_Settings_Storage::get_audit_log_retention_days();
         ?>
-        <input type="number" min="30" max="730" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <input type="number" min="30" max="730" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'How long audit trail rows are kept before the daily cleanup deletes them. 30-730 days, default 90.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -2148,14 +2148,14 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_log_level';
         $selected = class_exists( 'PressHub_AI_Logger' ) ? PressHub_AI_Logger::get_configured_level() : 'INFO';
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <option value="DEBUG" <?php echo 'DEBUG' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'DEBUG (Verbose: all API payloads, scheduling, turns & HTTP)', 'presshub-ai-editor' ); ?></option>
-            <option value="INFO" <?php echo 'INFO' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'INFO (Standard: milestones, settings updates, jobs)', 'presshub-ai-editor' ); ?></option>
-            <option value="WARNING" <?php echo 'WARNING' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'WARNING (Only warnings & failures)', 'presshub-ai-editor' ); ?></option>
-            <option value="ERROR" <?php echo 'ERROR' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'ERROR (Only critical failures)', 'presshub-ai-editor' ); ?></option>
-            <option value="OFF" <?php echo 'OFF' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'OFF (Disable file logging)', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <option value="DEBUG" <?php echo 'DEBUG' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'DEBUG (Verbose: all API payloads, scheduling, turns & HTTP)', 'presshub-ai-editor' ); ?></option>
+            <option value="INFO" <?php echo 'INFO' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'INFO (Standard: milestones, settings updates, jobs)', 'presshub-ai-editor' ); ?></option>
+            <option value="WARNING" <?php echo 'WARNING' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'WARNING (Only warnings & failures)', 'presshub-ai-editor' ); ?></option>
+            <option value="ERROR" <?php echo 'ERROR' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'ERROR (Only critical failures)', 'presshub-ai-editor' ); ?></option>
+            <option value="OFF" <?php echo 'OFF' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'OFF (Disable file logging)', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Control verbosity of the internal diagnostic log file (stored at the protected log folder (app channel)). When not set explicitly, the default is DEBUG if WP_DEBUG is on and INFO otherwise. Prompt debugging no longer changes the log level.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Control verbosity of the internal diagnostic log file (stored at the protected log folder (app channel)). When not set explicitly, the default is DEBUG if WP_DEBUG is on and INFO otherwise. Prompt debugging no longer changes the log level.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2169,12 +2169,12 @@ class PressHub_AI_Settings_Render {
         $active_count = count( array_filter( $sources, function( $s ) { return ! empty( $s['enabled'] ); } ) );
         ?>
         <div class="presshub-sources-manager-wrap" id="presshub-sources-manager-wrap">
-            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo esc_attr( wp_json_encode( $sources, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) ); ?>" />
+            <input type="hidden" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( wp_json_encode( $sources, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) ); ?>" />
             
             <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-margin-bottom-12px ph-flex-wrap-wrap ph-gap-10px presshub-sources-toolbar">
                 <div class="ph-display-flex ph-align-items-center ph-gap-8px">
                     <span id="presshub-sources-count-badge" class="presshub-badge">
-                        <?php echo sprintf( esc_html__( '%d Sources (%d Active)', 'presshub-ai-editor' ), $total_count, $active_count ); ?>
+                        <?php echo esc_html( sprintf( /* translators: 1: total sources, 2: active sources */ __( '%1$d Sources (%2$d Active)', 'presshub-ai-editor' ), $total_count, $active_count ) ); ?>
                     </span>
                     <span class="ph-color-646970 ph-font-size-12px">
                         <?php echo esc_html__( 'Configure editorial outlets, RSS feeds, and multi-modal streams for daily morning harvesting.', 'presshub-ai-editor' ); ?>
@@ -2499,32 +2499,32 @@ class PressHub_AI_Settings_Render {
         $cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
         ?>
         <label>
-            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
-            <?php echo __( 'Enable automated morning news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
+            <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
+            <?php echo esc_html__( 'Enable automated morning news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
         </label>
         <div class="ph-margin-top-8px ph-font-size-13px ph-color-555">
             <?php if ( $value ) : ?>
                 <div class="ph-margin-bottom-4px">
-                    <strong><?php echo __( 'Status:', 'presshub-ai-editor' ); ?></strong>
+                    <strong><?php echo esc_html__( 'Status:', 'presshub-ai-editor' ); ?></strong>
                     <?php if ( $next_harvest ) : ?>
-                        <span class="ph-color-46b450 ph-font-weight-600">&#10003; <?php echo __( 'Harvest:', 'presshub-ai-editor' ); ?></span>
+                        <span class="ph-color-46b450 ph-font-weight-600">&#10003; <?php echo esc_html__( 'Harvest:', 'presshub-ai-editor' ); ?></span>
                         <code><?php echo esc_html( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d H:i:s T', $next_harvest ) : date( 'Y-m-d H:i:s', $next_harvest ) ); ?></code>
                     <?php else : ?>
-                        <span class="ph-color-dc3232 ph-font-weight-600">&#10007; <?php echo __( 'Harvest not in cron queue.', 'presshub-ai-editor' ); ?></span>
+                        <span class="ph-color-dc3232 ph-font-weight-600">&#10007; <?php echo esc_html__( 'Harvest not in cron queue.', 'presshub-ai-editor' ); ?></span>
                     <?php endif; ?>
                     &nbsp;|&nbsp;
                     <?php if ( $next_generate ) : ?>
-                        <span class="ph-color-46b450 ph-font-weight-600">&#10003; <?php echo __( 'Generation:', 'presshub-ai-editor' ); ?></span>
+                        <span class="ph-color-46b450 ph-font-weight-600">&#10003; <?php echo esc_html__( 'Generation:', 'presshub-ai-editor' ); ?></span>
                         <code><?php echo esc_html( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d H:i:s T', $next_generate ) : date( 'Y-m-d H:i:s', $next_generate ) ); ?></code>
                     <?php else : ?>
-                        <span class="ph-color-dc3232 ph-font-weight-600">&#10007; <?php echo __( 'Generation not in cron queue.', 'presshub-ai-editor' ); ?></span>
+                        <span class="ph-color-dc3232 ph-font-weight-600">&#10007; <?php echo esc_html__( 'Generation not in cron queue.', 'presshub-ai-editor' ); ?></span>
                     <?php endif; ?>
                 </div>
                 <?php if ( $cron_disabled ) : ?>
                     <div class="ph-margin-top-6px ph-padding-6px-10px ph-background-fff8e5 ph-border-left-4px-solid-ffb900 ph-color-613e00">
-                        <strong><?php echo __( 'Notice:', 'presshub-ai-editor' ); ?></strong>
-                        <?php echo __( 'DISABLE_WP_CRON is enabled on your site. Automated jobs will only run if a system cron (e.g. crontab) executes wp-cron.php or WP-CLI.', 'presshub-ai-editor' ); ?>
+                        <strong><?php echo esc_html__( 'Notice:', 'presshub-ai-editor' ); ?></strong>
+                        <?php echo esc_html__( 'DISABLE_WP_CRON is enabled on your site. Automated jobs will only run if a system cron (e.g. crontab) executes wp-cron.php or WP-CLI.', 'presshub-ai-editor' ); ?>
                     </div>
                 <?php endif; ?>
             <?php endif; ?>
@@ -2536,8 +2536,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_harvest_time';
         $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_harvest_time() );
         ?>
-        <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Time when morning Greek news sources are scraped and snapshot saved. Default 06:30.', 'presshub-ai-editor' ); ?></p>
+        <input type="time" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Time when morning Greek news sources are scraped and snapshot saved. Default 06:30.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2545,8 +2545,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_generation_time';
         $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_generation_time() );
         ?>
-        <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Time when text story curation and podcast synthesis are triggered. Default 07:15.', 'presshub-ai-editor' ); ?></p>
+        <input type="time" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Time when text story curation and podcast synthesis are triggered. Default 07:15.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2559,32 +2559,32 @@ class PressHub_AI_Settings_Render {
         $cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
         ?>
         <label>
-            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
-            <?php echo __( 'Enable automated noon news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
+            <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
+            <?php echo esc_html__( 'Enable automated noon news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
         </label>
         <div class="ph-margin-top-8px ph-font-size-13px ph-color-555">
             <?php if ( $value ) : ?>
                 <div class="ph-margin-bottom-4px">
-                    <strong><?php echo __( 'Status:', 'presshub-ai-editor' ); ?></strong>
+                    <strong><?php echo esc_html__( 'Status:', 'presshub-ai-editor' ); ?></strong>
                     <?php if ( $next_harvest ) : ?>
-                        <span class="ph-color-46b450 ph-font-weight-600">&#10003; <?php echo __( 'Harvest:', 'presshub-ai-editor' ); ?></span>
+                        <span class="ph-color-46b450 ph-font-weight-600">&#10003; <?php echo esc_html__( 'Harvest:', 'presshub-ai-editor' ); ?></span>
                         <code><?php echo esc_html( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d H:i:s T', $next_harvest ) : date( 'Y-m-d H:i:s', $next_harvest ) ); ?></code>
                     <?php else : ?>
-                        <span class="ph-color-dc3232 ph-font-weight-600">&#10007; <?php echo __( 'Harvest not in cron queue.', 'presshub-ai-editor' ); ?></span>
+                        <span class="ph-color-dc3232 ph-font-weight-600">&#10007; <?php echo esc_html__( 'Harvest not in cron queue.', 'presshub-ai-editor' ); ?></span>
                     <?php endif; ?>
                     &nbsp;|&nbsp;
                     <?php if ( $next_generate ) : ?>
-                        <span class="ph-color-46b450 ph-font-weight-600">&#10003; <?php echo __( 'Generation:', 'presshub-ai-editor' ); ?></span>
+                        <span class="ph-color-46b450 ph-font-weight-600">&#10003; <?php echo esc_html__( 'Generation:', 'presshub-ai-editor' ); ?></span>
                         <code><?php echo esc_html( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d H:i:s T', $next_generate ) : date( 'Y-m-d H:i:s', $next_generate ) ); ?></code>
                     <?php else : ?>
-                        <span class="ph-color-dc3232 ph-font-weight-600">&#10007; <?php echo __( 'Generation not in cron queue.', 'presshub-ai-editor' ); ?></span>
+                        <span class="ph-color-dc3232 ph-font-weight-600">&#10007; <?php echo esc_html__( 'Generation not in cron queue.', 'presshub-ai-editor' ); ?></span>
                     <?php endif; ?>
                 </div>
                 <?php if ( $cron_disabled ) : ?>
                     <div class="ph-margin-top-6px ph-padding-6px-10px ph-background-fff8e5 ph-border-left-4px-solid-ffb900 ph-color-613e00">
-                        <strong><?php echo __( 'Notice:', 'presshub-ai-editor' ); ?></strong>
-                        <?php echo __( 'DISABLE_WP_CRON is enabled on your site. Automated jobs will only run if a system cron (e.g. crontab) executes wp-cron.php or WP-CLI.', 'presshub-ai-editor' ); ?>
+                        <strong><?php echo esc_html__( 'Notice:', 'presshub-ai-editor' ); ?></strong>
+                        <?php echo esc_html__( 'DISABLE_WP_CRON is enabled on your site. Automated jobs will only run if a system cron (e.g. crontab) executes wp-cron.php or WP-CLI.', 'presshub-ai-editor' ); ?>
                     </div>
                 <?php endif; ?>
             <?php endif; ?>
@@ -2596,8 +2596,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_noon_harvest_time';
         $value  = PressHub_AI_Settings_Storage::get_briefing_noon_harvest_time();
         ?>
-        <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Time when noon Greek news sources are scraped and noon snapshot saved. Default 12:30.', 'presshub-ai-editor' ); ?></p>
+        <input type="time" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Time when noon Greek news sources are scraped and noon snapshot saved. Default 12:30.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2605,8 +2605,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_noon_generation_time';
         $value  = PressHub_AI_Settings_Storage::get_briefing_noon_generation_time();
         ?>
-        <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Time when noon text story curation and podcast synthesis are triggered. Default 13:00.', 'presshub-ai-editor' ); ?></p>
+        <input type="time" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Time when noon text story curation and podcast synthesis are triggered. Default 13:00.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2617,8 +2617,8 @@ class PressHub_AI_Settings_Render {
             $value = 60;
         }
         ?>
-        <input type="number" min="10" max="900" step="15" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Maximum execution time in seconds allocated for crawling news sources and extracting articles during each briefing cycle (10 to 900 seconds / 15 minutes). Default: 60s.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="10" max="900" step="15" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Maximum execution time in seconds allocated for crawling news sources and extracting articles during each briefing cycle (10 to 900 seconds / 15 minutes). Default: 60s.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2632,8 +2632,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_curation_max_articles';
         $value  = PressHub_AI_Settings_Storage::get_curation_max_articles();
         ?>
-        <input type="number" min="1" max="200" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Upper bound on the number of harvested articles forwarded to the Daily Briefing curation LLM. The News Pool Inspector still shows every harvested article; only the first N (by snapshot order) are included in the curation prompt. Range: 1 to 200. Default: 40.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="1" max="200" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Upper bound on the number of harvested articles forwarded to the Daily Briefing curation LLM. The News Pool Inspector still shows every harvested article; only the first N (by snapshot order) are included in the curation prompt. Range: 1 to 200. Default: 40.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2647,8 +2647,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_curation_max_chars_per_article';
         $value  = PressHub_AI_Settings_Storage::get_curation_max_chars_per_article();
         ?>
-        <input type="number" min="100" max="400000" step="500" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Per-article body character cap inside the curation prompt. Articles longer than this are truncated with the "…[περικομμένο]" marker. Range: 100 to 400,000. Default: 3000.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="100" max="400000" step="500" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Per-article body character cap inside the curation prompt. Articles longer than this are truncated with the "…[περικομμένο]" marker. Range: 100 to 400,000. Default: 3000.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2657,17 +2657,17 @@ class PressHub_AI_Settings_Render {
         $selected = (string) get_option( $option, '' );
         $presets  = class_exists( 'PressHub_AI_Preset_Store' ) ? PressHub_AI_Preset_Store::get_plugin_defaults() : [];
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <option value="" <?php echo '' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Standard Editorial (Default)', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <option value="" <?php echo '' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'Standard Editorial (Default)', 'presshub-ai-editor' ); ?></option>
             <?php foreach ( $presets as $preset ) : ?>
                 <?php if ( ! empty( $preset['enabled'] ) ) : ?>
-                    <option value="<?php echo self::esc_attr_safe( $preset['slug'] ); ?>" <?php echo $selected === $preset['slug'] ? 'selected="selected"' : ''; ?>>
-                        <?php echo self::esc_html_safe( $preset['name'] ); ?> (<?php echo self::esc_html_safe( $preset['slug'] ); ?>)
+                    <option value="<?php echo esc_attr( $preset['slug'] ); ?>" <?php echo $selected === $preset['slug'] ? 'selected="selected"' : ''; ?>>
+                        <?php echo esc_html( $preset['name'] ); ?> (<?php echo esc_html( $preset['slug'] ); ?>)
                     </option>
                 <?php endif; ?>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo __( 'Instruction preset applied to the morning text briefing curation agent.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Instruction preset applied to the morning text briefing curation agent.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2689,12 +2689,12 @@ class PressHub_AI_Settings_Render {
         $nonce = function_exists( 'wp_nonce_field' ) ? wp_nonce_field( PressHub_Settings_Transfer::NONCE, '_wpnonce', true, false ) : '';
         $post  = admin_url( 'admin-post.php' );
         ?>
-        <form id="presshub-settings-import-form" method="post" action="<?php echo self::esc_attr_safe( $post ); ?>" enctype="multipart/form-data">
-            <input type="hidden" name="action" value="<?php echo self::esc_attr_safe( PressHub_Settings_Transfer::PREVIEW_ACTION ); ?>" />
+        <form id="presshub-settings-import-form" method="post" action="<?php echo esc_attr( $post ); ?>" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="<?php echo esc_attr( PressHub_Settings_Transfer::PREVIEW_ACTION ); ?>" />
             <?php echo $nonce; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core nonce markup. ?>
         </form>
-        <form id="presshub-settings-apply-form" method="post" action="<?php echo self::esc_attr_safe( $post ); ?>">
-            <input type="hidden" name="action" value="<?php echo self::esc_attr_safe( PressHub_Settings_Transfer::APPLY_ACTION ); ?>" />
+        <form id="presshub-settings-apply-form" method="post" action="<?php echo esc_attr( $post ); ?>">
+            <input type="hidden" name="action" value="<?php echo esc_attr( PressHub_Settings_Transfer::APPLY_ACTION ); ?>" />
             <?php echo $nonce; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core nonce markup. ?>
         </form>
         <?php
@@ -2715,13 +2715,13 @@ class PressHub_AI_Settings_Render {
         <h3><?php echo esc_html__( 'Export and import settings', 'presshub-ai-editor' ); ?></h3>
         <p class="description"><?php echo esc_html__( 'Download every PressHub setting (every Settings section) as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them. The AI providers you set up (with their keys) are not in the file either, so add them again on a new site.', 'presshub-ai-editor' ); ?></p>
         <?php if ( 'done' === $state ) : ?>
-            <div class="notice notice-success inline"><p><?php echo self::esc_html_safe( sprintf( __( 'Import finished: %d settings changed.', 'presshub-ai-editor' ), isset( $_GET['presshub_import_count'] ) ? (int) $_GET['presshub_import_count'] : 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification ?></p></div>
+            <div class="notice notice-success inline"><p><?php echo esc_html( sprintf( __( 'Import finished: %d settings changed.', 'presshub-ai-editor' ), isset( $_GET['presshub_import_count'] ) ? (int) $_GET['presshub_import_count'] : 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification ?></p></div>
         <?php elseif ( 'expired' === $state ) : ?>
             <div class="notice notice-warning inline"><p><?php echo esc_html__( 'Nothing was imported: the preview had expired. Choose the file again.', 'presshub-ai-editor' ); ?></p></div>
         <?php endif; ?>
         <p>
             <?php if ( class_exists( $T ) ) : ?>
-                <a class="button" href="<?php echo self::esc_attr_safe( $T::export_url() ); ?>" download><?php echo esc_html__( 'Export settings (JSON, no keys)', 'presshub-ai-editor' ); ?></a>
+                <a class="button" href="<?php echo esc_attr( $T::export_url() ); ?>" download><?php echo esc_html__( 'Export settings (JSON, no keys)', 'presshub-ai-editor' ); ?></a>
             <?php endif; ?>
             &nbsp;
             <label for="presshub_settings_file" class="screen-reader-text"><?php echo esc_html__( 'Settings export file', 'presshub-ai-editor' ); ?></label>
@@ -2729,11 +2729,11 @@ class PressHub_AI_Settings_Render {
             <button type="submit" class="button" form="presshub-settings-import-form"><?php echo esc_html__( 'Preview import', 'presshub-ai-editor' ); ?></button>
         </p>
         <?php if ( $pending && isset( $pending['error'] ) ) : ?>
-            <div class="notice notice-error inline"><p><?php echo self::esc_html_safe( (string) $pending['error'] ); ?></p></div>
+            <div class="notice notice-error inline"><p><?php echo esc_html( (string) $pending['error'] ); ?></p></div>
         <?php elseif ( $pending && isset( $pending['options'] ) && class_exists( $T ) ) : ?>
             <?php $preview = $T::preview( (array) $pending['options'] ); ?>
             <div class="ph-border-1px-solid-c3c4c7 ph-background-fff ph-padding-12px ph-margin-8px-0 presshub-import-preview">
-                <p><strong><?php echo self::esc_html_safe( sprintf( __( 'Import preview: %1$d settings would change, %2$d are already the same, %3$d are skipped.', 'presshub-ai-editor' ), count( $preview['changes'] ), $preview['unchanged'], count( $preview['skipped'] ) ) ); ?></strong></p>
+                <p><strong><?php echo esc_html( sprintf( __( 'Import preview: %1$d settings would change, %2$d are already the same, %3$d are skipped.', 'presshub-ai-editor' ), count( $preview['changes'] ), $preview['unchanged'], count( $preview['skipped'] ) ) ); ?></strong></p>
                 <?php if ( $preview['changes'] ) : ?>
                     <table class="ph-max-width-100pct widefat striped">
                         <thead><tr><th><?php echo esc_html__( 'Setting', 'presshub-ai-editor' ); ?></th><th><?php echo esc_html__( 'Now', 'presshub-ai-editor' ); ?></th><th><?php echo esc_html__( 'After import', 'presshub-ai-editor' ); ?></th></tr></thead>
@@ -2750,7 +2750,7 @@ class PressHub_AI_Settings_Render {
                     </table>
                 <?php endif; ?>
                 <?php if ( $preview['skipped'] ) : ?>
-                    <p class="description"><?php echo self::esc_html_safe( __( 'Skipped:', 'presshub-ai-editor' ) . ' ' . implode( ', ', array_map( static function ( $k, $why ) { return $k . ' (' . $why . ')'; }, array_keys( $preview['skipped'] ), $preview['skipped'] ) ) ); ?></p>
+                    <p class="description"><?php echo esc_html( __( 'Skipped:', 'presshub-ai-editor' ) . ' ' . implode( ', ', array_map( static function ( $k, $why ) { return $k . ' (' . $why . ')'; }, array_keys( $preview['skipped'] ), $preview['skipped'] ) ) ); ?></p>
                 <?php endif; ?>
                 <p>
                     <button type="submit" class="button button-primary" form="presshub-settings-apply-form" <?php echo $preview['changes'] ? '' : 'disabled="disabled"'; ?>><?php echo esc_html__( 'Apply import', 'presshub-ai-editor' ); ?></button>
@@ -2793,12 +2793,12 @@ class PressHub_AI_Settings_Render {
     public function render_switch_field( string $option, string $label, string $help = '' ) {
         $on = PressHub_AI_Settings_Storage::get_switch( $option );
         ?>
-        <label for="<?php echo self::esc_attr_safe( $option ); ?>">
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $on ); ?> />
-            <?php echo self::esc_html_safe( $label ); ?>
+        <label for="<?php echo esc_attr( $option ); ?>">
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( true, $on ); ?> />
+            <?php echo esc_html( $label ); ?>
         </label>
         <?php if ( '' !== $help ) : ?>
-            <p class="description"><?php echo self::esc_html_safe( $help ); ?></p>
+            <p class="description"><?php echo esc_html( $help ); ?></p>
         <?php endif; ?>
         <?php
     }
@@ -2948,12 +2948,12 @@ class PressHub_AI_Settings_Render {
                     <th scope="row"><?php echo esc_html__( 'Memory Retention Window (days)', 'presshub-ai-editor' ); ?></th>
                     <td>
                         <p class="description"><?php
-                        echo self::esc_html_safe( sprintf(
+                        echo esc_html( sprintf(
                             /* translators: %d: days */
                             __( 'Kept for %d days. Every retention period is set in one table under Site & system.', 'presshub-ai-editor' ),
                             (int) PressHub_AI_Settings_Storage::get_memory_retention_days()
                         ) );
-                        ?> <a href="<?php echo self::esc_attr_safe( PressHub_Settings_Sections::url( 'site-system', 'logging-retention' ) ); ?>"><?php echo esc_html__( 'Change in Logging & retention', 'presshub-ai-editor' ); ?></a></p>
+                        ?> <a href="<?php echo esc_attr( PressHub_Settings_Sections::url( 'site-system', 'logging-retention' ) ); ?>"><?php echo esc_html__( 'Change in Logging & retention', 'presshub-ai-editor' ); ?></a></p>
                     </td>
                 </tr>
                 <tr>
@@ -3026,7 +3026,7 @@ class PressHub_AI_Settings_Render {
                     <td>
                         <?php $this->render_switch_field( 'presshub_ai_pool_cleanup_enabled', __( 'Drop old and duplicate articles before curation', 'presshub-ai-editor' ), __( 'The curator reads fewer, fresher articles. Default: on.', 'presshub-ai-editor' ) ); ?>
                         <p><label for="presshub_ai_pool_max_age_hours"><?php echo esc_html__( 'Oldest article kept (h)', 'presshub-ai-editor' ); ?></label>
-                            <input type="number" min="1" max="720" name="presshub_ai_pool_max_age_hours" id="presshub_ai_pool_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $S::get_pool_max_age_hours() ); ?>" class="small-text" />
+                            <input type="number" min="1" max="720" name="presshub_ai_pool_max_age_hours" id="presshub_ai_pool_max_age_hours" value="<?php echo esc_attr( (string) $S::get_pool_max_age_hours() ); ?>" class="small-text" />
                             <span class="description"><?php echo esc_html__( '1 to 720 hours. Default: 48.', 'presshub-ai-editor' ); ?></span></p>
                     </td>
                 </tr>
@@ -3039,20 +3039,20 @@ class PressHub_AI_Settings_Render {
                     <tr>
                         <th scope="row"><label for="presshub_ai_pool_duplicate_similarity"><?php echo esc_html__( 'Duplicate similarity (0.1–1)', 'presshub-ai-editor' ); ?></label></th>
                         <td>
-                            <input type="number" min="0.1" max="1" step="0.05" name="presshub_ai_pool_duplicate_similarity" id="presshub_ai_pool_duplicate_similarity" value="<?php echo self::esc_attr_safe( (string) $S::get_pool_duplicate_similarity() ); ?>" class="small-text" />
+                            <input type="number" min="0.1" max="1" step="0.05" name="presshub_ai_pool_duplicate_similarity" id="presshub_ai_pool_duplicate_similarity" value="<?php echo esc_attr( (string) $S::get_pool_duplicate_similarity() ); ?>" class="small-text" />
                             <p class="description"><?php echo esc_html__( 'How alike two articles must be to count as the same story. Lower drops more articles. Default: 0.6.', 'presshub-ai-editor' ); ?></p>
                         </td>
                     </tr>
                     <?php foreach ( $S::context_budget_options() as $option => $defaults ) : ?>
                         <?php $current = $S::get_context_budgets( $option, $defaults ); ?>
                         <tr>
-                            <th scope="row"><?php echo self::esc_html_safe( sprintf( __( '%s context per AI task (characters)', 'presshub-ai-editor' ), $budget_names[ $option ] ?? $option ) ); ?></th>
+                            <th scope="row"><?php echo esc_html( sprintf( __( '%s context per AI task (characters)', 'presshub-ai-editor' ), $budget_names[ $option ] ?? $option ) ); ?></th>
                             <td>
                                 <?php foreach ( $defaults as $task => $default ) : ?>
                                     <?php $field_id = $option . '_' . trim( $task, '_' ); ?>
-                                    <label for="<?php echo self::esc_attr_safe( $field_id ); ?>" class="ph-display-inline-block ph-min-width-12em ph-margin-0-12px-6px-0">
-                                        <?php echo self::esc_html_safe( $task_names[ $task ] ?? $task ); ?>
-                                        <input type="number" min="0" max="20000" step="1" name="<?php echo self::esc_attr_safe( $option . '[' . $task . ']' ); ?>" id="<?php echo self::esc_attr_safe( $field_id ); ?>" value="<?php echo self::esc_attr_safe( (string) ( $current[ $task ] ?? $default ) ); ?>" class="ph-width-6em small-text" />
+                                    <label for="<?php echo esc_attr( $field_id ); ?>" class="ph-display-inline-block ph-min-width-12em ph-margin-0-12px-6px-0">
+                                        <?php echo esc_html( $task_names[ $task ] ?? $task ); ?>
+                                        <input type="number" min="0" max="20000" step="1" name="<?php echo esc_attr( $option . '[' . $task . ']' ); ?>" id="<?php echo esc_attr( $field_id ); ?>" value="<?php echo esc_attr( (string) ( $current[ $task ] ?? $default ) ); ?>" class="ph-width-6em small-text" />
                                     </label>
                                 <?php endforeach; ?>
                                 <p class="description"><?php echo self::esc_html_safe( sprintf( __( 'Most characters of %s added to each kind of AI call. 0 leaves that task without them.', 'presshub-ai-editor' ), strtolower( $budget_names[ $option ] ?? $option ) ) ); ?></p>
@@ -3130,17 +3130,17 @@ class PressHub_AI_Settings_Render {
         $selected = (string) get_option( $option, '' );
         $presets  = class_exists( 'PressHub_AI_Preset_Store' ) ? PressHub_AI_Preset_Store::get_plugin_defaults() : [];
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <option value="" <?php echo '' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Standard Conversational (Default)', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <option value="" <?php echo '' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'Standard Conversational (Default)', 'presshub-ai-editor' ); ?></option>
             <?php foreach ( $presets as $preset ) : ?>
                 <?php if ( ! empty( $preset['enabled'] ) ) : ?>
-                    <option value="<?php echo self::esc_attr_safe( $preset['slug'] ); ?>" <?php echo $selected === $preset['slug'] ? 'selected="selected"' : ''; ?>>
-                        <?php echo self::esc_html_safe( $preset['name'] ); ?> (<?php echo self::esc_html_safe( $preset['slug'] ); ?>)
+                    <option value="<?php echo esc_attr( $preset['slug'] ); ?>" <?php echo $selected === $preset['slug'] ? 'selected="selected"' : ''; ?>>
+                        <?php echo esc_html( $preset['name'] ); ?> (<?php echo esc_html( $preset['slug'] ); ?>)
                     </option>
                 <?php endif; ?>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo __( 'Instruction preset the podcast scriptwriter follows when it writes the dialogue. Default: Standard Conversational.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Instruction preset the podcast scriptwriter follows when it writes the dialogue. Default: Standard Conversational.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -3148,12 +3148,12 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_target_duration';
         $selected = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_target_duration() );
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <option value="3_min" <?php echo '3_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( '3 Minutes (~450 words, 6-8 dialogue turns)', 'presshub-ai-editor' ); ?></option>
-            <option value="5_min" <?php echo '5_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( '5 Minutes (~750 words, 12-15 dialogue turns)', 'presshub-ai-editor' ); ?></option>
-            <option value="10_min" <?php echo '10_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( '10 Minutes (~1500 words, 20+ dialogue turns)', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <option value="3_min" <?php echo '3_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( '3 Minutes (~450 words, 6-8 dialogue turns)', 'presshub-ai-editor' ); ?></option>
+            <option value="5_min" <?php echo '5_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( '5 Minutes (~750 words, 12-15 dialogue turns)', 'presshub-ai-editor' ); ?></option>
+            <option value="10_min" <?php echo '10_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( '10 Minutes (~1500 words, 20+ dialogue turns)', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Target duration and word budget pacing for daily podcast synthesis.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Target duration and word budget pacing for daily podcast synthesis.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -3192,25 +3192,25 @@ class PressHub_AI_Settings_Render {
             <th scope="row"><label for="presshub_ai_press_inbox_folder"><?php echo esc_html__( 'Folders', 'presshub-ai-editor' ); ?></label></th>
             <td>
                 <label for="presshub_ai_press_inbox_folder"><?php echo esc_html__( 'Read from', 'presshub-ai-editor' ); ?></label>
-                <input type="text" name="presshub_ai_press_inbox_folder" id="presshub_ai_press_inbox_folder" value="<?php echo self::esc_attr_safe( $folder ); ?>" class="ph-width-12em regular-text code" />
+                <input type="text" name="presshub_ai_press_inbox_folder" id="presshub_ai_press_inbox_folder" value="<?php echo esc_attr( $folder ); ?>" class="ph-width-12em regular-text code" />
                 <label for="presshub_ai_press_inbox_processed_folder" class="ph-margin-left-8px"><?php echo esc_html__( 'Move used emails to', 'presshub-ai-editor' ); ?></label>
-                <input type="text" name="presshub_ai_press_inbox_processed_folder" id="presshub_ai_press_inbox_processed_folder" value="<?php echo self::esc_attr_safe( $processed ); ?>" class="ph-width-12em regular-text code" />
+                <input type="text" name="presshub_ai_press_inbox_processed_folder" id="presshub_ai_press_inbox_processed_folder" value="<?php echo esc_attr( $processed ); ?>" class="ph-width-12em regular-text code" />
                 <p class="description"><?php echo esc_html__( 'The processed folder is created if it does not exist. Emails that are skipped (sender not allowed, too old, too large) stay in the inbox, marked as read.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
             <th scope="row"><label for="presshub_ai_press_inbox_allowed_senders"><?php echo esc_html__( 'Allowed Senders', 'presshub-ai-editor' ); ?></label></th>
             <td>
-                <textarea name="presshub_ai_press_inbox_allowed_senders" id="presshub_ai_press_inbox_allowed_senders" rows="4" class="large-text code" placeholder="pio.gov.cy&#10;police.gov.cy&#10;someone@example.com"><?php echo self::esc_html_safe( $senders ); ?></textarea>
+                <textarea name="presshub_ai_press_inbox_allowed_senders" id="presshub_ai_press_inbox_allowed_senders" rows="4" class="large-text code" placeholder="pio.gov.cy&#10;police.gov.cy&#10;someone@example.com"><?php echo esc_html( $senders ); ?></textarea>
                 <p class="description"><?php echo esc_html__( 'One address or domain per line (a domain also covers its subdomains). Leave empty to accept every sender.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
             <th scope="row"><?php echo esc_html__( 'Inbox Limits', 'presshub-ai-editor' ); ?></th>
             <td>
-                <label><?php echo esc_html__( 'Max emails per harvest', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="100" name="presshub_ai_press_inbox_max_messages" id="presshub_ai_press_inbox_max_messages" value="<?php echo self::esc_attr_safe( (string) $max_msgs ); ?>" class="small-text" /></label>
-                &nbsp; <label><?php echo esc_html__( 'Ignore emails older than (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="720" name="presshub_ai_press_inbox_max_age_hours" id="presshub_ai_press_inbox_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
-                <br /><label><?php echo esc_html__( 'Max attachment size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="25" name="presshub_ai_press_inbox_max_attachment_mb" id="presshub_ai_press_inbox_max_attachment_mb" value="<?php echo self::esc_attr_safe( (string) $max_mb ); ?>" class="small-text" /></label>
+                <label><?php echo esc_html__( 'Max emails per harvest', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="100" name="presshub_ai_press_inbox_max_messages" id="presshub_ai_press_inbox_max_messages" value="<?php echo esc_attr( (string) $max_msgs ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Ignore emails older than (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="720" name="presshub_ai_press_inbox_max_age_hours" id="presshub_ai_press_inbox_max_age_hours" value="<?php echo esc_attr( (string) $max_age ); ?>" class="small-text" /></label>
+                <br /><label><?php echo esc_html__( 'Max attachment size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="25" name="presshub_ai_press_inbox_max_attachment_mb" id="presshub_ai_press_inbox_max_attachment_mb" value="<?php echo esc_attr( (string) $max_mb ); ?>" class="small-text" /></label>
                 <p><label><input type="checkbox" name="presshub_ai_press_inbox_extract_attachments" id="presshub_ai_press_inbox_extract_attachments" value="1" <?php checked( $extract ); ?> /> <?php echo esc_html__( 'Read attachments (PDF and images through Gemini, Word directly)', 'presshub-ai-editor' ); ?></label></p>
             </td>
         </tr>
@@ -3233,9 +3233,9 @@ class PressHub_AI_Settings_Render {
         <tr>
             <th scope="row"><label for="presshub_ai_press_inbox_host"><?php echo esc_html__( 'Incoming Mail Server (IMAP)', 'presshub-ai-editor' ); ?></label></th>
             <td>
-                <input type="text" name="presshub_ai_press_inbox_host" id="presshub_ai_press_inbox_host" value="<?php echo self::esc_attr_safe( $host ); ?>" class="regular-text code" placeholder="presshub.cy" />
+                <input type="text" name="presshub_ai_press_inbox_host" id="presshub_ai_press_inbox_host" value="<?php echo esc_attr( $host ); ?>" class="regular-text code" placeholder="presshub.cy" />
                 <label for="presshub_ai_press_inbox_port" class="ph-margin-left-8px"><?php echo esc_html__( 'Port', 'presshub-ai-editor' ); ?></label>
-                <input type="number" min="1" max="65535" name="presshub_ai_press_inbox_port" id="presshub_ai_press_inbox_port" value="<?php echo self::esc_attr_safe( (string) $port ); ?>" class="small-text" />
+                <input type="number" min="1" max="65535" name="presshub_ai_press_inbox_port" id="presshub_ai_press_inbox_port" value="<?php echo esc_attr( (string) $port ); ?>" class="small-text" />
                 <select name="presshub_ai_press_inbox_encryption" id="presshub_ai_press_inbox_encryption">
                     <option value="ssl" <?php selected( $encryption, 'ssl' ); ?>><?php echo esc_html__( 'SSL/TLS (port 993)', 'presshub-ai-editor' ); ?></option>
                     <option value="tls" <?php selected( $encryption, 'tls' ); ?>><?php echo esc_html__( 'STARTTLS (port 143)', 'presshub-ai-editor' ); ?></option>
@@ -3246,7 +3246,7 @@ class PressHub_AI_Settings_Render {
         </tr>
         <tr>
             <th scope="row"><label for="presshub_ai_press_inbox_username"><?php echo esc_html__( 'Mailbox Username', 'presshub-ai-editor' ); ?></label></th>
-            <td><input type="text" name="presshub_ai_press_inbox_username" id="presshub_ai_press_inbox_username" value="<?php echo self::esc_attr_safe( $username ); ?>" class="regular-text" autocomplete="off" placeholder="press@presshub.cy" />
+            <td><input type="text" name="presshub_ai_press_inbox_username" id="presshub_ai_press_inbox_username" value="<?php echo esc_attr( $username ); ?>" class="regular-text" autocomplete="off" placeholder="press@presshub.cy" />
                 <?php self::registry_help( 'presshub_ai_press_inbox_username' ); ?>
             </td>
         </tr>
@@ -3268,7 +3268,7 @@ class PressHub_AI_Settings_Render {
         </tr>
         <tr>
             <th scope="row"><label for="presshub_ai_press_inbox_timeout"><?php echo esc_html__( 'Connection timeout', 'presshub-ai-editor' ); ?></label></th>
-            <td><input type="number" min="5" max="120" name="presshub_ai_press_inbox_timeout" id="presshub_ai_press_inbox_timeout" value="<?php echo self::esc_attr_safe( (string) $timeout ); ?>" class="small-text" /> <?php echo esc_html__( 'seconds', 'presshub-ai-editor' ); ?></td>
+            <td><input type="number" min="5" max="120" name="presshub_ai_press_inbox_timeout" id="presshub_ai_press_inbox_timeout" value="<?php echo esc_attr( (string) $timeout ); ?>" class="small-text" /> <?php echo esc_html__( 'seconds', 'presshub-ai-editor' ); ?></td>
         </tr>
         <tr>
             <th scope="row"><?php echo esc_html__( 'Status', 'presshub-ai-editor' ); ?></th>
@@ -3331,23 +3331,23 @@ class PressHub_AI_Settings_Render {
         <tr>
             <th scope="row"><?php echo esc_html__( 'Scan Schedule', 'presshub-ai-editor' ); ?></th>
             <td>
-                <label><?php echo esc_html__( 'Scan every (minutes)', 'presshub-ai-editor' ); ?> <input type="number" min="30" max="1440" name="presshub_ai_social_monitor_interval_min" id="presshub_ai_social_monitor_interval_min" value="<?php echo self::esc_attr_safe( (string) $interval ); ?>" class="small-text" /></label>
-                &nbsp; <label><?php echo esc_html__( 'Ignore posts older than (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="168" name="presshub_ai_social_monitor_max_age_hours" id="presshub_ai_social_monitor_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
+                <label><?php echo esc_html__( 'Scan every (minutes)', 'presshub-ai-editor' ); ?> <input type="number" min="30" max="1440" name="presshub_ai_social_monitor_interval_min" id="presshub_ai_social_monitor_interval_min" value="<?php echo esc_attr( (string) $interval ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Ignore posts older than (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="168" name="presshub_ai_social_monitor_max_age_hours" id="presshub_ai_social_monitor_max_age_hours" value="<?php echo esc_attr( (string) $max_age ); ?>" class="small-text" /></label>
                 <p class="description"><?php echo esc_html__( 'An extra scan is also requested in the 30 minutes before each scheduled harvest. Fewer scans mean fewer page visits and less risk for the reader accounts.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
             <th scope="row"><?php echo esc_html__( 'Post Limits', 'presshub-ai-editor' ); ?></th>
             <td>
-                <label><?php echo esc_html__( 'Max new posts per account per scan', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="50" name="presshub_ai_social_monitor_max_posts_per_account" id="presshub_ai_social_monitor_max_posts_per_account" value="<?php echo self::esc_attr_safe( (string) $per_acct ); ?>" class="small-text" /></label>
-                &nbsp; <label><?php echo esc_html__( 'Max posts per harvest', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="100" name="presshub_ai_social_monitor_max_posts_per_harvest" id="presshub_ai_social_monitor_max_posts_per_harvest" value="<?php echo self::esc_attr_safe( (string) $per_run ); ?>" class="small-text" /></label>
+                <label><?php echo esc_html__( 'Max new posts per account per scan', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="50" name="presshub_ai_social_monitor_max_posts_per_account" id="presshub_ai_social_monitor_max_posts_per_account" value="<?php echo esc_attr( (string) $per_acct ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Max posts per harvest', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="100" name="presshub_ai_social_monitor_max_posts_per_harvest" id="presshub_ai_social_monitor_max_posts_per_harvest" value="<?php echo esc_attr( (string) $per_run ); ?>" class="small-text" /></label>
                 <p class="description"><?php echo esc_html__( 'Newest posts are used first. They are placed before the web articles, so keep this below the "Maximum Articles Sent to Curation LLM" setting.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
             <th scope="row"><label for="presshub_ai_social_monitor_x_list_url"><?php echo esc_html__( 'X List (optional)', 'presshub-ai-editor' ); ?></label></th>
             <td>
-                <input type="url" name="presshub_ai_social_monitor_x_list_url" id="presshub_ai_social_monitor_x_list_url" value="<?php echo self::esc_attr_safe( $list_url ); ?>" class="regular-text code" placeholder="https://x.com/i/lists/1234567890" />
+                <input type="url" name="presshub_ai_social_monitor_x_list_url" id="presshub_ai_social_monitor_x_list_url" value="<?php echo esc_attr( $list_url ); ?>" class="regular-text code" placeholder="https://x.com/i/lists/1234567890" />
                 <p class="description"><?php echo esc_html__( 'A private List on the reader account that contains the monitored X accounts. The worker then reads one page instead of one per account. When this is set, profiles are not visited, so every monitored X source must be in the List. Accounts in the List that are not News Sources are ignored.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
@@ -3355,8 +3355,8 @@ class PressHub_AI_Settings_Render {
             <th scope="row"><?php echo esc_html__( 'Videos', 'presshub-ai-editor' ); ?></th>
             <td>
                 <label><input type="checkbox" name="presshub_ai_social_monitor_transcribe_videos" id="presshub_ai_social_monitor_transcribe_videos" value="1" <?php checked( $transcribe ); ?> /> <?php echo esc_html__( 'Transcribe and describe videos with Gemini', 'presshub-ai-editor' ); ?></label>
-                <br /><label><?php echo esc_html__( 'Skip videos longer than (seconds)', 'presshub-ai-editor' ); ?> <input type="number" min="10" max="600" name="presshub_ai_social_monitor_max_video_seconds" id="presshub_ai_social_monitor_max_video_seconds" value="<?php echo self::esc_attr_safe( (string) $max_secs ); ?>" class="small-text" /></label>
-                &nbsp; <label><?php echo esc_html__( 'Max video file size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_monitor_max_video_mb" id="presshub_ai_social_monitor_max_video_mb" value="<?php echo self::esc_attr_safe( (string) $max_mb ); ?>" class="small-text" /></label>
+                <br /><label><?php echo esc_html__( 'Skip videos longer than (seconds)', 'presshub-ai-editor' ); ?> <input type="number" min="10" max="600" name="presshub_ai_social_monitor_max_video_seconds" id="presshub_ai_social_monitor_max_video_seconds" value="<?php echo esc_attr( (string) $max_secs ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Max video file size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_monitor_max_video_mb" id="presshub_ai_social_monitor_max_video_mb" value="<?php echo esc_attr( (string) $max_mb ); ?>" class="small-text" /></label>
                 <p class="description"><?php echo esc_html__( 'Needs a Gemini provider. Gemini accepts inline files up to about 20 MB; the worker picks the smallest X video quality that fits.', 'presshub-ai-editor' ); ?></p>
                 <p class="description"><?php echo esc_html__( 'Longer videos: a worker set up with local transcription (whisper.cpp, see the worker README) transcribes them on its own machine and sends only the text. The harvest waits up to an hour for those transcripts.', 'presshub-ai-editor' ); ?></p>
             </td>
@@ -3432,7 +3432,7 @@ class PressHub_AI_Settings_Render {
             <th scope="row"><label for="presshub_ai_social_trending_enabled"><?php echo esc_html__( 'Publish Trending Roundup', 'presshub-ai-editor' ); ?></label></th>
             <td>
                 <label><input type="checkbox" name="presshub_ai_social_trending_enabled" id="presshub_ai_social_trending_enabled" value="1" <?php checked( $enabled ); ?> /> <?php echo esc_html__( 'Collect trending Cyprus posts and publish the roundup', 'presshub-ai-editor' ); ?></label>
-                &nbsp; <label><?php echo esc_html__( 'Refresh every (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="48" name="presshub_ai_social_trending_interval_hours" id="presshub_ai_social_trending_interval_hours" value="<?php echo self::esc_attr_safe( (string) $interval ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Refresh every (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="48" name="presshub_ai_social_trending_interval_hours" id="presshub_ai_social_trending_interval_hours" value="<?php echo esc_attr( (string) $interval ); ?>" class="small-text" /></label>
                 <?php if ( $enabled && '' !== $run_url ) : ?>
                     &nbsp; <a class="button" href="<?php echo esc_url( $run_url ); ?>"><?php echo esc_html__( 'Refresh now', 'presshub-ai-editor' ); ?></a>
                 <?php endif; ?>
@@ -3443,7 +3443,7 @@ class PressHub_AI_Settings_Render {
             <th scope="row"><?php echo esc_html__( 'Platforms', 'presshub-ai-editor' ); ?></th>
             <td>
                 <?php foreach ( $labels as $p => $label ) : ?>
-                    <label class="ph-display-block"><input type="checkbox" name="presshub_ai_social_trending_platform_<?php echo self::esc_attr_safe( $p ); ?>" id="presshub_ai_social_trending_platform_<?php echo self::esc_attr_safe( $p ); ?>" value="1" <?php checked( in_array( $p, $platforms, true ) ); ?> /> <?php echo esc_html( $label ); ?></label>
+                    <label class="ph-display-block"><input type="checkbox" name="presshub_ai_social_trending_platform_<?php echo esc_attr( $p ); ?>" id="presshub_ai_social_trending_platform_<?php echo esc_attr( $p ); ?>" value="1" <?php checked( in_array( $p, $platforms, true ) ); ?> /> <?php echo esc_html( $label ); ?></label>
                 <?php endforeach; ?>
             </td>
         </tr>
@@ -3479,18 +3479,18 @@ class PressHub_AI_Settings_Render {
         <tr>
             <th scope="row"><?php echo esc_html__( 'Selection', 'presshub-ai-editor' ); ?></th>
             <td>
-                <label><?php echo esc_html__( 'Posts in the roundup', 'presshub-ai-editor' ); ?> <input type="number" min="3" max="50" name="presshub_ai_social_trending_max_items" id="presshub_ai_social_trending_max_items" value="<?php echo self::esc_attr_safe( (string) $max_items ); ?>" class="small-text" /></label>
-                &nbsp; <label><?php echo esc_html__( 'Max per platform', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_trending_max_per_platform" id="presshub_ai_social_trending_max_per_platform" value="<?php echo self::esc_attr_safe( (string) $per_plat ); ?>" class="small-text" /></label>
-                <br /><label><?php echo esc_html__( 'Only posts from the last (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="72" name="presshub_ai_social_trending_max_age_hours" id="presshub_ai_social_trending_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
-                &nbsp; <label><?php echo esc_html__( 'Minimum engagement', 'presshub-ai-editor' ); ?> <input type="number" min="0" max="100000" name="presshub_ai_social_trending_min_engagement" id="presshub_ai_social_trending_min_engagement" value="<?php echo self::esc_attr_safe( (string) $min_eng ); ?>" class="small-text" /></label>
-                <br /><label for="presshub_ai_social_trending_max_per_account"><?php echo esc_html__( 'Trending posts per account', 'presshub-ai-editor' ); ?></label> <input type="number" min="1" max="10" name="presshub_ai_social_trending_max_per_account" id="presshub_ai_social_trending_max_per_account" value="<?php echo self::esc_attr_safe( (string) $per_acct ); ?>" class="small-text" />
+                <label><?php echo esc_html__( 'Posts in the roundup', 'presshub-ai-editor' ); ?> <input type="number" min="3" max="50" name="presshub_ai_social_trending_max_items" id="presshub_ai_social_trending_max_items" value="<?php echo esc_attr( (string) $max_items ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Max per platform', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_trending_max_per_platform" id="presshub_ai_social_trending_max_per_platform" value="<?php echo esc_attr( (string) $per_plat ); ?>" class="small-text" /></label>
+                <br /><label><?php echo esc_html__( 'Only posts from the last (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="72" name="presshub_ai_social_trending_max_age_hours" id="presshub_ai_social_trending_max_age_hours" value="<?php echo esc_attr( (string) $max_age ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Minimum engagement', 'presshub-ai-editor' ); ?> <input type="number" min="0" max="100000" name="presshub_ai_social_trending_min_engagement" id="presshub_ai_social_trending_min_engagement" value="<?php echo esc_attr( (string) $min_eng ); ?>" class="small-text" /></label>
+                <br /><label for="presshub_ai_social_trending_max_per_account"><?php echo esc_html__( 'Trending posts per account', 'presshub-ai-editor' ); ?></label> <input type="number" min="1" max="10" name="presshub_ai_social_trending_max_per_account" id="presshub_ai_social_trending_max_per_account" value="<?php echo esc_attr( (string) $per_acct ); ?>" class="small-text" />
                 <p class="description"><?php echo esc_html__( 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. "Trending posts per account" caps how many posts one account gets on each platform (default 1), and a story that several posts share (same link or same opening text) is shown once.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
             <th scope="row"><label for="presshub_ai_social_trending_share_after_hour"><?php echo esc_html__( 'Publish trending roundups from (hour)', 'presshub-ai-editor' ); ?></label></th>
             <td>
-                <input type="number" min="0" max="23" name="presshub_ai_social_trending_share_after_hour" id="presshub_ai_social_trending_share_after_hour" value="<?php echo self::esc_attr_safe( (string) $after_h ); ?>" class="small-text" />
+                <input type="number" min="0" max="23" name="presshub_ai_social_trending_share_after_hour" id="presshub_ai_social_trending_share_after_hour" value="<?php echo esc_attr( (string) $after_h ); ?>" class="small-text" />
                 <p class="description"><?php echo esc_html__( 'A roundup made before this local hour is scheduled for that hour, so its social posts go out when people read. 0 publishes at once. Default: 8.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
@@ -3513,15 +3513,15 @@ class PressHub_AI_Settings_Render {
             <th scope="row"><label for="presshub_ai_social_trending_briefing_enabled"><?php echo esc_html__( 'Use in the Briefing', 'presshub-ai-editor' ); ?></label></th>
             <td>
                 <label><input type="checkbox" name="presshub_ai_social_trending_briefing_enabled" id="presshub_ai_social_trending_briefing_enabled" value="1" <?php checked( $brief_on ); ?> /> <?php echo esc_html__( 'Add the top trending posts to each briefing edition', 'presshub-ai-editor' ); ?></label>
-                &nbsp; <label><?php echo esc_html__( 'Posts per edition', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="15" name="presshub_ai_social_trending_briefing_count" id="presshub_ai_social_trending_briefing_count" value="<?php echo self::esc_attr_safe( (string) $brief_n ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Posts per edition', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="15" name="presshub_ai_social_trending_briefing_count" id="presshub_ai_social_trending_briefing_count" value="<?php echo esc_attr( (string) $brief_n ); ?>" class="small-text" /></label>
                 <p class="description"><?php echo esc_html__( 'The best posts from the roundups since the last edition go into the harvest as one item, "What Cyprus is talking about on social media", marked as public conversation rather than verified news. The brief and the podcast get one short social segment from it. Each post is used once; posts by monitored accounts and by the news sites in the source list are left out, since those already reach the harvest.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
             <th scope="row"><?php echo esc_html__( 'Roundup Post', 'presshub-ai-editor' ); ?></th>
             <td>
-                <label><?php echo esc_html__( 'Category', 'presshub-ai-editor' ); ?> <input type="text" name="presshub_ai_social_trending_category" id="presshub_ai_social_trending_category" value="<?php echo self::esc_attr_safe( $category ); ?>" class="regular-text" /></label>
-                <br /><label><?php echo esc_html__( 'Title', 'presshub-ai-editor' ); ?> <input type="text" name="presshub_ai_social_trending_title" id="presshub_ai_social_trending_title" value="<?php echo self::esc_attr_safe( $title ); ?>" class="regular-text" /></label>
+                <label><?php echo esc_html__( 'Category', 'presshub-ai-editor' ); ?> <input type="text" name="presshub_ai_social_trending_category" id="presshub_ai_social_trending_category" value="<?php echo esc_attr( $category ); ?>" class="regular-text" /></label>
+                <br /><label><?php echo esc_html__( 'Title', 'presshub-ai-editor' ); ?> <input type="text" name="presshub_ai_social_trending_title" id="presshub_ai_social_trending_title" value="<?php echo esc_attr( $title ); ?>" class="regular-text" /></label>
                 <br /><label><?php echo esc_html__( 'Each refresh', 'presshub-ai-editor' ); ?>
                     <select name="presshub_ai_social_trending_post_mode" id="presshub_ai_social_trending_post_mode">
                         <option value="daily" <?php selected( $mode, 'daily' ); ?>><?php echo esc_html__( 'updates the day\'s post (new post each day)', 'presshub-ai-editor' ); ?></option>
@@ -3565,9 +3565,9 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_log_tts_payloads';
         $value  = PressHub_AI_Settings_Storage::get_log_tts_payloads();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label>
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
             <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to the protected log folder (tts channel).', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
@@ -3580,9 +3580,9 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_social_meta_enabled';
         $value  = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_social_meta_enabled() : true;
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label>
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
             <?php echo esc_html__( 'Output OpenGraph, Twitter Card, and meta description tags in wp_head.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
@@ -3595,9 +3595,9 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_social_meta_all_posts';
         $value  = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_social_meta_all_posts() : true;
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label>
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
             <?php echo esc_html__( 'Apply to all published single posts (Recommended if you do not use Yoast or RankMath).', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
@@ -3610,7 +3610,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_host_count';
         $value  = PressHub_AI_Settings_Storage::get_briefing_host_count();
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
             <option value="1" <?php echo 1 === $value ? 'selected="selected"' : ''; ?>>
                 <?php echo esc_html__( '1 Presenter (Solo Anchor / Monologue)', 'presshub-ai-editor' ); ?>
             </option>
@@ -3631,8 +3631,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_host_female';
         $value  = PressHub_AI_Settings_Storage::get_briefing_host_female();
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Name of the lead presenter (Presenter 1). Default: Μαρία.', 'presshub-ai-editor' ); ?></p>
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Name of the lead presenter (Presenter 1). Default: Μαρία.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -3640,8 +3640,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_host_male';
         $value  = PressHub_AI_Settings_Storage::get_briefing_host_male();
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Name of the co-host / commentator (Presenter 2). Default: Νίκος.', 'presshub-ai-editor' ); ?></p>
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Name of the co-host / commentator (Presenter 2). Default: Νίκος.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -3734,8 +3734,8 @@ class PressHub_AI_Settings_Render {
         $checked = PressHub_AI_Settings_Storage::get_briefing_audio_split_by_topic();
         ?>
         <label>
-            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
+            <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
             <?php echo esc_html__( 'Generate audio separately for each topic and stitch seamlessly (Recommended)', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
@@ -3782,10 +3782,10 @@ class PressHub_AI_Settings_Render {
         }
         ?>
         <div class="ph-display-flex ph-align-items-center ph-gap-8px">
-            <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text presshub-sfx-select" data-audio-url="<?php echo esc_url( $audio_url ); ?>">
+            <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" class="regular-text presshub-sfx-select" data-audio-url="<?php echo esc_url( $audio_url ); ?>">
                 <?php foreach ( $available_sfx as $sfx_key => $sfx_label ) : ?>
-                    <option value="<?php echo self::esc_attr_safe( $sfx_key ); ?>" <?php selected( $value, $sfx_key ); ?>>
-                        <?php echo self::esc_html_safe( $sfx_label ); ?>
+                    <option value="<?php echo esc_attr( $sfx_key ); ?>" <?php selected( $value, $sfx_key ); ?>>
+                        <?php echo esc_html( $sfx_label ); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -3824,13 +3824,13 @@ class PressHub_AI_Settings_Render {
         $female_voices = $voices['female'] ?? [];
         $male_voices   = $voices['male'] ?? [];
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); ?>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- helper escapes every value it returns. ?>
             <?php if ( ! empty( $female_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Female Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $female_voices as $key => $v ) : ?>
-                        <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php selected( $selected, $key ); ?>>
-                            <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                        <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>>
+                            <?php echo esc_html( $v['label'] ?? $key ); ?>
                         </option>
                     <?php endforeach; ?>
                 </optgroup>
@@ -3838,8 +3838,8 @@ class PressHub_AI_Settings_Render {
             <?php if ( ! empty( $male_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Male Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $male_voices as $key => $v ) : ?>
-                        <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php selected( $selected, $key ); ?>>
-                            <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                        <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>>
+                            <?php echo esc_html( $v['label'] ?? $key ); ?>
                         </option>
                     <?php endforeach; ?>
                 </optgroup>
@@ -3859,13 +3859,13 @@ class PressHub_AI_Settings_Render {
         $female_voices = $voices['female'] ?? [];
         $male_voices   = $voices['male'] ?? [];
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); ?>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- helper escapes every value it returns. ?>
             <?php if ( ! empty( $male_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Male Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $male_voices as $key => $v ) : ?>
-                        <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php selected( $selected, $key ); ?>>
-                            <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                        <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>>
+                            <?php echo esc_html( $v['label'] ?? $key ); ?>
                         </option>
                     <?php endforeach; ?>
                 </optgroup>
@@ -3873,8 +3873,8 @@ class PressHub_AI_Settings_Render {
             <?php if ( ! empty( $female_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Female Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $female_voices as $key => $v ) : ?>
-                        <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php selected( $selected, $key ); ?>>
-                            <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                        <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>>
+                            <?php echo esc_html( $v['label'] ?? $key ); ?>
                         </option>
                     <?php endforeach; ?>
                 </optgroup>
@@ -3894,13 +3894,13 @@ class PressHub_AI_Settings_Render {
         $female_voices = $voices['female'] ?? [];
         $male_voices   = $voices['male'] ?? [];
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); ?>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- helper escapes every value it returns. ?>
             <?php if ( ! empty( $male_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Male Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $male_voices as $key => $v ) : ?>
-                        <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php selected( $selected, $key ); ?>>
-                            <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                        <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>>
+                            <?php echo esc_html( $v['label'] ?? $key ); ?>
                         </option>
                     <?php endforeach; ?>
                 </optgroup>
@@ -3908,8 +3908,8 @@ class PressHub_AI_Settings_Render {
             <?php if ( ! empty( $female_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Female Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $female_voices as $key => $v ) : ?>
-                        <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php selected( $selected, $key ); ?>>
-                            <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                        <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, $key ); ?>>
+                            <?php echo esc_html( $v['label'] ?? $key ); ?>
                         </option>
                     <?php endforeach; ?>
                 </optgroup>
@@ -3923,8 +3923,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_voice_speed';
         $value  = (float) get_option( $option, 1.0 );
         ?>
-        <input type="number" min="0.85" max="1.25" step="0.05" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Speaking rate multiplier (0.85 to 1.25). Default 1.00.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="0.85" max="1.25" step="0.05" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Speaking rate multiplier (0.85 to 1.25). Default 1.00.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -3932,8 +3932,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_voice_pitch';
         $value  = (float) get_option( $option, 0.0 );
         ?>
-        <input type="number" min="-4.0" max="4.0" step="0.5" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Voice pitch adjustment (-4.0 to 4.0 semitones). Default 0.0.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="-4.0" max="4.0" step="0.5" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Voice pitch adjustment (-4.0 to 4.0 semitones). Default 0.0.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -3991,7 +3991,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_turn_pause_ms';
         $value  = PressHub_AI_Settings_Storage::get_briefing_tts_turn_pause_ms();
         ?>
-        <input type="number" min="0" max="2000" step="50" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="0" max="2000" step="50" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'Silence duration in milliseconds inserted between consecutive dialogue turns (0 to 2000 ms). Default 250 ms.', 'presshub-ai-editor' ); ?>
         </p>
@@ -4017,7 +4017,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_topic_pause_ms';
         $value  = PressHub_AI_Settings_Storage::get_briefing_tts_topic_pause_ms();
         ?>
-        <input type="number" min="0" max="5000" step="50" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="0" max="5000" step="50" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'Silence duration in milliseconds inserted between podcast topics during audio stitching (0 to 5000 ms). Default 600 ms.', 'presshub-ai-editor' ); ?>
         </p>
@@ -4028,7 +4028,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_request_delay_ms';
         $value  = PressHub_AI_Settings_Storage::get_briefing_tts_request_delay_ms();
         ?>
-        <input type="number" min="0" max="5000" step="50" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="0" max="5000" step="50" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'Throttle delay in milliseconds between consecutive TTS API requests to prevent rate limiting (0 to 5000 ms). Default 250 ms.', 'presshub-ai-editor' ); ?>
         </p>
@@ -4039,7 +4039,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_max_retries';
         $value  = PressHub_AI_Settings_Storage::get_briefing_tts_max_retries();
         ?>
-        <input type="number" min="0" max="5" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="0" max="5" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'Maximum automatic retries upon encountering HTTP 429 rate limit or 5xx server errors during synthesis (0 to 5). Default 2.', 'presshub-ai-editor' ); ?>
         </p>
@@ -4050,7 +4050,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_retry_backoff_ms';
         $value  = PressHub_AI_Settings_Storage::get_briefing_tts_retry_backoff_ms();
         ?>
-        <input type="number" min="500" max="15000" step="500" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="500" max="15000" step="500" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'Initial exponential backoff duration in milliseconds before retrying a failed speech request (500 to 15000 ms). Default 2000 ms. Used for 5xx and connection errors, and for a 429 that carries no retry delay.', 'presshub-ai-editor' ); ?>
         </p>
@@ -4061,7 +4061,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_requests_per_minute';
         $value  = PressHub_AI_Settings_Storage::get_briefing_tts_requests_per_minute();
         ?>
-        <input type="number" min="0" max="600" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="0" max="600" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'Maximum Gemini speech requests per model per minute, shared by podcast synthesis, TikTok narration and the test button. Synthesis waits instead of exceeding it. Set it just below your Google AI Studio limit (Tier 1: 10). 0 disables pacing. Default 9.', 'presshub-ai-editor' ); ?>
         </p>
@@ -4072,7 +4072,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_max_retry_wait_ms';
         $value  = PressHub_AI_Settings_Storage::get_briefing_tts_max_retry_wait_ms();
         ?>
-        <input type="number" min="1000" max="120000" step="1000" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="1000" max="120000" step="1000" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'When Gemini answers 429 with a retry delay ("Please retry in 43s"), synthesis waits that long before retrying, up to this cap (1000 to 120000 ms). Default 60000 ms. Per-day quota errors are never retried.', 'presshub-ai-editor' ); ?>
         </p>
@@ -4083,7 +4083,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_cron_retry_delay_min';
         $value  = PressHub_AI_Settings_Storage::get_briefing_tts_cron_retry_delay_min();
         ?>
-        <input type="number" min="0" max="120" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="0" max="120" step="1" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description">
             <?php echo esc_html__( 'If scheduled audio synthesis fails, retry it once after this many minutes. Turns already synthesized are reused from the cache. Not retried for configuration errors or a per-day quota. 0 disables. Default 5.', 'presshub-ai-editor' ); ?>
         </p>
@@ -4111,14 +4111,14 @@ class PressHub_AI_Settings_Render {
             ];
         }
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
             <?php foreach ( $styles as $key => $style ) : ?>
-                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
-                    <?php echo self::esc_html_safe( $style['label'] ?? ucfirst( $key ) ); ?>
+                <option value="<?php echo esc_attr( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo esc_html( $style['label'] ?? ucfirst( $key ) ); ?>
                 </option>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo __( 'Select emotional tone and delivery cadence for Gemini audio speech synthesis (logosAI system).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Select emotional tone and delivery cadence for Gemini audio speech synthesis (logosAI system).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4126,8 +4126,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_tts_custom_style';
         $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_tts_custom_style() );
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="3" class="large-text" placeholder="<?php echo esc_attr__( 'e.g. Say in an energetic, radio-broadcaster style with rapid pace and enthusiasm in Greek:', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
-        <p class="description"><?php echo __( 'Custom prompt prefix prepended before spoken text when Style is set to "Custom Prompt Instruction".', 'presshub-ai-editor' ); ?></p>
+        <textarea name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" rows="3" class="large-text" placeholder="<?php echo esc_attr__( 'e.g. Say in an energetic, radio-broadcaster style with rapid pace and enthusiasm in Greek:', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <p class="description"><?php echo esc_html__( 'Custom prompt prefix prepended before spoken text when Style is set to "Custom Prompt Instruction".', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4152,10 +4152,10 @@ class PressHub_AI_Settings_Render {
             $selected = 'structured';
         }
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" class="regular-text">
             <?php foreach ( $modes as $key => $mode ) : ?>
-                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
-                    <?php echo self::esc_html_safe( $mode['label'] ); ?>
+                <option value="<?php echo esc_attr( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo esc_html( $mode['label'] ); ?>
                 </option>
             <?php endforeach; ?>
         </select>
@@ -4170,7 +4170,7 @@ class PressHub_AI_Settings_Render {
         $current = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction() : '';
         $default = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::default_briefing_tts_system_instruction() : '';
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="5" class="large-text code" placeholder="<?php echo esc_attr( $default ); ?>"><?php echo esc_textarea( $current ); ?></textarea>
+        <textarea name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" rows="5" class="large-text code" placeholder="<?php echo esc_attr( $default ); ?>"><?php echo esc_textarea( $current ); ?></textarea>
         <p class="description">
             <?php echo esc_html__( 'System instruction template passed to the Gemini model for speech synthesis. Leave empty to use the built-in external default template.', 'presshub-ai-editor' ); ?>
             <br />
@@ -4356,12 +4356,12 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_text_status';
         $selected = (string) get_option( $option, 'pending' );
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <option value="pending" <?php echo 'pending' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Pending Review', 'presshub-ai-editor' ); ?></option>
-            <option value="draft" <?php echo 'draft' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Draft', 'presshub-ai-editor' ); ?></option>
-            <option value="publish" <?php echo 'publish' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Publish Immediately', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <option value="pending" <?php echo 'pending' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'Pending Review', 'presshub-ai-editor' ); ?></option>
+            <option value="draft" <?php echo 'draft' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'Draft', 'presshub-ai-editor' ); ?></option>
+            <option value="publish" <?php echo 'publish' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'Publish Immediately', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Default status for newly generated morning text briefing posts.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Default status for newly generated morning text briefing posts.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4375,14 +4375,14 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_text_title_prefix';
         $value  = PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Πρωινή Ενημέρωση:', 'presshub-ai-editor' ); ?>" />
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Πρωινή Ενημέρωση:', 'presshub-ai-editor' ); ?>" />
         <!-- Issue #92 — translatable description strings must not contain raw HTML tags.
              The previous wording mentioned the curator's &lt;h1&gt; tag literally, which the
              browser parsed as a real heading and which then consumed the rest of the
              &lt;p&gt; paragraph (rendering "already contains it." as an oversized bold
              heading). The fix uses the safe inline-code form so the literal renders
              as documentation, not as a parsed element. -->
-        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Text Story post title (e.g. "Πρωινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Πρωινή Ενημέρωση:". A duplicate-prefix collision guard prevents the same prefix from appearing twice when the curator\'s <code>&lt;h1&gt;</code> headline already contains it.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo wp_kses_post( __( 'Editorial prefix prepended to the generated Text Story post title (e.g. "Πρωινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Πρωινή Ενημέρωση:". A duplicate-prefix collision guard prevents the same prefix from appearing twice when the curator\'s <code>&lt;h1&gt;</code> headline already contains it.', 'presshub-ai-editor' ) ); ?></p>
         <?php
     }
 
@@ -4395,8 +4395,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_text_title_date_format';
         $value  = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" maxlength="30" placeholder="<?php echo esc_attr__( 'e.g. d/m/Y', 'presshub-ai-editor' ); ?>" />
-        <p class="description"><?php echo __( 'date() format appended after the title prefix and headline (e.g. "d/m/Y" → 26/08/2026). Leave blank to omit the date. Default: "d/m/Y". Tokens are validated by PHP\'s date() function before being saved.', 'presshub-ai-editor' ); ?></p>
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="small-text" maxlength="30" placeholder="<?php echo esc_attr__( 'e.g. d/m/Y', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo esc_html__( 'date() format appended after the title prefix and headline (e.g. "d/m/Y" → 26/08/2026). Leave blank to omit the date. Default: "d/m/Y". Tokens are validated by PHP\'s date() function before being saved.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4404,8 +4404,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_noon_text_title_prefix';
         $value  = PressHub_AI_Settings_Storage::get_briefing_noon_text_title_prefix();
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Μεσημβρινή Ενημέρωση:', 'presshub-ai-editor' ); ?>" />
-        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Noon Text Story post title (e.g. "Μεσημβρινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Μεσημβρινή Ενημέρωση:".', 'presshub-ai-editor' ); ?></p>
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Μεσημβρινή Ενημέρωση:', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo esc_html__( 'Editorial prefix prepended to the generated Noon Text Story post title (e.g. "Μεσημβρινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Μεσημβρινή Ενημέρωση:".', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4413,8 +4413,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_podcast_title_prefix';
         $value  = PressHub_AI_Settings_Storage::get_briefing_podcast_title_prefix();
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Πρωινό Podcast Ενημέρωσης - ', 'presshub-ai-editor' ); ?>" />
-        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Morning Podcast post title (e.g. "Πρωινό Podcast Ενημέρωσης - "). Default: "Πρωινό Podcast Ενημέρωσης - ".', 'presshub-ai-editor' ); ?></p>
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Πρωινό Podcast Ενημέρωσης - ', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo esc_html__( 'Editorial prefix prepended to the generated Morning Podcast post title (e.g. "Πρωινό Podcast Ενημέρωσης - "). Default: "Πρωινό Podcast Ενημέρωσης - ".', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4422,8 +4422,8 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_briefing_noon_podcast_title_prefix';
         $value  = PressHub_AI_Settings_Storage::get_briefing_noon_podcast_title_prefix();
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Μεσημβρινό Podcast Ενημέρωσης - ', 'presshub-ai-editor' ); ?>" />
-        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Noon Podcast post title (e.g. "Μεσημβρινό Podcast Ενημέρωσης - "). Default: "Μεσημβρινό Podcast Ενημέρωσης - ".', 'presshub-ai-editor' ); ?></p>
+        <input type="text" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Μεσημβρινό Podcast Ενημέρωσης - ', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo esc_html__( 'Editorial prefix prepended to the generated Noon Podcast post title (e.g. "Μεσημβρινό Podcast Ενημέρωσης - "). Default: "Μεσημβρινό Podcast Ενημέρωσης - ".', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4443,7 +4443,7 @@ class PressHub_AI_Settings_Render {
         $has_images    = ! empty( $ids );
         ?>
         <div class="presshub-image-pool-manager" data-option="<?php echo esc_attr( $option ); ?>">
-            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $sanitized_csv ); ?>" />
+            <input type="hidden" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $sanitized_csv ); ?>" />
 
             <div class="presshub-image-pool-grid">
                 <?php
@@ -4511,11 +4511,11 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_featured_image_source';
         $selected = PressHub_AI_Settings_Storage::get_briefing_featured_image_source();
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
-            <option value="pool" <?php selected( $selected, 'pool' ); ?>><?php echo __( 'Featured Image Pool (Random Selection with Collision Avoidance)', 'presshub-ai-editor' ); ?></option>
-            <option value="auto_generate" <?php selected( $selected, 'auto_generate' ); ?>><?php echo __( 'Automatic AI Image Generation (analyzing article content)', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" class="regular-text">
+            <option value="pool" <?php selected( $selected, 'pool' ); ?>><?php echo esc_html__( 'Featured Image Pool (Random Selection with Collision Avoidance)', 'presshub-ai-editor' ); ?></option>
+            <option value="auto_generate" <?php selected( $selected, 'auto_generate' ); ?>><?php echo esc_html__( 'Automatic AI Image Generation (analyzing article content)', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Choose whether text briefings pick an image randomly from the Featured Image Pool or automatically synthesize a custom editorial image using the configured AI image generator (with automatic fallback to the pool if generation fails).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Choose whether text briefings pick an image randomly from the Featured Image Pool or automatically synthesize a custom editorial image using the configured AI image generator (with automatic fallback to the pool if generation fails).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4659,11 +4659,11 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_podcast_featured_image_source';
         $selected = PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source();
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
-            <option value="pool" <?php selected( $selected, 'pool' ); ?>><?php echo __( 'Featured Image Pool (Random Selection with Collision Avoidance)', 'presshub-ai-editor' ); ?></option>
-            <option value="auto_generate" <?php selected( $selected, 'auto_generate' ); ?>><?php echo __( 'Automatic AI Image Generation (analyzing podcast transcript)', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" class="regular-text">
+            <option value="pool" <?php selected( $selected, 'pool' ); ?>><?php echo esc_html__( 'Featured Image Pool (Random Selection with Collision Avoidance)', 'presshub-ai-editor' ); ?></option>
+            <option value="auto_generate" <?php selected( $selected, 'auto_generate' ); ?>><?php echo esc_html__( 'Automatic AI Image Generation (analyzing podcast transcript)', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Choose whether audio podcast posts pick an image randomly from the Featured Image Pool or automatically synthesize a custom editorial image using the configured AI image generator (with automatic fallback to the pool if generation fails).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Choose whether audio podcast posts pick an image randomly from the Featured Image Pool or automatically synthesize a custom editorial image using the configured AI image generator (with automatic fallback to the pool if generation fails).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4682,12 +4682,12 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_image_aspect_ratio';
         $selected = PressHub_AI_Settings_Storage::get_image_aspect_ratio();
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
-            <option value="16:9" <?php selected( $selected, '16:9' ); ?>><?php echo __( '16:9 Landscape (Recommended for News Featured Images)', 'presshub-ai-editor' ); ?></option>
-            <option value="1:1" <?php selected( $selected, '1:1' ); ?>><?php echo __( '1:1 Square (1024x1024)', 'presshub-ai-editor' ); ?></option>
-            <option value="4:3" <?php selected( $selected, '4:3' ); ?>><?php echo __( '4:3 Standard', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" class="regular-text">
+            <option value="16:9" <?php selected( $selected, '16:9' ); ?>><?php echo esc_html__( '16:9 Landscape (Recommended for News Featured Images)', 'presshub-ai-editor' ); ?></option>
+            <option value="1:1" <?php selected( $selected, '1:1' ); ?>><?php echo esc_html__( '1:1 Square (1024x1024)', 'presshub-ai-editor' ); ?></option>
+            <option value="4:3" <?php selected( $selected, '4:3' ); ?>><?php echo esc_html__( '4:3 Standard', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Target aspect ratio for synthesized featured images.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Target aspect ratio for synthesized featured images.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4760,9 +4760,9 @@ class PressHub_AI_Settings_Render {
         $option  = 'presshub_ai_image_metadata_enabled';
         $enabled = PressHub_AI_Settings_Storage::get_image_metadata_enabled();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label for="presshub_ai_image_metadata_enabled">
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_image_metadata_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_image_metadata_enabled" value="1" <?php checked( true, $enabled ); ?> />
             <?php echo esc_html__( 'Write descriptive Title, Alternative Text, Caption and Description for every AI-generated image.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description"><?php echo esc_html__( 'Default: Enabled. Uses the Article Analysis AI Provider to describe the image in the article\'s language and gives the file a descriptive name, so images are easy to find and reuse in the Media Library.', 'presshub-ai-editor' ); ?></p>
@@ -4773,9 +4773,9 @@ class PressHub_AI_Settings_Render {
         $option  = 'presshub_ai_seo_auto_enabled';
         $enabled = PressHub_AI_Settings_Storage::get_seo_auto_enabled();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label for="presshub_ai_seo_auto_enabled">
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_seo_auto_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_seo_auto_enabled" value="1" <?php checked( true, $enabled ); ?> />
             <?php echo esc_html__( 'Automatically fill tags, meta description and focus keyphrase for Daily Briefing posts, podcasts and AI Co-Author drafts.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description"><?php echo esc_html__( 'Default: Enabled. Briefing and podcast posts get tags and an SEO excerpt when they are created. For co-author drafts the tags and excerpt are added to the editor when you insert the draft, so you can still review them before saving.', 'presshub-ai-editor' ); ?></p>
@@ -4786,9 +4786,9 @@ class PressHub_AI_Settings_Render {
         $option  = 'presshub_ai_briefing_seo_enhance_enabled';
         $enabled = PressHub_AI_Settings_Storage::get_briefing_seo_enhance_enabled();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label for="presshub_ai_briefing_seo_enhance_enabled">
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_briefing_seo_enhance_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_briefing_seo_enhance_enabled" value="1" <?php checked( true, $enabled ); ?> />
             <?php echo esc_html__( 'Shape Daily Briefing posts for search: a title of at most 65 characters, short paragraphs, links to the source articles, and links to related earlier posts.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description"><?php echo esc_html__( 'Default: Enabled. Source links that do not match a harvested article are removed, a "Πηγές" list is added, the first mention of each tag links to its tag page, and a "Διαβάστε επίσης" list links up to 4 related posts.', 'presshub-ai-editor' ); ?></p>
@@ -4799,7 +4799,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_seo_max_tags';
         $value  = PressHub_AI_Settings_Storage::get_seo_max_tags();
         ?>
-        <input type="number" min="1" max="15" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_seo_max_tags" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <input type="number" min="1" max="15" step="1" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_seo_max_tags" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'Upper limit of tags assigned to a post automatically (1 - 15). Default 8. Existing site tags are reused where they fit.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -4808,7 +4808,7 @@ class PressHub_AI_Settings_Render {
         $option  = 'presshub_ai_seo_review_enabled';
         $enabled = PressHub_AI_Settings_Storage::get_seo_review_enabled();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label for="presshub_ai_seo_review_enabled">
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_seo_review_enabled" value="1" <?php checked( true, $enabled ); ?> />
             <?php echo esc_html__( 'Score SEO in the QA review and act on a low score.', 'presshub-ai-editor' ); ?>
@@ -4822,8 +4822,8 @@ class PressHub_AI_Settings_Render {
         $checked = PressHub_AI_Settings_Storage::get_briefing_podcast_include_text();
         ?>
         <label>
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
-            <?php echo __( 'Include full dialogue text in podcast post content (Default: Disabled, audio player only with dialogue managed via the Podcast Editor metabox).', 'presshub-ai-editor' ); ?>
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
+            <?php echo esc_html__( 'Include full dialogue text in podcast post content (Default: Disabled, audio player only with dialogue managed via the Podcast Editor metabox).', 'presshub-ai-editor' ); ?>
         </label>
         <?php
     }
@@ -4832,12 +4832,12 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_podcast_status';
         $selected = (string) get_option( $option, 'pending' );
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <option value="pending" <?php echo 'pending' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Pending Review', 'presshub-ai-editor' ); ?></option>
-            <option value="draft" <?php echo 'draft' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Draft', 'presshub-ai-editor' ); ?></option>
-            <option value="publish" <?php echo 'publish' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Publish Immediately', 'presshub-ai-editor' ); ?></option>
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>">
+            <option value="pending" <?php echo 'pending' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'Pending Review', 'presshub-ai-editor' ); ?></option>
+            <option value="draft" <?php echo 'draft' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'Draft', 'presshub-ai-editor' ); ?></option>
+            <option value="publish" <?php echo 'publish' === $selected ? 'selected="selected"' : ''; ?>><?php echo esc_html__( 'Publish Immediately', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Default status for newly generated podcast posts.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Default status for newly generated podcast posts.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4848,16 +4848,16 @@ class PressHub_AI_Settings_Render {
             : '';
         $value   = (string) get_option( $option, '' );
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use standard Greek editorial curation prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <textarea name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use standard Greek editorial curation prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
         <p>
-            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="">
-                <?php echo __( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
+            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo esc_attr( $option ); ?>" data-default="">
+                <?php echo esc_html__( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
             </button>
-            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
-                <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
+            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo esc_attr( $option ); ?>" data-default="<?php echo esc_attr( $default ); ?>">
+                <?php echo esc_html__( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
             </button>
         </p>
-        <p class="description"><?php echo __( 'Custom system prompt for Greek text story curation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_count}. (Optional: {articles_context} if you prefer articles placed inside the system prompt rather than the user prompt).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Custom system prompt for Greek text story curation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_count}. (Optional: {articles_context} if you prefer articles placed inside the system prompt rather than the user prompt).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4873,7 +4873,7 @@ class PressHub_AI_Settings_Render {
             'conversational_news_reporting'  => __( 'Conversational News Reporting (informal, first-person, opinionated)', 'presshub-ai-editor' ),
         ];
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+        <select name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" class="regular-text">
             <?php foreach ( $styles as $key => $label ) : ?>
                 <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $value, $key ); ?>>
                     <?php echo esc_html( $label ); ?>
@@ -4881,7 +4881,7 @@ class PressHub_AI_Settings_Render {
             <?php endforeach; ?>
         </select>
         <p class="description"><?php
-            echo __( 'Selects the dialogue style template that the podcast producer will use. The per-style override textareas below let you customize each style\'s prompts (3 hosts × 3 styles = 9 override fields).', 'presshub-ai-editor' );
+            echo esc_html__( 'Selects the dialogue style template that the podcast producer will use. The per-style override textareas below let you customize each style\'s prompts (3 hosts × 3 styles = 9 override fields).', 'presshub-ai-editor' );
         ?></p>
         <?php
     }
@@ -4923,7 +4923,7 @@ class PressHub_AI_Settings_Render {
                     }
                     $val_str = (string) $val;
                     ?>
-                    <div id="presshub-pane-<?php echo esc_attr( $style_key ); ?>-<?php echo $host_count_n; ?>" class="presshub-host-pane<?php echo ( 1 === $host_count_n ) ? '' : ' presshub-is-hidden'; ?>">
+                    <div id="presshub-pane-<?php echo esc_attr( $style_key ); ?>-<?php echo (int) $host_count_n; ?>" class="presshub-host-pane<?php echo ( 1 === $host_count_n ) ? '' : ' presshub-is-hidden'; ?>">
                         <textarea name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" rows="10" class="large-text code presshub-prompt-textarea"><?php echo esc_textarea( $val_str ); ?></textarea>
 
                         <p class="ph-margin-top-8px">
@@ -4964,9 +4964,9 @@ class PressHub_AI_Settings_Render {
         $option  = 'presshub_ai_qa_enabled';
         $enabled = PressHub_AI_Settings_Storage::get_qa_enabled();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label for="presshub_ai_qa_enabled">
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_qa_enabled" value="1" <?php checked( true, $enabled ); ?> />
             <?php echo esc_html__( 'Enable automated pre-publication AI editorial QA review gate.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
@@ -4982,9 +4982,9 @@ class PressHub_AI_Settings_Render {
         $option  = 'presshub_ai_qa_include_briefings';
         $enabled = PressHub_AI_Settings_Storage::get_qa_include_briefings();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label for="presshub_ai_qa_include_briefings">
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_include_briefings" value="1" <?php checked( true, $enabled ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_qa_include_briefings" value="1" <?php checked( true, $enabled ); ?> />
             <?php echo esc_html__( 'Subject automated Daily Briefing posts to AI QA evaluation before publishing.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
@@ -5039,7 +5039,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_qa_min_score';
         $value  = PressHub_AI_Settings_Storage::get_qa_min_score();
         ?>
-        <input type="number" min="50" max="100" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_min_score" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <input type="number" min="50" max="100" step="1" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_qa_min_score" value="<?php echo esc_attr( $value ); ?>" class="small-text" />
         <span class="description"><?php echo esc_html__( '/ 100', 'presshub-ai-editor' ); ?></span>
         <p class="description">
             <?php echo esc_html__( 'Minimum editorial score (50-100) required for publication. Articles scoring below this threshold are held in Pending Review. Default: 80.', 'presshub-ai-editor' ); ?>
@@ -5108,9 +5108,9 @@ class PressHub_AI_Settings_Render {
         $option  = 'presshub_ai_qa_notify_editor';
         $enabled = PressHub_AI_Settings_Storage::get_qa_notify_editor();
         ?>
-        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
         <label for="presshub_ai_qa_notify_editor">
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_notify_editor" value="1" <?php checked( true, $enabled ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_qa_notify_editor" value="1" <?php checked( true, $enabled ); ?> />
             <?php echo esc_html__( 'Email the Editor when an article fails QA evaluation and is blocked.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
@@ -5126,9 +5126,9 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_qa_editor_email';
         $value  = (string) get_option( $option, '' );
         ?>
-        <input type="email" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_editor_email" value="<?php echo self::esc_attr_safe( $value ); ?>" placeholder="<?php echo self::esc_attr_safe( get_option( 'admin_email' ) ); ?>" class="regular-text" />
+        <input type="email" name="<?php echo esc_attr( $option ); ?>" id="presshub_ai_qa_editor_email" value="<?php echo esc_attr( $value ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>" class="regular-text" />
         <p class="description">
-            <?php echo esc_html__( 'Recipient email address for QA failure alerts. Leave blank to default to site admin email (', 'presshub-ai-editor' ); ?><code><?php echo self::esc_html_safe( get_option( 'admin_email' ) ); ?></code><?php echo esc_html__( ').', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Recipient email address for QA failure alerts. Leave blank to default to site admin email (', 'presshub-ai-editor' ); ?><code><?php echo esc_html( get_option( 'admin_email' ) ); ?></code><?php echo esc_html__( ').', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }
@@ -5144,17 +5144,17 @@ class PressHub_AI_Settings_Render {
         }
         $default = PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="8" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use the built-in default Daily Briefing QA review prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <textarea name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" rows="8" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use the built-in default Daily Briefing QA review prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
         <p>
-            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="">
-                <?php echo __( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
+            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo esc_attr( $option ); ?>" data-default="">
+                <?php echo esc_html__( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
             </button>
-            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
-                <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
+            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo esc_attr( $option ); ?>" data-default="<?php echo esc_attr( $default ); ?>">
+                <?php echo esc_html__( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
             </button>
         </p>
         <p class="description">
-            <?php echo __( 'User prompt template sent to the QA model when evaluating automated Daily Briefing roundups. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ); ?>
+            <?php echo wp_kses_post( __( 'User prompt template sent to the QA model when evaluating automated Daily Briefing roundups. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ) ); ?>
         </p>
         <?php
     }
@@ -5179,7 +5179,7 @@ class PressHub_AI_Settings_Render {
             <textarea name="presshub_ai_qa_article_prompt" id="presshub_ai_qa_article_prompt" rows="9" class="large-text code presshub-qa-prompt-textarea" placeholder="<?php echo esc_attr__( 'Leave empty to use the built-in default Article QA review prompt...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $article_val ); ?></textarea>
 
             <p class="ph-margin-top-8px">
-                <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="presshub_ai_qa_article_prompt" data-default="<?php echo self::esc_attr_safe( $default_article_prompt ); ?>">
+                <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="presshub_ai_qa_article_prompt" data-default="<?php echo esc_attr( $default_article_prompt ); ?>">
                     <?php echo esc_html__( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
                 </button>
                 <button type="button" class="button button-secondary presshub-reset-prompt" data-target="presshub_ai_qa_article_prompt" data-default="">
@@ -5192,7 +5192,7 @@ class PressHub_AI_Settings_Render {
             </div>
 
             <p class="ph-margin-top-8px description">
-                <?php echo __( 'User prompt template sent to the QA model when evaluating author articles. Evaluates factual clarity, grammar, structure, attribution, and balance. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ); ?>
+                <?php echo wp_kses_post( __( 'User prompt template sent to the QA model when evaluating author articles. Evaluates factual clarity, grammar, structure, attribution, and balance. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ) ); ?>
             </p>
         </div>
 
@@ -5240,19 +5240,6 @@ class PressHub_AI_Settings_Render {
         return PressHub_AI_Provider_Store::mask_key( $key );
     }
 
-    private static function esc_attr_safe( $text ) {
-        if ( function_exists( 'esc_attr' ) ) {
-            return esc_attr( $text );
-        }
-        return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
-    }
-
-    private static function esc_html_safe( $text ) {
-        if ( function_exists( 'esc_html' ) ) {
-            return esc_html( $text );
-        }
-        return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
-    }
     // ------------------------------------------------------------------
     // Issue #132: Editorial Memory Render Fields
     // ------------------------------------------------------------------
@@ -5263,7 +5250,7 @@ class PressHub_AI_Settings_Render {
         ?>
         <label>
             <input type="hidden" name="presshub_ai_memory_enabled_present" value="1" />
-            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <input type="checkbox" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
             <?php echo esc_html__( 'Enable editorial memory stream (recent daily digests and background weekly rollups).', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description"><?php echo esc_html__( 'When disabled, generations use only that day&#39;s harvested articles.', 'presshub-ai-editor' ); ?></p>
@@ -5274,7 +5261,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_memory_daily_days';
         $value  = PressHub_AI_Settings_Storage::get_memory_daily_days();
         ?>
-        <input type="number" min="0" max="14" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="0" max="14" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'Number of recent days covered as daily story digests (0 - 14 days, default: 7).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -5283,7 +5270,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_memory_background_days';
         $value  = PressHub_AI_Settings_Storage::get_memory_background_days();
         ?>
-        <input type="number" min="0" max="90" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="0" max="90" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'Background window covered as weekly rollups (0 - 90 days, >= recent days, default: 30).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -5292,7 +5279,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_memory_briefing_budget_chars';
         $value  = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
         ?>
-        <input type="number" min="0" max="60000" step="100" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="regular-text" />
+        <input type="number" min="0" max="60000" step="100" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="regular-text" />
         <p class="description"><?php echo esc_html__( 'Maximum character budget for memory context injected into daily briefing prompt (0 - 60,000, default: 12,000).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -5301,7 +5288,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_memory_podcast_budget_chars';
         $value  = PressHub_AI_Settings_Storage::get_memory_podcast_budget_chars();
         ?>
-        <input type="number" min="0" max="60000" step="100" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="regular-text" />
+        <input type="number" min="0" max="60000" step="100" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="regular-text" />
         <p class="description"><?php echo esc_html__( 'Maximum character budget for memory context injected into podcast prompt (0 - 60,000, default: 6,000).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
@@ -5310,7 +5297,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_memory_retention_days';
         $value  = PressHub_AI_Settings_Storage::get_memory_retention_days();
         ?>
-        <input type="number" min="30" max="730" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <input type="number" min="30" max="730" name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'Retention period before old memory entries and links are pruned (30 - 730 days, default: 180).', 'presshub-ai-editor' ); ?></p>
         <?php
     }

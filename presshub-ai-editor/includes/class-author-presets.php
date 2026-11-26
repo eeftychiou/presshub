@@ -152,25 +152,25 @@ class PressHub_AI_Author_Presets {
                         <td><code><?php echo esc_html( $preset['slug'] ); ?></code></td>
                         <td class="presshub-preset-text"><?php echo esc_html( PressHub_AI_Preset_UI::excerpt( $preset['instruction_text'], 120 ) ); ?></td>
                         <td>
-                            <button type="button" class="button presshub-preset-edit"<?php echo $control_state; ?>><?php echo esc_html( __( 'Edit', 'presshub-ai-editor' ) ); ?></button>
-                            <button type="button" class="button presshub-preset-delete"<?php echo $control_state; ?>><?php echo esc_html( __( 'Delete', 'presshub-ai-editor' ) ); ?></button>
+                            <button type="button" class="button presshub-preset-edit"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>><?php echo esc_html( __( 'Edit', 'presshub-ai-editor' ) ); ?></button>
+                            <button type="button" class="button presshub-preset-delete"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>><?php echo esc_html( __( 'Delete', 'presshub-ai-editor' ) ); ?></button>
                         </td>
                     </tr>
                     <tr class="presshub-preset-edit-row" style="display:none;">
                         <td colspan="4">
                             <p>
                                 <label><?php echo esc_html( __( 'Name', 'presshub-ai-editor' ) ); ?><br />
-                                    <input type="text" class="presshub-edit-name regular-text" maxlength="80" value="<?php echo esc_attr( $preset['name'] ); ?>"<?php echo $control_state; ?> />
+                                    <input type="text" class="presshub-edit-name regular-text" maxlength="80" value="<?php echo esc_attr( $preset['name'] ); ?>"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?> />
                                 </label>
                             </p>
                             <p>
                                 <label><?php echo esc_html( __( 'Instruction text', 'presshub-ai-editor' ) ); ?><br />
-                                    <textarea class="presshub-edit-text large-text" rows="3" maxlength="4000"<?php echo $control_state; ?>><?php echo esc_textarea( $preset['instruction_text'] ); ?></textarea>
+                                    <textarea class="presshub-edit-text large-text" rows="3" maxlength="4000"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>><?php echo esc_textarea( $preset['instruction_text'] ); ?></textarea>
                                 </label>
                             </p>
                             <p>
-                                <button type="button" class="button button-primary presshub-edit-save"<?php echo $control_state; ?>><?php echo esc_html( __( 'Save', 'presshub-ai-editor' ) ); ?></button>
-                                <button type="button" class="button presshub-edit-cancel"<?php echo $control_state; ?>><?php echo esc_html( __( 'Cancel', 'presshub-ai-editor' ) ); ?></button>
+                                <button type="button" class="button button-primary presshub-edit-save"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>><?php echo esc_html( __( 'Save', 'presshub-ai-editor' ) ); ?></button>
+                                <button type="button" class="button presshub-edit-cancel"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>><?php echo esc_html( __( 'Cancel', 'presshub-ai-editor' ) ); ?></button>
                             </p>
                         </td>
                     </tr>
@@ -183,31 +183,31 @@ class PressHub_AI_Author_Presets {
             <form id="presshub-ai-author-add-preset-form">
                 <p>
                     <label for="presshub-ai-author-new-preset-name"><?php echo esc_html( __( 'Name', 'presshub-ai-editor' ) ); ?><br />
-                        <input type="text" id="presshub-ai-author-new-preset-name" class="regular-text" maxlength="80"<?php echo $control_state; ?> />
+                        <input type="text" id="presshub-ai-author-new-preset-name" class="regular-text" maxlength="80"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?> />
                     </label>
                 </p>
                 <p>
                     <label for="presshub-ai-author-new-preset-text"><?php echo esc_html( __( 'Instruction text', 'presshub-ai-editor' ) ); ?><br />
-                        <textarea id="presshub-ai-author-new-preset-text" class="large-text" rows="4" maxlength="4000"<?php echo $control_state; ?>></textarea>
+                        <textarea id="presshub-ai-author-new-preset-text" class="large-text" rows="4" maxlength="4000"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>></textarea>
                     </label>
                 </p>
                 <p class="description">
                     <?php echo esc_html( __( 'The slug is generated automatically from the name (e.g. "Concise wire style" → "concise-wire-style").', 'presshub-ai-editor' ) ); ?>
                 </p>
-                <button type="submit" class="button button-primary"<?php echo $control_state; ?>><?php echo esc_html( __( 'Add preset', 'presshub-ai-editor' ) ); ?></button>
+                <button type="submit" class="button button-primary"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>><?php echo esc_html( __( 'Add preset', 'presshub-ai-editor' ) ); ?></button>
             </form>
 
             <h3><?php echo esc_html( __( 'Default preset', 'presshub-ai-editor' ) ); ?></h3>
             <p class="description">
                 <?php echo esc_html( __( 'Applied automatically when no preset is picked in the post editor.', 'presshub-ai-editor' ) ); ?>
             </p>
-            <select id="presshub-ai-default-preset"<?php echo $control_state; ?>>
+            <select id="presshub-ai-default-preset"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>>
                 <option value=""><?php echo esc_html( __( '— No default —', 'presshub-ai-editor' ) ); ?></option>
                 <?php foreach ( $default_options as $option ) : ?>
                     <option value="<?php echo esc_attr( $option['value'] ); ?>"<?php echo $default_slug === $option['value'] ? ' selected="selected"' : ''; ?>><?php echo esc_html( $option['label'] ); ?></option>
                 <?php endforeach; ?>
             </select>
-            <button type="button" class="button presshub-ai-save-default"<?php echo $control_state; ?>><?php echo esc_html( __( 'Save default', 'presshub-ai-editor' ) ); ?></button>
+            <button type="button" class="button presshub-ai-save-default"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>><?php echo esc_html( __( 'Save default', 'presshub-ai-editor' ) ); ?></button>
 
             <h3><?php echo esc_html( __( 'Copy from plugin defaults', 'presshub-ai-editor' ) ); ?></h3>
             <p class="description">
@@ -216,12 +216,12 @@ class PressHub_AI_Author_Presets {
             <?php if ( empty( $copy_options ) ) : ?>
                 <p class="description"><?php echo esc_html( __( 'No plugin defaults available.', 'presshub-ai-editor' ) ); ?></p>
             <?php else : ?>
-                <select id="presshub-ai-copy-preset"<?php echo $control_state; ?>>
+                <select id="presshub-ai-copy-preset"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>>
                     <?php foreach ( $copy_options as $option ) : ?>
                         <option value="<?php echo esc_attr( $option['value'] ); ?>"><?php echo esc_html( $option['label'] ); ?></option>
                     <?php endforeach; ?>
                 </select>
-                <button type="button" class="button presshub-ai-copy-preset-btn"<?php echo $control_state; ?>><?php echo esc_html( __( 'Copy to my presets', 'presshub-ai-editor' ) ); ?></button>
+                <button type="button" class="button presshub-ai-copy-preset-btn"<?php echo $control_state; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $control_state is a fixed disabled-attribute string set in this method. ?>><?php echo esc_html( __( 'Copy to my presets', 'presshub-ai-editor' ) ); ?></button>
             <?php endif; ?>
         </div>
         <?php

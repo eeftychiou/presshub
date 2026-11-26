@@ -915,7 +915,7 @@ class PressHub_AI_Briefing_Admin {
      */
     public function render_hub_page( string $date = '', string $edition = '' ) {
         if ( ! current_user_can( self::capability() ) ) {
-            wp_die( __( 'You do not have permission to access the Daily Briefing Hub.', 'presshub-ai-editor' ) );
+            wp_die( esc_html__( 'You do not have permission to access the Daily Briefing Hub.', 'presshub-ai-editor' ) );
         }
 
         if ( empty( $date ) ) {
@@ -1289,8 +1289,8 @@ class PressHub_AI_Briefing_Admin {
                                     printf(
                                         /* translators: 1: selected count, 2: total count */
                                         esc_html__( 'Selected: %1$d / %2$d', 'presshub-ai-editor' ),
-                                        $total_articles,
-                                        $total_articles
+                                        (int) $total_articles,
+                                        (int) $total_articles
                                     );
                                     ?>
                                 </span>
@@ -1737,8 +1737,8 @@ class PressHub_AI_Briefing_Admin {
                             printf(
                                 /* translators: 1: selected count, 2: total count */
                                 esc_html__( 'Selected: %1$d / %2$d', 'presshub-ai-editor' ),
-                                $total_articles,
-                                $total_articles
+                                (int) $total_articles,
+                                (int) $total_articles
                             );
                             ?>
                         </span>
@@ -1793,7 +1793,7 @@ class PressHub_AI_Briefing_Admin {
                                     </div>
                                     <div class="inspector-card-meta">
                                         <span class="presshub-article-source-pill"><?php echo esc_html( $art_source ); ?></span>
-                                        <span class="presshub-article-words-pill"><?php echo sprintf( esc_html__( '%d words', 'presshub-ai-editor' ), $word_count ); ?></span>
+                                        <span class="presshub-article-words-pill"><?php echo esc_html( sprintf( /* translators: %d: word count */ __( '%d words', 'presshub-ai-editor' ), (int) $word_count ) ); ?></span>
                                         <span class="presshub-article-tokens-pill"><?php echo sprintf( esc_html__( '~%d tokens', 'presshub-ai-editor' ), $token_count ); ?></span>
                                     </div>
                                     <div class="inspector-card-title">
@@ -1814,7 +1814,7 @@ class PressHub_AI_Briefing_Admin {
                                 <div class="presshub-inspector-card-drawer" id="inspector-drawer-<?php echo esc_attr( $index ); ?>" style="display: none;">
                                     <div class="inspector-drawer-meta-bar">
                                         <div class="drawer-stats">
-                                            <span><strong><?php echo esc_html__( 'Length:', 'presshub-ai-editor' ); ?></strong> <?php echo sprintf( esc_html__( '%1$d words / %2$d characters', 'presshub-ai-editor' ), $word_count, $char_count ); ?></span>
+                                            <span><strong><?php echo esc_html__( 'Length:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html( sprintf( /* translators: 1: word count, 2: character count */ __( '%1$d words / %2$d characters', 'presshub-ai-editor' ), (int) $word_count, (int) $char_count ) ); ?></span>
                                             <?php if ( ! empty( $art_url ) ) : ?>
                                                 <span class="drawer-url"><strong><?php echo esc_html__( 'URL:', 'presshub-ai-editor' ); ?></strong> <a href="<?php echo esc_url( $art_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $art_url ); ?></a></span>
                                             <?php endif; ?>
