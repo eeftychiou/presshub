@@ -93,10 +93,12 @@ class PressHub_Social_Queue {
         }
 
         if ( ! in_array( $platform, self::VALID_PLATFORMS, true ) ) {
+            // translators: %s: comma-separated list of valid platforms
             return new WP_Error( 'invalid_platform', sprintf( __( 'Platform must be one of: %s', 'presshub-social-autopost' ), implode( ', ', self::VALID_PLATFORMS ) ) );
         }
 
         if ( ! in_array( $engine, self::VALID_ENGINES, true ) ) {
+            // translators: %s: comma-separated list of valid engines
             return new WP_Error( 'invalid_engine', sprintf( __( 'Engine must be one of: %s', 'presshub-social-autopost' ), implode( ', ', self::VALID_ENGINES ) ) );
         }
 
@@ -652,6 +654,7 @@ class PressHub_Social_Queue {
     public static function repost_as_new_job( int $source_job_id, string $custom_copy = '' ): int|WP_Error {
         $source = self::get_job( $source_job_id );
         if ( ! $source ) {
+            // translators: %d: ID of the original queue job
             return new WP_Error( 'job_not_found', sprintf( __( 'Source job #%d not found.', 'presshub-social-autopost' ), $source_job_id ) );
         }
 

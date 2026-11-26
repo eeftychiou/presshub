@@ -377,7 +377,7 @@ class PressHub_Social_Settings_Render {
         <div class="presshub-social-test-row" style="margin-top:8px;">
             <button type="button" class="button button-secondary presshub-social-test-btn" data-platform="<?php echo esc_attr( $platform ); ?>">
                 <span class="dashicons dashicons-update" style="line-height:1.4; vertical-align:middle; font-size:16px;"></span>
-                <?php echo esc_html( sprintf( __( 'Test %s Connection', 'presshub-social-autopost' ), ucfirst( $platform ) ) ); ?>
+                <?php echo esc_html( sprintf( /* translators: %s: social platform name */ __( 'Test %s Connection', 'presshub-social-autopost' ), ucfirst( $platform ) ) ); ?>
             </button>
             <span class="spinner" style="float:none; margin:0 0 0 6px;"></span>
             <span class="presshub-social-test-status" data-platform="<?php echo esc_attr( $platform ); ?>" style="margin-left:8px; font-weight:600;"></span>

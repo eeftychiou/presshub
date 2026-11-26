@@ -184,6 +184,7 @@ class PressHub_Social_Dispatcher {
     public static function dispatch_job( int $job_id ): bool|WP_Error {
         $job = PressHub_Social_Queue::get_job( $job_id );
         if ( ! $job ) {
+            // translators: %d: queue job ID
             return new WP_Error( 'job_not_found', sprintf( __( 'Social job #%d not found.', 'presshub-social-autopost' ), $job_id ) );
         }
 

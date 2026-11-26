@@ -118,6 +118,7 @@ class PressHub_Social_AI_Copywriter {
         $platform = sanitize_key( $platform );
 
         if ( ! in_array( $platform, PressHub_Social_Settings_Storage::PLATFORMS, true ) ) {
+            // translators: %s: social platform name
             $msg = sprintf( __( 'Unsupported social platform: %s', 'presshub-social-autopost' ), $platform );
             PressHub_Social_Logger::error( $msg, [ 'platform' => $platform ] );
             return new WP_Error( 'invalid_platform', $msg );
@@ -133,6 +134,7 @@ class PressHub_Social_AI_Copywriter {
 
             // Zero-Silent-Fallback: Fail loudly if template is empty.
             if ( '' === trim( $template ) ) {
+                // translators: %s: social platform name
                 $msg = sprintf( __( 'No template configured for platform "%s".', 'presshub-social-autopost' ), $platform );
                 PressHub_Social_Logger::error( $msg, [ 'platform' => $platform ] );
                 return new WP_Error( 'missing_social_template', $msg );
@@ -178,7 +180,8 @@ class PressHub_Social_AI_Copywriter {
             }
 
             $msg = sprintf(
-                __( 'Missing required prompt configuration for %s: %s is empty. Please configure prompt in Settings.', 'presshub-social-autopost' ),
+                // translators: %1$s: social platform name, %2$s: comma-separated list of the empty settings
+                __( 'Missing required prompt configuration for %1$s: %2$s is empty. Please configure prompt in Settings.', 'presshub-social-autopost' ),
                 $platform,
                 implode( ', ', $missing )
             );
@@ -240,7 +243,8 @@ class PressHub_Social_AI_Copywriter {
                     $metadata
                 );
             } catch ( Exception $e ) {
-                $msg = sprintf( __( 'AI copywriter exception for %s: %s', 'presshub-social-autopost' ), $platform, $e->getMessage() );
+                // translators: %1$s: social platform name, %2$s: exception message
+                $msg = sprintf( __( 'AI copywriter exception for %1$s: %2$s', 'presshub-social-autopost' ), $platform, $e->getMessage() );
                 PressHub_Social_Logger::error( $msg, [ 'platform' => $platform, 'exception' => $e->getMessage() ] );
                 return new WP_Error( 'ai_dispatch_exception', $msg );
             }
@@ -256,6 +260,7 @@ class PressHub_Social_AI_Copywriter {
         }
 
         if ( ! is_string( $raw_result ) || '' === trim( $raw_result ) ) {
+            // translators: %s: social platform name
             $msg = sprintf( __( 'AI provider returned an empty response for %s.', 'presshub-social-autopost' ), $platform );
             PressHub_Social_Logger::error( $msg, [ 'platform' => $platform ] );
             return new WP_Error( 'empty_ai_response', $msg );
@@ -332,7 +337,8 @@ class PressHub_Social_AI_Copywriter {
 
         // API Key verification.
         if ( 'ollama_local' !== $type && '' === trim( $api_key ) ) {
-            $msg = sprintf( __( 'AI provider "%s" (ID: %s) does not have an API key configured.', 'presshub-social-autopost' ), $name, $provider_id );
+            // translators: %1$s: provider name, %2$s: provider ID
+            $msg = sprintf( __( 'AI provider "%1$s" (ID: %2$s) does not have an API key configured.', 'presshub-social-autopost' ), $name, $provider_id );
             PressHub_Social_Logger::error( $msg, [ 'provider_id' => $provider_id, 'type' => $type ] );
             return new WP_Error( 'missing_ai_api_key', $msg );
         }
@@ -508,6 +514,7 @@ class PressHub_Social_AI_Copywriter {
     public static function build_article_data( int $post_id ) {
         $post = get_post( $post_id );
         if ( ! is_object( $post ) ) {
+            // translators: %d: post ID
             $msg = sprintf( __( 'Post ID %d not found.', 'presshub-social-autopost' ), $post_id );
             PressHub_Social_Logger::error( $msg, [ 'post_id' => $post_id ] );
             return new WP_Error( 'invalid_post', $msg );

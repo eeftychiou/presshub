@@ -1490,6 +1490,7 @@ class PressHub_AI_API_Client {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $model_name, 0, 0, $duration_ms, 'success', '' );
             }
         } else {
+            // translators: %s: provider type
             return new WP_Error( 'unsupported_image_provider', sprintf( __( 'Image generation is not supported for provider type "%s". Please select Gemini or OpenAI.', 'presshub-ai-editor' ), $type ) );
         }
 
@@ -2527,6 +2528,7 @@ class PressHub_AI_API_Client {
         if ( is_wp_error( $response ) ) {
             return new WP_Error(
                 'tts_test_failed',
+                // translators: %s: error message
                 sprintf( __( 'Gemini TTS request failed: %s', 'presshub-ai-editor' ), $response->get_error_message() ),
                 [
                     'endpoint_masked' => $masked_url,
@@ -2547,7 +2549,8 @@ class PressHub_AI_API_Client {
             $err_detail = $res_json['error']['message'] ?? ( 'HTTP ' . $code . ': ' . substr( $body_raw, 0, 500 ) );
             return new WP_Error(
                 'tts_api_error',
-                sprintf( __( 'Gemini API Error (%d): %s', 'presshub-ai-editor' ), $code, $err_detail ),
+                // translators: %1$d: HTTP status code, %2$s: error detail
+                sprintf( __( 'Gemini API Error (%1$d): %2$s', 'presshub-ai-editor' ), $code, $err_detail ),
                 [
                     'endpoint_masked' => $masked_url,
                     'headers_masked'  => $headers_masked,
@@ -3754,6 +3757,7 @@ class PressHub_AI_API_Client {
             $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
 
             if ( $code < 200 || $code >= 300 || ! is_array( $res_body ) ) {
+                // translators: %d: HTTP status code
                 $msg = $res_body['error']['message'] ?? sprintf( __( 'Anthropic API returned HTTP %d', 'presshub-ai-editor' ), $code );
                 return new WP_Error( 'api_error', $msg );
             }
@@ -3795,6 +3799,7 @@ class PressHub_AI_API_Client {
             $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
 
             if ( $code < 200 || $code >= 300 || ! is_array( $res_body ) ) {
+                // translators: %d: HTTP status code
                 $msg = $res_body['error']['message'] ?? sprintf( __( 'Google Gemini API returned HTTP %d', 'presshub-ai-editor' ), $code );
                 return new WP_Error( 'api_error', $msg );
             }
@@ -3908,6 +3913,7 @@ class PressHub_AI_API_Client {
             $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
 
             if ( $code < 200 || $code >= 300 || ! is_array( $res_body ) ) {
+                // translators: %d: HTTP status code
                 $msg = $res_body['error']['message'] ?? sprintf( __( 'API returned HTTP %d for models discovery', 'presshub-ai-editor' ), $code );
                 return new WP_Error( 'api_error', $msg );
             }

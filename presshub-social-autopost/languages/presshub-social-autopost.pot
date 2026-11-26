@@ -1,0 +1,656 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PressHub Social Auto-Post 2.8.4\n"
+"Report-Msgid-Bugs-To: https://github.com/eeftychiou/presshub/issues\n"
+"POT-Creation-Date: 2026-11-18 12:05+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: presshub-social-autopost\n"
+
+#: includes/class-social-ajax-handlers.php:392
+msgid "(Warning: dispatch encountered: %s)"
+msgstr ""
+
+#: includes/class-social-rest-controller.php:298
+msgid "A valid positive job_id is required."
+msgstr ""
+
+#: includes/class-social-queue.php:57
+msgid "A valid positive post_id is required."
+msgstr ""
+
+#: includes/class-social-settings-render.php:27
+msgid "AI Copywriter"
+msgstr ""
+
+#: includes/class-social-settings.php:217
+msgid "AI Copywriter Model & Tuning"
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:39
+#: includes/class-social-ajax-handlers.php:295
+msgid "AI Copywriter module is unavailable."
+msgstr ""
+
+#: includes/class-social-settings.php:652
+msgid "AI Prompt"
+msgstr ""
+
+#: includes/class-social-settings.php:224
+msgid "AI Provider"
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:316
+msgid "AI copy regenerated for %s."
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:206
+msgid "AI copywriter exception for %1$s: %2$s"
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:293
+msgid "AI provider \"%1$s\" (ID: %2$s) does not have an API key configured."
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:223
+msgid "AI provider returned an empty response for %s."
+msgstr ""
+
+#: includes/class-social-settings-render.php:28
+msgid "API Credentials"
+msgstr ""
+
+#: includes/class-social-worker-client.php:159
+msgid "Active %s session verified on local pull worker."
+msgstr ""
+
+#: includes/class-social-settings.php:172
+msgid "Active Platforms"
+msgstr ""
+
+#: includes/class-social-settings.php:615
+msgid "Alert Recipient Email"
+msgstr ""
+
+#: includes/class-social-settings-render.php:81
+msgid "Are you sure you want to restore all prompts to defaults? Your customized prompt changes will be lost."
+msgstr ""
+
+#: includes/class-social-settings.php:164
+msgid "Auto-Publish on Post"
+msgstr ""
+
+#: includes/class-social-settings-render.php:29
+msgid "Automation Worker"
+msgstr ""
+
+#: includes/class-social-settings.php:571
+msgid "Batch Size"
+msgstr ""
+
+#: includes/class-social-metabox.php:77
+msgid "Browser Automation"
+msgstr ""
+
+#: includes/class-social-worker-client.php:184
+msgid "Browser automation session active for %s."
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:372
+msgid "Connected to Facebook Page: %1$s (ID: %2$s)"
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:400
+msgid "Connected to Instagram Account: @%1$s (ID: %2$s)"
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:452
+msgid "Connected to TikTok Content Posting API."
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:425
+msgid "Connected to Twitter/X user: @%s"
+msgstr ""
+
+#: includes/class-social-settings.php:180
+msgid "Copy Generation Mode"
+msgstr ""
+
+#: includes/class-social-settings.php:645
+msgid "Core journalistic persona and instructions delivered to the LLM."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:225
+msgid "Could not cancel job."
+msgstr ""
+
+#: includes/class-social-queue.php:127
+msgid "Could not insert queue record into database."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:180
+msgid "Could not reset job in queue."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:351
+msgid "Could not update post copy."
+msgstr ""
+
+#: includes/class-social-metabox.php:106
+msgid "Custom %s copy... (Leave blank for AI generation on publish)"
+msgstr ""
+
+#: includes/class-social-settings.php:556
+msgid "Dispatch Interval"
+msgstr ""
+
+#: includes/class-social-settings.php:607
+msgid "Enable Failure Email Alerts"
+msgstr ""
+
+#: includes/class-social-settings.php:204
+msgid "Engine"
+msgstr ""
+
+#: includes/class-social-queue.php:67
+msgid "Engine must be one of: %s"
+msgstr ""
+
+#: presshub-social-autopost.php:72
+msgid "Every Minute (PressHub Social)"
+msgstr ""
+
+#: includes/class-social-settings.php:274
+msgid "Facebook Page ID"
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:43
+msgid "Facebook credentials not configured. Please set Meta Page ID and Access Token in Settings."
+msgstr ""
+
+#: includes/class-social-settings.php:600
+msgid "Failure Alerts"
+msgstr ""
+
+#: includes/class-social-settings.php:565
+msgid "Frequency for running the background cron queue dispatcher."
+msgstr ""
+
+#: includes/class-social-settings-render.php:26
+msgid "General & Engines"
+msgstr ""
+
+#: includes/class-social-settings.php:157
+msgid "General Publishing Configuration"
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:305
+msgid "Generated copy was empty."
+msgstr ""
+
+#: includes/class-social-settings.php:188
+msgid "GitHub Personal Access Token (Auto-Updates)"
+msgstr ""
+
+#: includes/class-social-settings.php:435
+msgid "HTTP request timeout when waiting for worker response."
+msgstr ""
+
+#: includes/class-social-settings.php:594
+msgid "Initial exponential backoff delay for retrying failed dispatches."
+msgstr ""
+
+#: includes/class-social-settings.php:296
+msgid "Instagram Account ID"
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:384
+msgid "Instagram Account ID and Meta Access Token must be configured."
+msgstr ""
+
+#: includes/class-social-settings.php:476
+msgid "Instagram Card Height"
+msgstr ""
+
+#: includes/class-social-settings.php:462
+msgid "Instagram Card Width"
+msgstr ""
+
+#: includes/class-social-settings.php:302
+msgid "Instagram Professional/Business Account ID linked to your Meta Page."
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:118
+msgid "Instagram credentials not configured. Please set Instagram Account ID and Meta Access Token in Settings."
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:129
+msgid "Instagram requires a public media URL (image or video). None was provided."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:175
+#: includes/class-social-ajax-handlers.php:220
+#: includes/class-social-ajax-handlers.php:279
+#: includes/class-social-ajax-handlers.php:337
+msgid "Invalid job ID."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:35
+#: includes/class-social-ajax-handlers.php:84
+msgid "Invalid post ID provided."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:379
+msgid "Invalid source job ID."
+msgstr ""
+
+#: includes/class-social-rest-controller.php:65
+msgid "Invalid worker secret."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:229
+msgid "Job cancelled."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:359
+msgid "Job copy updated successfully."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:256
+msgid "Job dispatched successfully."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:291
+msgid "Job is missing post ID or platform."
+msgstr ""
+
+#: includes/class-social-dispatcher.php:192
+msgid "Job is queued in Pull Mode and will be picked up automatically by your local worker on its next poll."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:249
+msgid "Job is queued in Pull Mode and will be picked up by your local worker."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:284
+msgid "Job not found in queue."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:346
+msgid "Job not found."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:205
+msgid "Job rescheduled for processing."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:199
+msgid "Job retried and dispatched successfully."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:188
+msgid "Job retried and queued for local worker."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:194
+msgid "Job retried but dispatch failed: %s"
+msgstr ""
+
+#: includes/class-social-settings.php:622
+msgid "Leave empty to use the WordPress administration email address."
+msgstr ""
+
+#: includes/class-social-worker-client.php:108
+msgid "Local Pull Worker Online (last heartbeat %ds ago)"
+msgstr ""
+
+#: includes/class-social-settings.php:289
+msgid "Long-lived Page Access Token with pages_manage_posts and pages_read_engagement permissions."
+msgstr ""
+
+#: includes/class-social-settings.php:542
+msgid "Max Retry Attempts"
+msgstr ""
+
+#: includes/class-social-settings.php:248
+msgid "Max Tokens"
+msgstr ""
+
+#: includes/class-social-settings.php:579
+msgid "Maximum number of queue items processed per run."
+msgstr ""
+
+#: includes/class-social-settings.php:441
+msgid "Media & Video Specifications"
+msgstr ""
+
+#: includes/class-social-settings.php:267
+msgid "Meta Graph API (Facebook & Instagram)"
+msgstr ""
+
+#: includes/class-social-settings.php:283
+msgid "Meta Page Access Token"
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:356
+msgid "Meta Page ID and Access Token must be configured."
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:143
+msgid "Missing required prompt configuration for %1$s: %2$s is empty. Please configure prompt in Settings."
+msgstr ""
+
+#: includes/class-social-settings.php:232
+msgid "Model Override"
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:398
+msgid "New social post #%1$d created and queued.%2$s"
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:278
+msgid "No AI provider is configured or enabled in PressHub AI Editor."
+msgstr ""
+
+#: includes/class-social-worker-client.php:166
+msgid "No active %1$s session reported by local worker. Run: npm run login -- %2$s"
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:139
+msgid "No platform specified for connection test."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:116
+msgid "No social jobs were enqueued. Please ensure at least one platform is selected."
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:97
+msgid "No template configured for platform \"%s\"."
+msgstr ""
+
+#: includes/class-social-worker-client.php:186
+msgid "No valid browser session found for %s on worker."
+msgstr ""
+
+#: includes/class-social-settings.php:550
+msgid "Number of dispatch attempts before a job is marked failed."
+msgstr ""
+
+#: includes/class-social-settings.php:278
+msgid "Numeric Facebook Page ID."
+msgstr ""
+
+#: includes/class-social-settings-render.php:138
+msgid "Optional GitHub Personal Access Token (PAT) for automatic plugin updates if the repository is private. Automatically inherits the token from PressHub AI Editor if left blank."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:28
+#: includes/class-social-ajax-handlers.php:79
+#: includes/class-social-ajax-handlers.php:133
+#: includes/class-social-ajax-handlers.php:168
+#: includes/class-social-ajax-handlers.php:215
+#: includes/class-social-ajax-handlers.php:239
+#: includes/class-social-ajax-handlers.php:274
+#: includes/class-social-ajax-handlers.php:330
+#: includes/class-social-ajax-handlers.php:371
+msgid "Permission denied."
+msgstr ""
+
+#: includes/class-social-settings.php:196
+msgid "Platform Dispatch Engines"
+msgstr ""
+
+#: includes/class-social-queue.php:62
+msgid "Platform must be one of: %s"
+msgstr ""
+
+#: includes/class-social-settings.php:395
+msgid "Playwright Automation Worker"
+msgstr ""
+
+#: includes/class-social-queue-admin.php:157
+msgid "Post #%d"
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:460
+msgid "Post ID %d not found."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:341
+msgid "Post copy cannot be empty."
+msgstr ""
+
+#: includes/class-social-queue.php:71
+#: includes/class-social-queue.php:572
+msgid "Post copy content cannot be empty."
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:179
+msgid "PressHub AI API Client not found. Please ensure PressHub AI Editor plugin is active."
+msgstr ""
+
+#: includes/class-social-settings.php:51
+#: includes/class-social-settings.php:52
+msgid "PressHub Social"
+msgstr ""
+
+#: includes/class-social-metabox.php:20
+msgid "PressHub Social Auto-Post"
+msgstr ""
+
+#: includes/class-social-queue-admin.php:26
+msgid "PressHub Social Queue & Logs"
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:263
+msgid "Processed %1$d due job(s): %2$d succeeded, %3$d failed."
+msgstr ""
+
+#: includes/class-social-settings.php:660
+msgid "Prompt template for %1$s. Placeholders: {title}, {excerpt}, {content}, {url}, {site_name}%2$s."
+msgstr ""
+
+#: includes/class-social-settings-render.php:31
+msgid "Prompts & Templates"
+msgstr ""
+
+#: includes/class-social-worker-client.php:113
+#: includes/class-social-worker-client.php:149
+msgid "Pull mode active: waiting for local worker heartbeat. Start presshub-social-worker on your local machine."
+msgstr ""
+
+#: includes/class-social-settings.php:63
+msgid "Queue"
+msgstr ""
+
+#: includes/class-social-settings-render.php:30
+msgid "Queue & Alerts"
+msgstr ""
+
+#: includes/class-social-settings.php:535
+msgid "Queue Processing & Retry Budget"
+msgstr ""
+
+#: includes/class-social-settings.php:256
+msgid "Request Timeout"
+msgstr ""
+
+#: includes/class-social-settings.php:585
+msgid "Retry Base Delay"
+msgstr ""
+
+#: includes/class-social-settings.php:72
+msgid "Settings"
+msgstr ""
+
+#: includes/class-social-queue-admin.php:27
+#: includes/class-social-settings.php:62
+msgid "Social Queue"
+msgstr ""
+
+#: includes/class-social-settings.php:71
+msgid "Social Settings"
+msgstr ""
+
+#: includes/class-social-worker-client.php:29
+#: includes/class-social-worker-client.php:97
+#: includes/class-social-worker-client.php:140
+msgid "Social Worker URL or Secret is not configured in Settings."
+msgstr ""
+
+#: includes/class-social-worker-client.php:124
+msgid "Social Worker is healthy and responding."
+msgstr ""
+
+#: includes/class-social-dispatcher.php:166
+msgid "Social job #%d not found."
+msgstr ""
+
+#: includes/class-social-queue.php:563
+msgid "Source job #%d not found."
+msgstr ""
+
+#: includes/class-social-settings.php:456
+msgid "Standard limit is 280; set up to 4000 if your account has X Premium."
+msgstr ""
+
+#: includes/class-social-settings.php:666
+msgid "Static Fallback Template"
+msgstr ""
+
+#: includes/class-social-settings.php:673
+msgid "Static template used when copy mode is set to Template. Placeholders: {title}, {excerpt}, {url}, {site_name}, {hashtags}."
+msgstr ""
+
+#: includes/class-social-ajax-handlers.php:122
+msgid "Successfully queued %d social post(s)."
+msgstr ""
+
+#: includes/class-social-settings.php:631
+msgid "System Prompt & Platform Copy Templates"
+msgstr ""
+
+#: includes/class-social-settings.php:638
+msgid "System Prompt (All Platforms)"
+msgstr ""
+
+#: includes/class-social-settings.php:240
+msgid "Temperature"
+msgstr ""
+
+#: includes/class-social-settings-render.php:360
+msgid "Test %s Connection"
+msgstr ""
+
+#: includes/class-social-settings.php:364
+msgid "TikTok API Credentials"
+msgstr ""
+
+#: includes/class-social-settings.php:371
+msgid "TikTok Access Token"
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:433
+msgid "TikTok Access Token must be configured."
+msgstr ""
+
+#: includes/class-social-settings.php:383
+msgid "TikTok Creator Open ID"
+msgstr ""
+
+#: includes/class-social-settings.php:518
+msgid "TikTok Video Duration"
+msgstr ""
+
+#: includes/class-social-settings.php:504
+msgid "TikTok Video Height"
+msgstr ""
+
+#: includes/class-social-settings.php:490
+msgid "TikTok Video Width"
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:286
+msgid "TikTok credentials not configured. Please set TikTok Access Token and Open ID in Settings."
+msgstr ""
+
+#: includes/class-social-settings.php:325
+msgid "Twitter API Key"
+msgstr ""
+
+#: includes/class-social-settings.php:334
+msgid "Twitter API Secret"
+msgstr ""
+
+#: includes/class-social-settings.php:352
+msgid "Twitter Access Secret"
+msgstr ""
+
+#: includes/class-social-settings.php:343
+msgid "Twitter Access Token"
+msgstr ""
+
+#: includes/class-social-settings.php:316
+msgid "Twitter Bearer Token"
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:408
+msgid "Twitter Bearer Token must be configured."
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:229
+msgid "Twitter credentials not configured. Please set Twitter Bearer or Access Token in Settings."
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:456
+msgid "Unknown platform specified for connection test."
+msgstr ""
+
+#: includes/class-social-meta-api-client.php:23
+msgid "Unsupported platform for API client: %s"
+msgstr ""
+
+#: includes/class-social-ai-copywriter.php:81
+msgid "Unsupported social platform: %s"
+msgstr ""
+
+#: includes/class-social-settings.php:402
+msgid "Worker Connection Mode"
+msgstr ""
+
+#: includes/class-social-settings.php:418
+msgid "Worker Secret Token"
+msgstr ""
+
+#: includes/class-social-settings.php:410
+msgid "Worker Service Endpoint"
+msgstr ""
+
+#: includes/class-social-settings.php:426
+msgid "Worker Timeout"
+msgstr ""
+
+#: includes/class-social-rest-controller.php:55
+msgid "Worker secret is not configured in WordPress settings."
+msgstr ""
+
+#: includes/class-social-settings.php:309
+msgid "X / Twitter API v2 Credentials"
+msgstr ""
+
+#: includes/class-social-settings.php:448
+msgid "X/Twitter Max Characters"
+msgstr ""
+
+#: includes/class-social-settings.php:434
+#: includes/class-social-settings.php:526
+#: includes/class-social-settings.php:564
+#: includes/class-social-settings.php:593
+msgid "seconds"
+msgstr ""

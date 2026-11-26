@@ -176,6 +176,7 @@ class PressHub_AI_Ajax_Handlers {
         // payloads that would waste tokens / cost money (Settings-First).
         $max_source_chars = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_coauthor_max_source_chars() : 200000;
         if ( strlen( $sources ) > $max_source_chars ) {
+            // translators: %s: maximum number of characters
             wp_send_json_error( sprintf( __( 'Sources exceed the %s character limit.', 'presshub-ai-editor' ), number_format_i18n( $max_source_chars ) ) );
         }
         if ( strlen( $instructions ) > 5000 ) {
@@ -519,6 +520,7 @@ class PressHub_AI_Ajax_Handlers {
             if ( '' !== trim( $article_content ) || '' !== trim( $article_title ) ) {
                 $sys .= "\n\n" . __( '--- CURRENT ARTICLE CONTEXT ---', 'presshub-ai-editor' );
                 if ( '' !== trim( $article_title ) ) {
+                    // translators: %s: article title
                     $sys .= "\n" . sprintf( __( 'Article Title: %s', 'presshub-ai-editor' ), $article_title );
                 }
                 if ( '' !== trim( $article_content ) ) {
@@ -1139,6 +1141,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             wp_send_json_error( [
+                // translators: %s: error message
                 'message'   => sprintf( __( 'Scrape failed: %s', 'presshub-ai-editor' ), $e->getMessage() ),
                 'exception' => $e->getMessage(),
                 'date'      => $date,
@@ -1229,6 +1232,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             wp_send_json_error( [
+                // translators: %s: error message
                 'message'   => sprintf( __( 'Text curation failed: %s', 'presshub-ai-editor' ), $e->getMessage() ),
                 'exception' => $e->getMessage(),
                 'date'      => $date,
@@ -1331,6 +1335,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             wp_send_json_error( [
+                // translators: %s: error message
                 'message'   => sprintf( __( 'Podcast script generation failed: %s', 'presshub-ai-editor' ), $e->getMessage() ),
                 'exception' => $e->getMessage(),
                 'date'      => $date,
@@ -1462,6 +1467,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             wp_send_json_error( [
+                // translators: %s: error message
                 'message'   => sprintf( __( 'Audio synthesis failed: %s', 'presshub-ai-editor' ), $e->getMessage() ),
                 'exception' => $e->getMessage(),
                 'date'      => $date,
@@ -1525,6 +1531,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                     'post_id'   => $post_id,
                 ] );
             }
+            // translators: %s: error message
             wp_send_json_error( [ 'message' => sprintf( __( 'Audio regeneration failed: %s', 'presshub-ai-editor' ), $e->getMessage() ) ], 500 );
         }
     }
@@ -1584,6 +1591,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 $filetype = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'] );
                 $ext      = strtolower( (string) ( $filetype['ext'] ?? pathinfo( $filename, PATHINFO_EXTENSION ) ) );
                 if ( ! in_array( $ext, $allowed_extensions, true ) ) {
+                    // translators: %s: file extension
                     wp_send_json_error( sprintf( __( 'Unsupported file type "%s". Allowed: PDF, DOCX, TXT.', 'presshub-ai-editor' ), $ext ) );
                 }
                 if ( (int) $file['size'] > $max_file_size ) {
@@ -1598,6 +1606,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
                 $articles_to_merge[] = [
                     'title'   => $file_title,
+                    // translators: %s: file name
                     'content' => $extracted_text ?: sprintf( __( 'Attached file: %s', 'presshub-ai-editor' ), $filename ),
                     'source'  => ! empty( trim( $source ) ) ? $source : __( 'Manual Upload', 'presshub-ai-editor' ),
                     'url'     => '',
@@ -1920,6 +1929,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         wp_send_json_success( [
+            // translators: %d: number of options updated
             'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
             'sources' => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'   => [
@@ -2201,6 +2211,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         PressHub_Connection_Status::forget( 'provider:' . sanitize_key( (string) $provider_id ) );
 
         wp_send_json_success( [
+            // translators: %s: provider name
             'message'  => sprintf( __( 'Provider "%s" saved successfully.', 'presshub-ai-editor' ), $provider['name'] ?? $provider_id ),
             'id'       => $provider_id,
             'provider' => $provider,
@@ -2982,6 +2993,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         wp_send_json_success( [
             'models'  => $result,
             'count'   => count( $result ),
+            // translators: %d: number of models found
             'message' => sprintf( __( 'Found %d models.', 'presshub-ai-editor' ), count( $result ) ),
         ] );
     }
@@ -3044,7 +3056,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( [
                 'status_code' => 0,
                 'duration_ms' => $duration_ms,
-                'message'     => sprintf( __( 'Connection failed: %s (%dms)', 'presshub-ai-editor' ), $response->get_error_message(), $duration_ms ),
+                // translators: %1$s: error message, %2$d: duration ms
+                'message'     => sprintf( __( 'Connection failed: %1$s (%2$dms)', 'presshub-ai-editor' ), $response->get_error_message(), $duration_ms ),
             ] );
         }
 
@@ -3057,7 +3070,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'status_code' => $code,
                 'duration_ms' => $duration_ms,
                 'is_blocked'  => true,
-                'message'     => sprintf( __( 'Bot protection / Cloudflare challenge detected (HTTP %d, %dms). This outlet may require manual text upload.', 'presshub-ai-editor' ), $code, $duration_ms ),
+                // translators: %1$d: HTTP status code, %2$d: duration in milliseconds, %3$d: number of article links found
+                'message'     => sprintf( __( 'Bot protection / Cloudflare challenge detected (HTTP %1$d, %2$dms). This outlet may require manual text upload.', 'presshub-ai-editor' ), $code, $duration_ms ),
             ] );
         }
 
@@ -3065,7 +3079,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( [
                 'status_code' => $code,
                 'duration_ms' => $duration_ms,
-                'message'     => sprintf( __( 'HTTP Error %d returned by source (%dms).', 'presshub-ai-editor' ), $code, $duration_ms ),
+                // translators: %1$d: HTTP status code, %2$d: duration in milliseconds
+                'message'     => sprintf( __( 'HTTP Error %1$d returned by source (%2$dms).', 'presshub-ai-editor' ), $code, $duration_ms ),
             ] );
         }
 
@@ -3075,7 +3090,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'status_code' => $code,
             'duration_ms' => $duration_ms,
             'links_found' => $links_found,
-            'message'     => sprintf( __( 'Connected successfully (HTTP %d, %dms). Discovered %d article links.', 'presshub-ai-editor' ), $code, $duration_ms, $links_found ),
+            // translators: %1$d: HTTP status code, %2$d: duration in milliseconds, %3$d: number of article links found
+            'message'     => sprintf( __( 'Connected successfully (HTTP %1$d, %2$dms). Discovered %3$d article links.', 'presshub-ai-editor' ), $code, $duration_ms, $links_found ),
         ] );
     }
 

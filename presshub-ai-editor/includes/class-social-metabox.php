@@ -31,7 +31,7 @@ class PressHub_Social_Metabox {
     public static function register_metabox(): void {
         add_meta_box(
             'presshub_social_metabox',
-            __( 'PressHub Social Auto-Post', 'presshub-social-autopost' ),
+            __( 'PressHub Social Auto-Post', 'presshub-ai-editor' ),
             [ __CLASS__, 'render_metabox' ],
             'post',
             'normal',
@@ -77,20 +77,20 @@ class PressHub_Social_Metabox {
         <div class="presshub-social-metabox-wrapper">
             <div class="presshub-social-metabox-header">
                 <p class="description">
-                    <?php esc_html_e( 'Configure automated multi-platform social sharing for this article. Leave custom copy empty to generate automatically upon publication.', 'presshub-social-autopost' ); ?>
+                    <?php esc_html_e( 'Configure automated multi-platform social sharing for this article. Leave custom copy empty to generate automatically upon publication.', 'presshub-ai-editor' ); ?>
                 </p>
                 <div class="presshub-social-bulk-actions">
                     <button type="button" class="button button-secondary" id="presshub-generate-all-social" data-post-id="<?php echo esc_attr( $post_id ); ?>">
                         <span class="dashicons dashicons-superhero"></span>
-                        <?php esc_html_e( 'Generate All Social Copy with AI', 'presshub-social-autopost' ); ?>
+                        <?php esc_html_e( 'Generate All Social Copy with AI', 'presshub-ai-editor' ); ?>
                     </button>
                     <button type="button" class="button button-primary" id="presshub-enqueue-social-now" data-post-id="<?php echo esc_attr( $post_id ); ?>">
                         <span class="dashicons dashicons-share" style="vertical-align:middle;"></span>
-                        <?php esc_html_e( 'Queue Social Posts Now', 'presshub-social-autopost' ); ?>
+                        <?php esc_html_e( 'Queue Social Posts Now', 'presshub-ai-editor' ); ?>
                     </button>
-                    <label style="display:inline-flex; align-items:center; gap:5px; margin-left:12px; font-weight:normal; font-size:13px; cursor:pointer;" title="<?php esc_attr_e( 'Check this box before updating the post to enqueue it into the social publishing queue.', 'presshub-social-autopost' ); ?>">
+                    <label style="display:inline-flex; align-items:center; gap:5px; margin-left:12px; font-weight:normal; font-size:13px; cursor:pointer;" title="<?php esc_attr_e( 'Check this box before updating the post to enqueue it into the social publishing queue.', 'presshub-ai-editor' ); ?>">
                         <input type="checkbox" name="presshub_social_requeue_on_save" value="1" />
-                        <span><?php esc_html_e( 'Queue on Update', 'presshub-social-autopost' ); ?></span>
+                        <span><?php esc_html_e( 'Queue on Update', 'presshub-ai-editor' ); ?></span>
                     </label>
                     <span class="spinner" id="presshub-social-global-spinner"></span>
                 </div>
@@ -98,11 +98,11 @@ class PressHub_Social_Metabox {
                     <div class="presshub-social-test-shorts" style="margin-top:8px;">
                         <button type="button" class="button button-secondary" id="presshub-render-test-shorts" data-post-id="<?php echo esc_attr( $post_id ); ?>">
                             <span class="dashicons dashicons-video-alt3" style="vertical-align:middle;"></span>
-                            <?php esc_html_e( 'Render Test TikTok Shorts', 'presshub-social-autopost' ); ?>
+                            <?php esc_html_e( 'Render Test TikTok Shorts', 'presshub-ai-editor' ); ?>
                         </button>
                         <span class="spinner" id="presshub-test-shorts-spinner"></span>
                         <p class="description" id="presshub-test-shorts-status">
-                            <?php esc_html_e( 'Makes this post\'s shorts (one per top story of a podcast, one for an article) with the real prompts, voices and images, and saves the videos in the worker\'s output folder (tiktok-short-tests). Nothing is posted.', 'presshub-social-autopost' ); ?>
+                            <?php esc_html_e( 'Makes this post\'s shorts (one per top story of a podcast, one for an article) with the real prompts, voices and images, and saves the videos in the worker\'s output folder (tiktok-short-tests). Nothing is posted.', 'presshub-ai-editor' ); ?>
                         </p>
                     </div>
                 <?php endif; ?>
@@ -136,11 +136,11 @@ class PressHub_Social_Metabox {
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <?php if ( ! $is_enabled ) : ?>
                                     <span class="presshub-badge badge-engine-disabled" style="background:#6c757d; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
-                                        <?php esc_html_e( 'Disabled in Settings', 'presshub-social-autopost' ); ?>
+                                        <?php esc_html_e( 'Disabled in Settings', 'presshub-ai-editor' ); ?>
                                     </span>
                                 <?php elseif ( ! $is_configured ) : ?>
                                     <span class="presshub-badge badge-engine-unconfigured" style="background:#d9534f; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
-                                        <?php esc_html_e( 'Not Configured', 'presshub-social-autopost' ); ?>
+                                        <?php esc_html_e( 'Not Configured', 'presshub-ai-editor' ); ?>
                                     </span>
                                 <?php elseif ( 'youtube' === $slug && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_podcast_enabled() ) : ?>
                                     <span class="presshub-badge badge-engine-unconfigured" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
@@ -148,7 +148,7 @@ class PressHub_Social_Metabox {
                                     </span>
                                 <?php elseif ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_session_active' ) && ! PressHub_Social_Settings_Storage::is_platform_session_active( $slug ) ) : ?>
                                     <span class="presshub-badge badge-engine-session-inactive" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
-                                        <?php esc_html_e( 'Session inactive — will post when the worker is back', 'presshub-social-autopost' ); ?>
+                                        <?php esc_html_e( 'Session inactive — will post when the worker is back', 'presshub-ai-editor' ); ?>
                                     </span>
                                 <?php endif; ?>
                                 <span class="presshub-badge <?php echo esc_attr( $badge_cls ); ?>">
@@ -160,7 +160,7 @@ class PressHub_Social_Metabox {
                         <div class="platform-card-body">
                             <div class="platform-copy-header">
                                 <label for="presshub_social_copy_<?php echo esc_attr( $slug ); ?>" class="screen-reader-text">
-                                    <?php echo esc_html( $data['label'] ); ?> <?php esc_html_e( 'Copy', 'presshub-social-autopost' ); ?>
+                                    <?php echo esc_html( $data['label'] ); ?> <?php esc_html_e( 'Copy', 'presshub-ai-editor' ); ?>
                                 </label>
                                 <span class="platform-char-count">
                                     <span class="current-chars"><?php echo esc_html( mb_strlen( $copy ) ); ?></span> / <?php echo esc_html( $data['char_limit'] ); ?>
@@ -172,13 +172,13 @@ class PressHub_Social_Metabox {
                                 name="presshub_social_copy_<?php echo esc_attr( $slug ); ?>"
                                 rows="4"
                                 class="large-text presshub-copy-textarea"
-                                placeholder="<?php echo esc_attr( sprintf( __( 'Custom %s copy... (Leave blank for AI generation on publish)', 'presshub-social-autopost' ), $data['label'] ) ); ?>"
+                                placeholder="<?php echo esc_attr( sprintf( /* translators: %s: social platform label */ __( 'Custom %s copy... (Leave blank for AI generation on publish)', 'presshub-ai-editor' ), $data['label'] ) ); ?>"
                             ><?php echo esc_textarea( $copy ); ?></textarea>
 
                             <div class="platform-card-footer">
                                 <button type="button" class="button button-small presshub-generate-single-copy" data-platform="<?php echo esc_attr( $slug ); ?>" data-post-id="<?php echo esc_attr( $post_id ); ?>">
                                     <span class="dashicons dashicons-admin-generic"></span>
-                                    <?php esc_html_e( 'Generate Copy', 'presshub-social-autopost' ); ?>
+                                    <?php esc_html_e( 'Generate Copy', 'presshub-ai-editor' ); ?>
                                 </button>
                                 <span class="spinner single-spinner-<?php echo esc_attr( $slug ); ?>"></span>
                             </div>
@@ -193,17 +193,17 @@ class PressHub_Social_Metabox {
             if ( ! empty( $jobs ) ) :
             ?>
                 <div class="presshub-social-post-history">
-                    <h4><?php esc_html_e( 'Queue & Dispatch History', 'presshub-social-autopost' ); ?></h4>
+                    <h4><?php esc_html_e( 'Queue & Dispatch History', 'presshub-ai-editor' ); ?></h4>
                     <table class="widefat striped presshub-jobs-table">
                         <thead>
                             <tr>
-                                <th><?php esc_html_e( 'ID', 'presshub-social-autopost' ); ?></th>
-                                <th><?php esc_html_e( 'Platform', 'presshub-social-autopost' ); ?></th>
-                                <th><?php esc_html_e( 'Engine', 'presshub-social-autopost' ); ?></th>
-                                <th><?php esc_html_e( 'Status', 'presshub-social-autopost' ); ?></th>
-                                <th><?php esc_html_e( 'Attempts', 'presshub-social-autopost' ); ?></th>
-                                <th><?php esc_html_e( 'Scheduled / Dispatched', 'presshub-social-autopost' ); ?></th>
-                                <th><?php esc_html_e( 'Link / Error', 'presshub-social-autopost' ); ?></th>
+                                <th><?php esc_html_e( 'ID', 'presshub-ai-editor' ); ?></th>
+                                <th><?php esc_html_e( 'Platform', 'presshub-ai-editor' ); ?></th>
+                                <th><?php esc_html_e( 'Engine', 'presshub-ai-editor' ); ?></th>
+                                <th><?php esc_html_e( 'Status', 'presshub-ai-editor' ); ?></th>
+                                <th><?php esc_html_e( 'Attempts', 'presshub-ai-editor' ); ?></th>
+                                <th><?php esc_html_e( 'Scheduled / Dispatched', 'presshub-ai-editor' ); ?></th>
+                                <th><?php esc_html_e( 'Link / Error', 'presshub-ai-editor' ); ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -233,7 +233,7 @@ class PressHub_Social_Metabox {
                                     <td>
                                         <?php if ( ! empty( $job['external_post_url'] ) ) : ?>
                                             <a href="<?php echo esc_url( $job['external_post_url'] ); ?>" target="_blank" rel="noopener noreferrer" class="button button-small">
-                                                <?php esc_html_e( 'View Post ↗', 'presshub-social-autopost' ); ?>
+                                                <?php esc_html_e( 'View Post ↗', 'presshub-ai-editor' ); ?>
                                             </a>
                                             <?php $yt_playlist_error = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::playlist_error( $job ) : ''; ?>
                                             <?php if ( '' !== $yt_playlist_error ) : ?>

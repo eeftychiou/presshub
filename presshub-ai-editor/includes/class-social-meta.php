@@ -202,6 +202,7 @@ class PressHub_AI_Social_Meta {
                 ? ( function_exists( 'date_i18n' ) ? date_i18n( 'd/m/Y', strtotime( $date ) ) : $date )
                 : '';
             return ! empty( $formatted_date )
+                // translators: %s: formatted date
                 ? sprintf( __( 'Ακούστε το ηχητικό podcast ενημέρωσης του PressHub (%s).', 'presshub-ai-editor' ), $formatted_date )
                 : __( 'Ακούστε το ηχητικό podcast ενημέρωσης του PressHub.', 'presshub-ai-editor' );
         }

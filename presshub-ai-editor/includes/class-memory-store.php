@@ -202,6 +202,7 @@ class PressHub_AI_Memory_Store {
             if ( ! is_array( $story ) ) {
                 return new WP_Error(
                     'invalid_story_item',
+                    // translators: %d: position of the story item in the list
                     sprintf( __( 'Story item at index %d is not an array.', 'presshub-ai-editor' ), $idx )
                 );
             }
@@ -210,6 +211,7 @@ class PressHub_AI_Memory_Store {
             if ( '' === $key ) {
                 return new WP_Error(
                     'missing_story_key',
+                    // translators: %d: position of the story item in the list
                     sprintf( __( 'Story item at index %d requires a non-empty key slug.', 'presshub-ai-editor' ), $idx )
                 );
             }
@@ -218,6 +220,7 @@ class PressHub_AI_Memory_Store {
             if ( '' === $title ) {
                 return new WP_Error(
                     'missing_story_title',
+                    // translators: %s: story item key
                     sprintf( __( 'Story item "%s" requires a non-empty title.', 'presshub-ai-editor' ), $key )
                 );
             }
@@ -226,6 +229,7 @@ class PressHub_AI_Memory_Store {
             if ( '' === $development ) {
                 return new WP_Error(
                     'missing_story_development',
+                    // translators: %s: story item key
                     sprintf( __( 'Story item "%s" requires a non-empty development summary.', 'presshub-ai-editor' ), $key )
                 );
             }
@@ -233,20 +237,23 @@ class PressHub_AI_Memory_Store {
             if ( ! isset( $story['status'] ) ) {
                 return new WP_Error(
                     'missing_story_status',
-                    sprintf( __( 'Story item "%s" requires a status (%s).', 'presshub-ai-editor' ), $key, implode( ', ', self::STORY_STATUSES ) )
+                    // translators: %1$s: story item key, %2$s: comma-separated list of allowed statuses
+                    sprintf( __( 'Story item "%1$s" requires a status (%2$s).', 'presshub-ai-editor' ), $key, implode( ', ', self::STORY_STATUSES ) )
                 );
             }
             $status = sanitize_key( (string) $story['status'] );
             if ( ! in_array( $status, self::STORY_STATUSES, true ) ) {
                 return new WP_Error(
                     'invalid_story_status',
-                    sprintf( __( 'Story item "%s" has invalid status "%s". Allowed: %s.', 'presshub-ai-editor' ), $key, $status, implode( ', ', self::STORY_STATUSES ) )
+                    // translators: %1$s: story item key, %2$s: the submitted status, %3$s: comma-separated list of allowed statuses
+                    sprintf( __( 'Story item "%1$s" has invalid status "%2$s". Allowed: %3$s.', 'presshub-ai-editor' ), $key, $status, implode( ', ', self::STORY_STATUSES ) )
                 );
             }
 
             if ( ! isset( $story['entities'] ) || ! is_array( $story['entities'] ) ) {
                 return new WP_Error(
                     'invalid_story_entities',
+                    // translators: %s: story item key
                     sprintf( __( 'Story item "%s" requires an entities array.', 'presshub-ai-editor' ), $key )
                 );
             }
@@ -261,6 +268,7 @@ class PressHub_AI_Memory_Store {
             if ( ! isset( $story['source_urls'] ) || ! is_array( $story['source_urls'] ) ) {
                 return new WP_Error(
                     'invalid_story_source_urls',
+                    // translators: %s: story item key
                     sprintf( __( 'Story item "%s" requires a source_urls array.', 'presshub-ai-editor' ), $key )
                 );
             }
@@ -275,6 +283,7 @@ class PressHub_AI_Memory_Store {
             if ( ! array_key_exists( 'include', $story ) ) {
                 return new WP_Error(
                     'missing_story_include',
+                    // translators: %s: story item key
                     sprintf( __( 'Story item "%s" requires an include boolean.', 'presshub-ai-editor' ), $key )
                 );
             }
@@ -431,6 +440,7 @@ class PressHub_AI_Memory_Store {
             }
             $edition = sanitize_key( $args['edition'] );
             if ( ! in_array( $edition, [ 'morning', 'noon' ], true ) ) {
+                // translators: %s: submitted edition
                 return new WP_Error( 'invalid_edition', sprintf( __( 'Invalid edition "%s". Allowed: morning, noon.', 'presshub-ai-editor' ), $edition ) );
             }
         }
@@ -447,6 +457,7 @@ class PressHub_AI_Memory_Store {
         if ( isset( $args['status'] ) ) {
             $status = sanitize_key( $args['status'] );
             if ( ! in_array( $status, self::STATUSES, true ) ) {
+                // translators: %s: submitted status
                 return new WP_Error( 'invalid_status', sprintf( __( 'Invalid status "%s".', 'presshub-ai-editor' ), $status ) );
             }
         } else {
@@ -770,6 +781,7 @@ class PressHub_AI_Memory_Store {
 
         $status = sanitize_key( $status );
         if ( ! in_array( $status, self::STATUSES, true ) ) {
+            // translators: %s: submitted status
             return new WP_Error( 'invalid_status', sprintf( __( 'Invalid status "%s".', 'presshub-ai-editor' ), $status ) );
         }
 

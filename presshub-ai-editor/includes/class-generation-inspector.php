@@ -223,6 +223,7 @@ class PressHub_AI_Generation_Inspector {
                 'copy'         => __( 'Copy', 'presshub-ai-editor' ),
                 'copied'       => __( 'Copied', 'presshub-ai-editor' ),
                 'copy_failed'  => __( 'Copy failed', 'presshub-ai-editor' ),
+                // translators: %s: number of characters
                 'characters'   => __( '%s characters', 'presshub-ai-editor' ),
                 'empty'        => __( '(empty)', 'presshub-ai-editor' ),
                 'raw_intro'    => __( 'Download the complete record (settings, inputs, memory, prompts, response, usage, TTS) as JSON.', 'presshub-ai-editor' ),
@@ -806,6 +807,7 @@ class PressHub_AI_Generation_Inspector {
             $html .= '</tbody></table>';
         }
 
+        // translators: %d: number of dropped articles
         $html .= self::section_heading( sprintf( __( 'Articles dropped (%d)', 'presshub-ai-editor' ), count( $dropped ) ) );
         if ( empty( $dropped ) ) {
             $html .= self::notice( __( 'No articles were dropped.', 'presshub-ai-editor' ) );
@@ -879,10 +881,12 @@ class PressHub_AI_Generation_Inspector {
         if ( empty( $entries ) ) {
             $html .= self::notice( __( 'Memory was enabled but no entries were included in this generation (memory was empty).', 'presshub-ai-editor' ) );
         } else {
+            // translators: %d: number of included entries
             $html .= self::section_heading( sprintf( __( 'Entries included (%d)', 'presshub-ai-editor' ), count( $entries ) ) )
                 . self::render_memory_entries( $entries );
         }
         if ( ! empty( $trimmed ) ) {
+            // translators: %d: number of trimmed entries
             $html .= self::section_heading( sprintf( __( 'Entries trimmed (%d)', 'presshub-ai-editor' ), count( $trimmed ) ) )
                 . self::render_memory_entries( $trimmed );
         }
@@ -1179,10 +1183,12 @@ class PressHub_AI_Generation_Inspector {
                     . esc_html( self::kind_label( $row['kind'] ) ) . '</td><td>' . self::cell( $row['edition'] ) . '</td><td>'
                     . esc_html( $row['status'] ) . '</td><td>' . self::post_link_html( (int) $row['post_id'] ) . '</td><td>'
                     . self::cell( $row['model'] ) . '</td><td><a href="' . esc_url( $open_url ) . '">'
+                    // translators: %d: generation record ID
                     . esc_html( sprintf( __( 'Open #%d', 'presshub-ai-editor' ), $row['id'] ) ) . '</a></td></tr>';
             }
             $html .= '</tbody></table>';
             if ( count( $rows ) >= self::LIST_LIMIT ) {
+                // translators: %d: maximum number of records shown
                 $html .= '<p class="description">' . esc_html( sprintf( __( 'Showing the newest %d records. Narrow the filters to see others.', 'presshub-ai-editor' ), self::LIST_LIMIT ) ) . '</p>';
             }
         }
