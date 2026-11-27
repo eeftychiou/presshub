@@ -1640,6 +1640,11 @@ class PressHub_AI_Settings_Render {
             <p><?php echo __( 'Monitor live token usage, Text-to-Speech character volumes, news crawling metrics, API latencies, and success rates.', 'presshub-ai-editor' ); ?></p>
 
             <div class="presshub-token-kpis" id="presshub-token-kpis">
+                <div class="presshub-kpi-card presshub-kpi-cost">
+                    <span class="kpi-title"><?php echo __( 'Estimated Cost', 'presshub-ai-editor' ); ?></span>
+                    <span class="kpi-value" id="kpi-cost-total">-</span>
+                    <span class="kpi-subtitle" id="kpi-cost-per-day"><?php echo __( 'USD, list prices', 'presshub-ai-editor' ); ?></span>
+                </div>
                 <div class="presshub-kpi-card">
                     <span class="kpi-title"><?php echo __( 'Total Requests', 'presshub-ai-editor' ); ?></span>
                     <span class="kpi-value" id="kpi-total-requests">-</span>
@@ -1664,6 +1669,50 @@ class PressHub_AI_Settings_Render {
                     <span class="kpi-title"><?php echo __( 'Success Rate', 'presshub-ai-editor' ); ?></span>
                     <span class="kpi-value" id="kpi-success-rate">100%</span>
                     <span class="kpi-subtitle"><?php echo __( 'Error-free runs', 'presshub-ai-editor' ); ?></span>
+                </div>
+            </div>
+
+            <div class="presshub-cost-breakdown ph-margin-top-15px" id="presshub-cost-breakdown">
+                <h3><?php echo __( 'Where the money goes', 'presshub-ai-editor' ); ?></h3>
+                <p class="description">
+                    <?php
+                    echo esc_html( sprintf(
+                        /* translators: %s: date of the price list, e.g. 2026-06-02. */
+                        __( 'Estimated from the logged tokens, characters and images at Gemini API and Google Cloud TTS list prices (as of %s). Free-tier allowances and credits are not counted, so your Google billing page is the real bill. Covers the selected date range.', 'presshub-ai-editor' ),
+                        PressHub_AI_Cost_Estimator::PRICES_AS_OF
+                    ) );
+                    ?>
+                </p>
+                <p class="description" id="presshub-cost-notes"></p>
+                <div class="ph-display-flex ph-gap-12px ph-flex-wrap-wrap">
+                    <div class="ph-flex-1 ph-min-width-200px presshub-table-responsive">
+                        <table class="wp-list-table widefat striped presshub-cost-table">
+                            <thead>
+                                <tr>
+                                    <th><?php echo __( 'Action', 'presshub-ai-editor' ); ?></th>
+                                    <th><?php echo __( 'Calls', 'presshub-ai-editor' ); ?></th>
+                                    <th><?php echo __( 'Cost', 'presshub-ai-editor' ); ?></th>
+                                    <th><?php echo __( 'Per call', 'presshub-ai-editor' ); ?></th>
+                                    <th><?php echo __( 'Share', 'presshub-ai-editor' ); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody id="presshub-cost-by-action"><tr><td colspan="5">-</td></tr></tbody>
+                        </table>
+                    </div>
+                    <div class="ph-flex-1 ph-min-width-200px presshub-table-responsive">
+                        <table class="wp-list-table widefat striped presshub-cost-table">
+                            <thead>
+                                <tr>
+                                    <th><?php echo __( 'Model', 'presshub-ai-editor' ); ?></th>
+                                    <th><?php echo __( 'Calls', 'presshub-ai-editor' ); ?></th>
+                                    <th><?php echo __( 'Cost', 'presshub-ai-editor' ); ?></th>
+                                    <th><?php echo __( 'Per call', 'presshub-ai-editor' ); ?></th>
+                                    <th><?php echo __( 'Share', 'presshub-ai-editor' ); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody id="presshub-cost-by-model"><tr><td colspan="5">-</td></tr></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -1731,13 +1780,14 @@ class PressHub_AI_Settings_Render {
                             <th class="ph-width-110px"><?php echo __( 'Provider', 'presshub-ai-editor' ); ?></th>
                             <th class="ph-width-140px"><?php echo __( 'Model', 'presshub-ai-editor' ); ?></th>
                             <th><?php echo __( 'Tokens / Metrics', 'presshub-ai-editor' ); ?></th>
+                            <th class="ph-width-90px"><?php echo __( 'Est. cost', 'presshub-ai-editor' ); ?></th>
                             <th class="ph-width-90px"><?php echo __( 'Latency', 'presshub-ai-editor' ); ?></th>
                             <th class="ph-width-90px"><?php echo __( 'Status', 'presshub-ai-editor' ); ?></th>
                             <th class="ph-width-80px"><?php echo __( 'Details', 'presshub-ai-editor' ); ?></th>
                         </tr>
                     </thead>
                     <tbody id="presshub-token-logs-tbody">
-                        <tr><td colspan="8" class="ph-text-align-center ph-padding-20px"><?php echo __( 'Loading token usage logs...', 'presshub-ai-editor' ); ?></td></tr>
+                        <tr><td colspan="9" class="ph-text-align-center ph-padding-20px"><?php echo __( 'Loading token usage logs...', 'presshub-ai-editor' ); ?></td></tr>
                     </tbody>
                 </table>
             </div>

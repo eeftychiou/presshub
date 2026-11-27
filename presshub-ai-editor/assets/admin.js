@@ -3510,6 +3510,35 @@ jQuery(document).ready(function($) {
         return (num || 0).toLocaleString();
     }
 
+    // 2.90.0: estimated cost in USD. Small amounts keep more decimals so a single call is readable.
+    function formatUsd(usd) {
+        var v = Number(usd) || 0;
+        var digits = v === 0 ? 2 : (v < 0.01 ? 4 : (v < 1 ? 3 : 2));
+        return '$' + v.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    }
+
+    function renderCostGroup($tbody, entries, nameFn) {
+        if (!entries || !entries.length) {
+            $tbody.html('<tr><td colspan="5" style="color:#666;">' + presshubEsc(__('No billed calls in this range.', 'presshub-ai-editor')) + '</td></tr>');
+            return;
+        }
+        var html = '';
+        entries.slice(0, 15).forEach(function(e) {
+            var perCall = e.calls > 0 ? e.usd / e.calls : 0;
+            var cost = e.unpriced > 0 && e.unpriced === e.calls
+                ? '<span title="' + presshubEsc(__('No price known for this model', 'presshub-ai-editor')) + '">-</span>'
+                : '<strong>' + presshubEsc(formatUsd(e.usd)) + '</strong>' + (e.unpriced > 0 ? ' <span style="color:#996800;" title="' + presshubEsc(__('Some calls have no known price', 'presshub-ai-editor')) + '">*</span>' : '');
+            html += '<tr>' +
+                '<td>' + nameFn(e) + '</td>' +
+                '<td>' + presshubEsc(formatNumber(e.calls)) + '</td>' +
+                '<td>' + cost + '</td>' +
+                '<td>' + presshubEsc(formatUsd(perCall)) + '</td>' +
+                '<td>' + presshubEsc((e.share || 0) + '%') + '</td>' +
+                '</tr>';
+        });
+        $tbody.html(html);
+    }
+
     function loadTokenLogs(page) {
         currentTokenPage = page || 1;
         var $tbody   = $('#presshub-token-logs-tbody');
@@ -3551,11 +3580,32 @@ jQuery(document).ready(function($) {
                 $('#kpi-scraped-articles').text(formatNumber(summary.scraped_articles));
                 $('#kpi-success-rate').text((summary.success_rate !== undefined ? summary.success_rate : 100) + '%');
 
+                // Estimated cost (2.90.0)
+                $('#kpi-cost-total').text(formatUsd(summary.cost_total));
+                $('#kpi-cost-per-day').text(sprintf(__('≈ %s per day, USD list prices', 'presshub-ai-editor'), formatUsd(summary.cost_per_day)));
+                renderCostGroup($('#presshub-cost-by-action'), summary.cost_by_action, function(e) {
+                    return presshubEsc(e.label || e.action) + ' <code style="font-size:10px; color:#666;">' + presshubEsc(e.action) + '</code>';
+                });
+                renderCostGroup($('#presshub-cost-by-model'), summary.cost_by_model, function(e) {
+                    return '<code style="font-size:11px;">' + presshubEsc(e.model) + '</code>';
+                });
+                var notes = [];
+                if (summary.thoughts_tokens > 0) {
+                    notes.push(sprintf(__('Includes %s Gemini thinking tokens, billed as output but not part of the token totals above.', 'presshub-ai-editor'), formatNumber(summary.thoughts_tokens)));
+                }
+                if (summary.cost_estimated_usd > 0) {
+                    notes.push(sprintf(__('%s of it is estimated from characters (TTS rows logged before token counts were kept).', 'presshub-ai-editor'), formatUsd(summary.cost_estimated_usd)));
+                }
+                if (summary.cost_unpriced > 0) {
+                    notes.push(sprintf(__('%d calls use a model with no known price and count as $0.', 'presshub-ai-editor'), summary.cost_unpriced));
+                }
+                $('#presshub-cost-notes').text(notes.join(' '));
+
                 // Render Table Rows
                 var items = logsData.items || [];
                 window.currentLogsItems = items;
                 if (items.length === 0) {
-                    $tbody.html('<tr><td colspan="8" style="text-align:center; padding: 25px; color: #666;">' + presshubEsc(__('No token activity logs found matching the selected filters.', 'presshub-ai-editor')) + '</td></tr>');
+                    $tbody.html('<tr><td colspan="9" style="text-align:center; padding: 25px; color: #666;">' + presshubEsc(__('No token activity logs found matching the selected filters.', 'presshub-ai-editor')) + '</td></tr>');
                 } else {
                     var rowsHtml = '';
                     items.forEach(function(item, idx) {
@@ -3566,7 +3616,7 @@ jQuery(document).ready(function($) {
 
                         var metricDisplay = '';
                         if (item.total_tokens > 0) {
-                            metricDisplay = '<strong>' + formatNumber(item.total_tokens) + '</strong> tokens <span style="color:#666; font-size:11px;">(P: ' + formatNumber(item.prompt_tokens) + ' / C: ' + formatNumber(item.completion_tokens) + ')</span>';
+                            metricDisplay = '<strong>' + formatNumber(item.total_tokens) + '</strong> tokens <span style="color:#666; font-size:11px;">(P: ' + formatNumber(item.prompt_tokens) + ' / C: ' + formatNumber(item.completion_tokens) + (item.thoughts_tokens > 0 ? ' / ' + presshubEsc(__('Thinking', 'presshub-ai-editor')) + ': ' + formatNumber(item.thoughts_tokens) : '') + ')</span>';
                         } else if (item.metric_units > 0) {
                             metricDisplay = '<strong>' + formatNumber(item.metric_units) + '</strong> units';
                         } else {
@@ -3574,6 +3624,9 @@ jQuery(document).ready(function($) {
                         }
 
                         var duration   = item.duration_ms ? formatNumber(item.duration_ms) + ' ms' : '-';
+                        var costCell   = item.cost_priced === false
+                            ? '<span style="color:#666;" title="' + presshubEsc(__('No price known for this model', 'presshub-ai-editor')) + '">-</span>'
+                            : presshubEsc((item.cost_estimated ? '≈ ' : '') + formatUsd(item.cost_usd));
 
                         var detailsBtn = isSuccess
                             ? '<button type="button" class="button button-small presshub-view-log-btn" data-index="' + idx + '" style="display:inline-flex; align-items:center; gap:4px; color:#00a32a;"><span class="dashicons dashicons-yes"></span> ' + presshubEsc(__('Details', 'presshub-ai-editor')) + '</button>'
@@ -3585,6 +3638,7 @@ jQuery(document).ready(function($) {
                             '<td><strong>' + presshubEsc(item.provider || '') + '</strong></td>' +
                             '<td><code style="font-size:11px;">' + presshubEsc(item.model || '') + '</code></td>' +
                             '<td>' + metricDisplay + '</td>' +
+                            '<td>' + costCell + '</td>' +
                             '<td>' + presshubEsc(duration) + '</td>' +
                             '<td>' + statusBadge + '</td>' +
                             '<td>' + detailsBtn + '</td>' +
@@ -3608,7 +3662,7 @@ jQuery(document).ready(function($) {
             }
         }).fail(function(xhr, status, error) {
             $spinner.removeClass('is-active');
-            $tbody.html('<tr><td colspan="8" style="text-align:center; color:#d63638; padding:20px;">' + presshubEsc(__('Error fetching token logs: ', 'presshub-ai-editor') + (error || status)) + '</td></tr>');
+            $tbody.html('<tr><td colspan="9" style="text-align:center; color:#d63638; padding:20px;">' + presshubEsc(__('Error fetching token logs: ', 'presshub-ai-editor') + (error || status)) + '</td></tr>');
         });
     }
 
