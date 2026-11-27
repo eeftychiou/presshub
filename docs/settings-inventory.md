@@ -417,6 +417,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_editorial_agenda_budgets` | `presshub_ai_editorial_agenda_budgets` |
 | `presshub_ai_enable_llm_extractor` | code only |
 | `presshub_ai_enable_social_meta` | code only |
+| `presshub_ai_fact_check_hosts` | code only |
 | `presshub_ai_fact_checks_budgets` | code only |
 | `presshub_ai_fact_checks_enabled` | code only |
 | `presshub_ai_fetch_source_urls` | `presshub_ai_fetch_urls` |

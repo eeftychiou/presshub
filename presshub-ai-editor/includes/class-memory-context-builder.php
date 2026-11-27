@@ -33,6 +33,26 @@ require_once __DIR__ . '/class-context-estimator.php';
 class PressHub_AI_Memory_Context_Builder {
 
     /**
+     * Memory blocks built in this request (newest last, at most 4). The
+     * fact checks match only today's material, never these: the memory
+     * retells what we already said, so a fact check we reported would
+     * otherwise be put back in every prompt and retold every day.
+     *
+     * @var string[]
+     */
+    private static array $rendered_texts = [];
+
+    /** Memory blocks built in this request. */
+    public static function rendered_texts(): array {
+        return self::$rendered_texts;
+    }
+
+    /** Forget the memory blocks of this request (tests). */
+    public static function reset_rendered_texts(): void {
+        self::$rendered_texts = [];
+    }
+
+    /**
      * Strip the {memory_context} placeholder cleanly from a prompt template,
      * restoring the exact original trailing newline structure of stock templates.
      *
@@ -678,6 +698,11 @@ class PressHub_AI_Memory_Context_Builder {
             'deduped'             => $deduped,
             'podcast_lines_count' => count( $podcast_lines ),
         ];
+
+        if ( '' !== trim( (string) $rendered ) ) {
+            self::$rendered_texts[] = (string) $rendered;
+            self::$rendered_texts   = array_slice( self::$rendered_texts, -4 );
+        }
 
         return [
             'text'                => $rendered,

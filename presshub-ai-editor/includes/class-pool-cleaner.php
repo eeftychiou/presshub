@@ -15,9 +15,11 @@
  *     is aged from the first harvest that saw its URL (option
  *     FIRST_SEEN_OPTION), so an undated piece that stays on a homepage
  *     for weeks is not new news every day.
- *  2b. Already told: a URL that a published daily brief or podcast linked
- *     to inside the age limit ('told'), so the next edition does not tell
- *     the same article again (filter presshub_ai_pool_drop_told).
+ *  2b. Already told ('told', filter presshub_ai_pool_drop_told): a URL that
+ *     a daily brief or podcast published in the last TOLD_DAYS linked to,
+ *     or a copy of it on the same site (WordPress gives a translation or
+ *     repost the same slug plus "-2"); and a fact-checker's article about a
+ *     fact check we already reported, named in its title (PressHub_AI_Fact_Checks register).
  *  3. Promos and filler: titles that match the promo patterns, and scraped
  *     results stubs (a score-only title with little text). A general
  *     minimum length can be set with presshub_ai_pool_min_scraped_words.
@@ -41,6 +43,8 @@ class PressHub_AI_Pool_Cleaner {
     const STORED_MAX_CHARS   = 20000;
     /** URL hash => first harvest time, for pages that state no date. */
     const FIRST_SEEN_OPTION  = 'presshub_ai_pool_first_seen';
+    /** Briefs and podcasts of the last this many days count as told. */
+    const TOLD_DAYS = 7;
     /** First-seen entries are kept this long past the age limit. */
     const FIRST_SEEN_KEEP_HOURS = 72;
     const MAX_AGE_HOURS      = 48;
@@ -135,7 +139,7 @@ class PressHub_AI_Pool_Cleaner {
                 continue;
             }
             $reason = self::is_protected( $art ) ? '' : self::drop_reason( $art, $date, $now );
-            if ( '' === $reason && ! self::is_protected( $art ) && isset( $told[ self::url_key( (string) ( $art['url'] ?? '' ) ) ] ) ) {
+            if ( '' === $reason && ! self::is_protected( $art ) && self::is_told( $art, $told ) ) {
                 $reason = 'told';
             }
             if ( '' !== $reason ) {
@@ -292,12 +296,13 @@ class PressHub_AI_Pool_Cleaner {
         $posts = get_posts( [
             'post_type'      => 'post',
             'post_status'    => 'publish',
-            'posts_per_page' => 40,
+            'posts_per_page' => 80,
             'orderby'        => 'date',
             'order'          => 'DESC',
-            'date_query'     => [ [ 'after' => gmdate( 'Y-m-d H:i:s', $now - max( 1, self::max_age_hours() ) * 3600 ), 'column' => 'post_date_gmt', 'inclusive' => true ] ],
+            'date_query'     => [ [ 'after' => gmdate( 'Y-m-d H:i:s', $now - max( self::max_age_hours(), self::TOLD_DAYS * 24 ) * 3600 ), 'column' => 'post_date_gmt', 'inclusive' => true ] ],
             'meta_query'     => [ [ 'key' => '_presshub_briefing_type', 'value' => [ 'text', 'podcast' ], 'compare' => 'IN' ] ],
-            'no_found_rows'  => true,
+            'no_found_rows'          => true,
+            'update_post_term_cache' => false,
         ] );
         $keys = [];
         $edition = 'noon' === $edition ? 'noon' : 'morning';
@@ -313,13 +318,67 @@ class PressHub_AI_Pool_Cleaner {
                 continue;
             }
             foreach ( $m[1] as $href ) {
-                $key = self::url_key( html_entity_decode( $href, ENT_QUOTES, 'UTF-8' ) );
+                $href = html_entity_decode( $href, ENT_QUOTES, 'UTF-8' );
+                $key = self::url_key( $href );
                 if ( '' !== $key ) {
                     $keys[ $key ] = true;
                 }
             }
         }
         return $keys;
+    }
+
+    /**
+     * Whether an article was already told: its URL, or the same slug without
+     * a WordPress "-2" suffix, is in $told; or it is a fact-checker's article
+     * that repeats a fact check we already reported.
+     */
+    public static function is_told( array $art, array $told ): bool {
+        $url = (string) ( $art['url'] ?? '' );
+        if ( '' !== $url && ( isset( $told[ self::url_key( $url ) ] ) || isset( $told[ self::url_key( self::slug_base( $url ) ) ] ) ) ) {
+            return true;
+        }
+        return self::repeats_reported_fact_check( $art );
+    }
+
+    /**
+     * The URL with WordPress's duplicate-slug suffix ("-2" … "-9") cut off
+     * its slug, else unchanged. Only a slug of 15+ characters whose rest does
+     * not itself end in a number or "part"/"meros" is cut, so "budget-2026-3"
+     * or "series-part-2" stay whole. Compared only against told URLs as they
+     * were linked, so "-2" and "-3" of one series never match each other.
+     */
+    public static function slug_base( string $url ): string {
+        $hash  = strpos( $url, '#' );
+        $url   = false === $hash ? $url : substr( $url, 0, $hash );
+        $parts = explode( '?', $url, 2 );
+        $path  = rtrim( $parts[0], '/' );
+        if ( preg_match( '#^(.*/)([^/]*[a-z][^/]*?)-([2-9])$#i', $path, $m ) && strlen( $m[2] ) >= 15
+            && ! preg_match( '/(\d|[-_](part|meros|μερος|μέρος))$/iu', $m[2] ) ) {
+            $path = $m[1] . $m[2];
+        }
+        return $path . ( isset( $parts[1] ) ? '?' . $parts[1] : '' );
+    }
+
+    /**
+     * A fact-checker's own article (host with "factcheck" or "fact-check" in
+     * its name, filter presshub_ai_fact_check_hosts for more) about a claim
+     * that our fact check register already holds: we reported that check.
+     */
+    public static function repeats_reported_fact_check( array $art ): bool {
+        if ( ! class_exists( 'PressHub_AI_Fact_Checks' ) || ! PressHub_AI_Fact_Checks::is_enabled() ) {
+            return false;
+        }
+        $host  = strtolower( (string) parse_url( (string) ( $art['url'] ?? '' ), PHP_URL_HOST ) );
+        $hosts = function_exists( 'apply_filters' ) ? (array) apply_filters( 'presshub_ai_fact_check_hosts', [] ) : [];
+        $hosts = array_map( static function ( $h ) { return preg_replace( '/^www\./', '', strtolower( trim( (string) $h ) ) ); }, $hosts );
+        $is_fc = '' !== $host && ( false !== strpos( $host, 'factcheck' ) || false !== strpos( $host, 'fact-check' ) || in_array( preg_replace( '/^www\./', '', $host ), $hosts, true ) );
+        if ( ! $is_fc ) {
+            return false;
+        }
+        // The title only: a new check that mentions an earlier debunk in its
+        // text is a new finding and is kept.
+        return [] !== PressHub_AI_Fact_Checks::find_in_text( (string) ( $art['title'] ?? '' ) );
     }
 
     /** Short stable key for a URL: scheme, "www.", a trailing slash, the fragment and tracking parameters ignored. */

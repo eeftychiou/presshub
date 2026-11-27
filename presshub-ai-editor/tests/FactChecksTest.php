@@ -131,6 +131,30 @@ fc_check( 'apply: nothing matched, untouched', 'SYS' === $F::apply( 'SYS', 'Κα
 $out = $F::apply( 'SYS', $tweet, 'social_copy_x' );
 fc_check( 'apply: a check already told is not news again', false !== strpos( $out, 'Ένας έλεγχος που ήδη αναφέραμε δεν είναι σημερινή είδηση' ) );
 fc_check( 'apply: block appended', 0 === strpos( $out, "SYS\n\n=== ΕΛΕΓΧΟΙ ΓΕΓΟΝΟΤΩΝ" ) && false !== strpos( $out, '[FC1] «Φωτογραφία με γκράφιτι «Free Cyprus» στο Μόναχο» — παραποιημένο (FactCheck Cyprus' ) && false !== strpos( $out, '=== ΤΕΛΟΣ ΕΛΕΓΧΩΝ ΓΕΓΟΝΟΤΩΝ ===' ) );
+// The pool drops a fact-checker's article about a check we already reported.
+$PC = 'PressHub_AI_Pool_Cleaner';
+fc_check( 'pool: a fact-checker article on a reported check is told', $PC::repeats_reported_fact_check( [ 'url' => 'https://factcheckcyprus.org/the-spread-of-free-cyprus-graffiti-and-the-visegrad-24-network-2/', 'title' => 'The spread of "Free Cyprus" graffiti and the Visegrád 24 network', 'content' => 'Images of Free Cyprus graffiti in European cities...' ] ) );
+fc_check( 'pool: a news site article on the same claim is kept', ! $PC::repeats_reported_fact_check( [ 'url' => 'https://politis.com.cy/a/1', 'title' => 'Free Cyprus', 'content' => 'Free Cyprus graffiti' ] ) );
+fc_check( 'pool: a new check that mentions the old debunk only in its text is kept', ! $PC::repeats_reported_fact_check( [ 'url' => 'https://factcheckcyprus.org/new-video/', 'title' => 'Νέο παραποιημένο βίντεο για το Κυπριακό', 'content' => 'Όπως και με το γκράφιτι Free Cyprus στο Μόναχο, ...' ] ) );
+$fc_hosts = static function () { return [ 'WWW.Example-Checks.org ' ]; };
+add_filter( 'presshub_ai_fact_check_hosts', $fc_hosts );
+fc_check( 'pool: the hosts filter adds a fact-checker (case and www ignored)', $PC::repeats_reported_fact_check( [ 'url' => 'https://www.example-checks.org/a/', 'title' => 'Free Cyprus graffiti again', 'content' => '' ] ) );
+remove_filter( 'presshub_ai_fact_check_hosts', $fc_hosts );
+fc_check( 'pool: a fact-checker article on a new claim is kept', ! $PC::repeats_reported_fact_check( [ 'url' => 'https://factcheckcyprus.org/new-claim/', 'title' => 'Ψεύτικο βίντεο για τις τιμές του ρεύματος', 'content' => 'Το βίντεο είναι παλιό.' ] ) );
+
+// Our own memory of earlier editions never brings a fact check back.
+$mem_text = "### Πρόσφατη Επικαιρότητα\n- " . $tweet;
+$rp = new ReflectionProperty( 'PressHub_AI_Memory_Context_Builder', 'rendered_texts' );
+$rp->setAccessible( true );
+$rp->setValue( null, [ $mem_text ] );
+$out_mem = $F::apply( "SYS\n" . $mem_text, 'Σημερινά άρθρα για τον καιρό.', 'briefing_curation' );
+fc_check( 'apply: a claim only in the memory block adds no fact check', "SYS\n" . $mem_text === $out_mem && null === $F::last_applied() );
+$out_both = $F::apply( "SYS\n" . $mem_text, 'Σημερινό άρθρο: ' . $tweet, 'briefing_curation' );
+fc_check( 'apply: a claim in today\'s material still gets its fact check', false !== strpos( $out_both, '=== ΕΛΕΓΧΟΙ ΓΕΓΟΝΟΤΩΝ' ) );
+$out_user = $F::apply( 'SYS', "Άρθρα:\n\n" . trim( $mem_text ) . "\n\nΣημερινά άρθρα για τον καιρό.", 'podcast_script' );
+fc_check( 'apply: memory placed in the user prompt (trimmed) adds no fact check either', 'SYS' === $out_user && null === $F::last_applied() );
+PressHub_AI_Memory_Context_Builder::reset_rendered_texts();
+$out = $F::apply( 'SYS', $tweet, 'social_copy_x' );
 $last = $F::last_applied();
 fc_check( 'apply: last_applied has refs and the prompt', is_array( $last ) && isset( $last['refs']['FC1'] ) && $out === $last['prompt'] && md5( 'SYS' ) === $last['original_hash'] );
 [ $sent, $cfg ] = PressHub_AI_Generation_Recorder::apply_injected_context( 'SYS', [] );
