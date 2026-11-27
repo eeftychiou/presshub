@@ -213,6 +213,18 @@ $p15 = [ 'articles' => $p14['articles'] ];
 $P::clean( $p15, '2026-11-18', $day1, 'noon' );
 pc_check( 'told: the next edition drops what the morning brief told', 0 === count( $p15['articles'] ) );
 unset( $GLOBALS['GET_POSTS_RESULT'], $GLOBALS['POST_META_STORE'][901] );
+// A copy of a told article on the same site ("-2" slug) is told too.
+$GLOBALS['GET_POSTS_RESULT'] = [ (object) [ 'post_content' => '<a href="https://factcheckcyprus.org/the-spread-of-free-cyprus-graffiti-and-the-visegrad-24-network/">x</a>' ] ];
+$p16 = [ 'articles' => [
+    array_merge( $undated, [ 'url' => 'https://factcheckcyprus.org/the-spread-of-free-cyprus-graffiti-and-the-visegrad-24-network-2/', 'published_at' => $fresh ] ),
+    array_merge( $undated, [ 'url' => 'https://reporter.com.cy/article/1488589', 'published_at' => $fresh, 'content' => pc_words( 400, 'ρεύμα' ) ] ),
+] ];
+$P::clean( $p16, '2026-11-18', $day1 );
+$urls16 = array_column( $p16['articles'], 'url' );
+pc_check( 'told: the "-2" copy of a told slug is dropped', ! in_array( 'https://factcheckcyprus.org/the-spread-of-free-cyprus-graffiti-and-the-visegrad-24-network-2/', $urls16, true ) );
+pc_check( 'told: numeric ids are never cut', in_array( 'https://reporter.com.cy/article/1488589', $urls16, true ) );
+unset( $GLOBALS['GET_POSTS_RESULT'] );
+pc_check( 'slug_base: cuts "-2" from a slug only', 'https://x.cy/some-long-article-slug' === $P::slug_base( 'https://x.cy/some-long-article-slug-2/' ) && 'https://x.cy/a/1488589' === $P::slug_base( 'https://x.cy/a/1488589' ) && 'https://x.cy/short-2' === $P::slug_base( 'https://x.cy/short-2' ) );
 pc_check( 'url_key: query kept, tracking dropped', $P::url_key( 'https://x.cy/a/?utm_source=fb&id=3' ) === $P::url_key( 'http://www.x.cy/a?id=3' ) && $P::url_key( 'https://x.cy/a?id=3' ) !== $P::url_key( 'https://x.cy/a?id=4' ) );
 
 // wiring

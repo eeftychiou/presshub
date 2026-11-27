@@ -368,7 +368,7 @@ class PressHub_AI_Fact_Checks {
             if ( $budget <= 0 || ! self::is_enabled() ) {
                 return $sys_prompt;
             }
-            $hits = self::find_in_text( $material );
+            $hits = self::find_in_text( self::without_memory( $material ) );
             if ( empty( $hits ) ) {
                 return $sys_prompt;
             }
@@ -388,6 +388,23 @@ class PressHub_AI_Fact_Checks {
         } catch ( \Throwable $e ) {
             return $sys_prompt;
         }
+    }
+
+    /**
+     * The material without the editorial memory blocks built in this
+     * request. A fact check is added only when today's material repeats the
+     * claim, not because our own memory of earlier editions mentions it.
+     */
+    public static function without_memory( string $material ): string {
+        if ( ! class_exists( 'PressHub_AI_Memory_Context_Builder' ) || ! method_exists( 'PressHub_AI_Memory_Context_Builder', 'rendered_texts' ) ) {
+            return $material;
+        }
+        foreach ( PressHub_AI_Memory_Context_Builder::rendered_texts() as $mem ) {
+            if ( '' !== trim( $mem ) ) {
+                $material = str_replace( [ $mem, trim( $mem ) ], '', $material );
+            }
+        }
+        return $material;
     }
 
     public static function last_applied(): ?array {
