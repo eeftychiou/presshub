@@ -223,6 +223,90 @@ class PressHub_AI_TTS_Call_Recorder {
     }
 
     // ---------------------------------------------------------------------
+    // Summary (which models and voices actually spoke)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Summarize the TTS calls of an envelope: the models that produced audio, with
+     * how many calls each, the voices and the engines. The model of a call is the
+     * substituted one when a fallback was used. When no call succeeded, `models`
+     * lists the models that were tried and `failed` is true.
+     *
+     * @param mixed $envelope Stored tts_calls envelope (see class docblock).
+     * @return array{models: array<string,int>, voices: string[], engines: string[], failed: bool}
+     */
+    public static function summarize( $envelope ): array {
+        $ok      = [];
+        $tried   = [];
+        $voices  = [];
+        $engines = [];
+        $entries = is_array( $envelope ) && is_array( $envelope['entries'] ?? null ) ? $envelope['entries'] : [];
+        foreach ( $entries as $entry ) {
+            if ( ! is_array( $entry ) || 'request' !== (string) ( $entry['phase'] ?? '' ) ) {
+                continue;
+            }
+            $fallback = (string) ( $entry['fallback_model'] ?? '' );
+            $model    = '' !== $fallback ? $fallback : (string) ( $entry['model'] ?? '' );
+            if ( '' === $model ) {
+                continue;
+            }
+            if ( '' === (string) ( $entry['error'] ?? '' ) ) {
+                $ok[ $model ] = ( $ok[ $model ] ?? 0 ) + 1;
+                if ( '' !== (string) ( $entry['voice'] ?? '' ) ) {
+                    $voices[] = (string) $entry['voice'];
+                }
+                foreach ( is_array( $entry['speakers'] ?? null ) ? $entry['speakers'] : [] as $speaker ) {
+                    if ( is_array( $speaker ) && '' !== (string) ( $speaker['voice'] ?? '' ) ) {
+                        $voices[] = (string) $speaker['voice'];
+                    }
+                }
+            } else {
+                $tried[ $model ] = ( $tried[ $model ] ?? 0 ) + 1;
+            }
+            if ( '' !== (string) ( $entry['engine'] ?? '' ) ) {
+                $engines[] = (string) $entry['engine'];
+            }
+        }
+        return [
+            'models'  => ! empty( $ok ) ? $ok : $tried,
+            'voices'  => array_values( array_unique( $voices ) ),
+            'engines' => array_values( array_unique( $engines ) ),
+            'failed'  => empty( $ok ) && ! empty( $tried ),
+        ];
+    }
+
+    /**
+     * summarize() for a stored record's calls. Empty summary when the record or its
+     * calls are missing; never throws.
+     *
+     * @param int $record_id Generation record ID.
+     * @return array See summarize().
+     */
+    public static function summarize_record( int $record_id ): array {
+        try {
+            $record = $record_id > 0 ? PressHub_AI_Generation_Recorder::get( $record_id ) : null;
+            return self::summarize( is_array( $record ) ? ( $record['tts_calls'] ?? null ) : null );
+        } catch ( \Throwable $t ) {
+            self::log_warning( 'TTS call summary failed: ' . $t->getMessage() );
+            return self::summarize( null );
+        }
+    }
+
+    /**
+     * One-line label for a summary: "model-a (12), model-b (1)", or "" when empty.
+     *
+     * @param array $summary From summarize().
+     */
+    public static function models_label( array $summary ): string {
+        $models = is_array( $summary['models'] ?? null ) ? $summary['models'] : [];
+        $parts  = [];
+        foreach ( $models as $model => $count ) {
+            $parts[] = count( $models ) > 1 ? sprintf( '%s (%d)', $model, (int) $count ) : (string) $model;
+        }
+        return implode( ', ', $parts );
+    }
+
+    // ---------------------------------------------------------------------
     // Internals
     // ---------------------------------------------------------------------
 

@@ -250,16 +250,24 @@ class PressHub_Social_TikTok_Narrator {
         if ( $record_id <= 0 || ! class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
             return;
         }
+        // The models that actually spoke, read from the calls logged on this record.
+        $used = class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ? PressHub_AI_TTS_Call_Recorder::summarize_record( $record_id ) : [];
         if ( is_wp_error( $result ) || empty( $result['url'] ) ) {
-            PressHub_AI_Generation_Recorder::update_record( $record_id, [
+            $fields = [
                 'status'        => 'error',
                 'error_message' => is_wp_error( $result ) ? $result->get_error_message() : 'Synthesized audio has no URL.',
-            ] );
+            ];
+            if ( ! empty( $used['models'] ) ) {
+                $fields['tts'] = [ 'models_used' => $used['models'] ];
+            }
+            PressHub_AI_Generation_Recorder::update_record( $record_id, $fields );
             return;
         }
         PressHub_AI_Generation_Recorder::update_record( $record_id, [
             'tts' => [
                 'engine'         => 'gemini',
+                'model'          => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : '',
+                'models_used'    => (array) ( $used['models'] ?? [] ),
                 'voices'         => [ 'narrator' => (string) ( $result['voice'] ?? '' ) ],
                 'speed'          => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_speed() : null,
                 'pitch'          => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_pitch() : null,
