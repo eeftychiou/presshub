@@ -385,7 +385,7 @@ class PressHub_AI_Generation_Inspector {
             $where[] = $wpdb->prepare( 'status = %s', $filters['status'] );
         }
 
-        $sql  = 'SELECT ' . self::LIGHT_COLUMNS . ', config_json FROM ' . $table;
+        $sql  = 'SELECT ' . self::LIGHT_COLUMNS . ', config_json, tts_json FROM ' . $table;
         $sql .= $where ? ' WHERE ' . implode( ' AND ', $where ) : '';
         $sql .= ' ORDER BY created_at DESC, id DESC LIMIT ' . max( 1, (int) $limit );
 
@@ -394,10 +394,75 @@ class PressHub_AI_Generation_Inspector {
         foreach ( is_array( $results ) ? $results : [] as $row ) {
             $config = ( isset( $row['config_json'] ) && '' !== (string) $row['config_json'] ) ? json_decode( (string) $row['config_json'], true ) : [];
             $config = is_array( $config ) ? $config : [];
-            unset( $row['config_json'] );
-            $row          = self::normalize_light_row( $row );
-            $row['model'] = (string) ( $config['model'] ?? '' );
-            $rows[]       = $row;
+            $tts    = ( isset( $row['tts_json'] ) && '' !== (string) $row['tts_json'] ) ? json_decode( (string) $row['tts_json'], true ) : [];
+            $tts    = is_array( $tts ) ? $tts : [];
+            unset( $row['config_json'], $row['tts_json'] );
+            $row              = self::normalize_light_row( $row );
+            $row['model']     = (string) ( $config['model'] ?? '' );
+            $row['tts_model'] = self::list_tts_model( (string) $row['kind'], $config, $tts );
+            // A TTS-only record has no text model: its Model column would repeat the TTS model.
+            if ( in_array( $row['kind'], [ 'tts_test', 'tiktok_narration', 'tiktok_short' ], true ) ) {
+                $row['model'] = '';
+            }
+            $rows[] = $row;
+        }
+        return $rows;
+    }
+
+    /**
+     * TTS model shown in the records list, without loading the per-call log:
+     * the models that spoke (tts.models_used), else the configured TTS model
+     * (tts.model), else the first call's model of a TTS test record.
+     */
+    public static function list_tts_model( string $kind, array $config, array $tts ): string {
+        if ( ! in_array( $kind, self::TTS_KINDS, true ) ) {
+            return '';
+        }
+        if ( is_array( $tts['models_used'] ?? null ) && class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+            $label = PressHub_AI_TTS_Call_Recorder::models_label( $tts['models_used'] );
+            if ( '' !== $label ) {
+                return $label;
+            }
+        }
+        // tts.model is the Gemini model setting; a Google Cloud run never used it.
+        if ( '' !== (string) ( $tts['model'] ?? '' ) && 'google_cloud' !== (string) ( $tts['engine'] ?? '' ) ) {
+            return (string) $tts['model'];
+        }
+        return 'tts_test' === $kind ? (string) ( $config['model'] ?? '' ) : '';
+    }
+
+    /**
+     * TTS model and voice rows for a full record: from the logged calls when there
+     * are any (the models that actually spoke), else from the stored TTS settings.
+     *
+     * @return array Label => value rows for kv_table(); empty for non-TTS kinds.
+     */
+    private static function tts_used_rows( array $record ): array {
+        if ( ! in_array( $record['kind'] ?? '', self::TTS_KINDS, true ) ) {
+            return [];
+        }
+        $tts     = is_array( $record['tts'] ?? null ) ? $record['tts'] : [];
+        $summary = class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ? PressHub_AI_TTS_Call_Recorder::summarize( $record['tts_calls'] ?? null ) : [];
+        $model   = class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ? PressHub_AI_TTS_Call_Recorder::models_label( $summary ) : '';
+        if ( '' === $model ) {
+            $model = self::list_tts_model( (string) $record['kind'], is_array( $record['config'] ?? null ) ? $record['config'] : [], $tts );
+        }
+        $voices = ! empty( $summary['voices'] ) ? implode( ', ', $summary['voices'] ) : '';
+        if ( '' === $voices && is_array( $tts['voices'] ?? null ) ) {
+            $voices = implode( ', ', array_filter( array_map( 'strval', array_values( $tts['voices'] ) ), 'strlen' ) );
+        }
+        $engine = ! empty( $summary['engines'] ) ? implode( ', ', $summary['engines'] ) : (string) ( $tts['engine'] ?? '' );
+        $rows   = [ __( 'TTS model', 'presshub-ai-editor' ) => $model ];
+        if ( '' !== $voices ) {
+            $rows[ __( 'TTS voices', 'presshub-ai-editor' ) ] = $voices;
+        }
+        if ( '' !== $engine ) {
+            $rows[ __( 'TTS engine', 'presshub-ai-editor' ) ] = $engine;
+        }
+        $configured = (string) ( $tts['model'] ?? '' );
+        $gemini_ran = in_array( 'gemini', (array) ( $summary['engines'] ?? [] ), true );
+        if ( '' !== $configured && $gemini_ran && ! empty( $summary['models'] ) && ! isset( $summary['models'][ $configured ] ) ) {
+            $rows[ __( 'Configured TTS model', 'presshub-ai-editor' ) ] = $configured;
         }
         return $rows;
     }
@@ -644,6 +709,12 @@ class PressHub_AI_Generation_Inspector {
                 $settings[ ucfirst( str_replace( '_', ' ', $extra ) ) ] = $config[ $extra ];
             }
         }
+        // Audio records: which TTS model and voices spoke. The Model row is the text
+        // model; TTS-only records have none (a TTS test's config.model is its TTS model).
+        if ( in_array( $record['kind'], [ 'tts_test', 'tiktok_narration', 'tiktok_short' ], true ) ) {
+            unset( $settings[ __( 'Model', 'presshub-ai-editor' ) ], $settings[ __( 'Model source', 'presshub-ai-editor' ) ] );
+        }
+        $settings = array_merge( $settings, self::tts_used_rows( $record ) );
 
         // What call_provider() added to the system prompt (agenda, people and
         // policy fiches), so an editor can see which fiches a generation used.
@@ -1013,10 +1084,13 @@ class PressHub_AI_Generation_Inspector {
             return self::notice( __( 'TTS applies to podcast script, TikTok narration and TTS test records only.', 'presshub-ai-editor' ) );
         }
         $calls_html = self::render_tts_calls( $record );
+        $used_rows  = self::tts_used_rows( $record );
+        $used_html  = '' !== implode( '', array_map( 'strval', $used_rows ) ) ? self::kv_table( $used_rows ) : '';
         $tts        = $record['tts'] ?? null;
-        if ( ! is_array( $tts ) || empty( $tts ) ) {
+        // A failed synthesis stores only tts.models_used: no settings table to show.
+        if ( ! is_array( $tts ) || empty( array_diff_key( $tts, [ 'models_used' => true ] ) ) ) {
             if ( '' !== $calls_html ) {
-                return $calls_html;
+                return $used_html . $calls_html;
             }
             return self::notice( in_array( $record['kind'], [ 'tts_test', 'tiktok_narration', 'tiktok_short' ], true )
                 ? __( 'No TTS calls were recorded.', 'presshub-ai-editor' )
@@ -1032,9 +1106,9 @@ class PressHub_AI_Generation_Inspector {
             }
             $voices = implode( ', ', $parts );
         }
-        return self::kv_table( [
+        $settings_rows = [
             __( 'Engine', 'presshub-ai-editor' )        => $tts['engine'] ?? '',
-            __( 'Model', 'presshub-ai-editor' )         => $tts['model'] ?? '',
+            __( 'Configured model', 'presshub-ai-editor' ) => $tts['model'] ?? '',
             __( 'Payload mode', 'presshub-ai-editor' )  => $tts['payload_mode'] ?? '',
             __( 'Voices', 'presshub-ai-editor' )        => $voices,
             __( 'Hosts', 'presshub-ai-editor' )         => $tts['host_count'] ?? '',
@@ -1048,7 +1122,20 @@ class PressHub_AI_Generation_Inspector {
             __( 'Turns', 'presshub-ai-editor' )         => $tts['turns_count'] ?? '',
             __( 'Script source', 'presshub-ai-editor' ) => $tts['script_source'] ?? '',
             __( 'Synthesized at', 'presshub-ai-editor' ) => $tts['synthesized_at'] ?? '',
-        ] ) . $calls_html;
+        ];
+        // The rows above already say which engine and voices spoke; the configured
+        // model stays (it shows when a fallback took over).
+        if ( '' !== $used_html ) {
+            if ( isset( $used_rows[ __( 'TTS engine', 'presshub-ai-editor' ) ] ) ) {
+                unset( $settings_rows[ __( 'Engine', 'presshub-ai-editor' ) ] );
+            }
+            if ( isset( $used_rows[ __( 'TTS voices', 'presshub-ai-editor' ) ] ) ) {
+                unset( $settings_rows[ __( 'Voices', 'presshub-ai-editor' ) ] );
+            }
+            unset( $used_rows[ __( 'Configured TTS model', 'presshub-ai-editor' ) ] );
+            $used_html = self::kv_table( $used_rows );
+        }
+        return $used_html . self::kv_table( $settings_rows ) . $calls_html;
     }
 
     // ---------------------------------------------------------------------
@@ -1172,13 +1259,14 @@ class PressHub_AI_Generation_Inspector {
             $html .= '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Date', 'presshub-ai-editor' ) . '</th><th>'
                 . esc_html__( 'Kind', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'Edition', 'presshub-ai-editor' ) . '</th><th>'
                 . esc_html__( 'Status', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'Post', 'presshub-ai-editor' ) . '</th><th>'
-                . esc_html__( 'Model', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'Inspect', 'presshub-ai-editor' ) . '</th></tr></thead><tbody>';
+                . esc_html__( 'Model', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'TTS model', 'presshub-ai-editor' ) . '</th><th>'
+                . esc_html__( 'Inspect', 'presshub-ai-editor' ) . '</th></tr></thead><tbody>';
             foreach ( $rows as $row ) {
                 $open_url = add_query_arg( array_merge( $filters, [ 'page' => self::PAGE_SLUG, 'record_id' => $row['id'] ] ), $base );
                 $html    .= '<tr><td>' . esc_html( '' !== $row['briefing_date'] ? $row['briefing_date'] : $row['created_at'] ) . '</td><td>'
                     . esc_html( self::kind_label( $row['kind'] ) ) . '</td><td>' . self::cell( $row['edition'] ) . '</td><td>'
                     . esc_html( $row['status'] ) . '</td><td>' . self::post_link_html( (int) $row['post_id'] ) . '</td><td>'
-                    . self::cell( $row['model'] ) . '</td><td><a href="' . esc_url( $open_url ) . '">'
+                    . self::cell( $row['model'] ) . '</td><td>' . self::cell( $row['tts_model'] ?? '' ) . '</td><td><a href="' . esc_url( $open_url ) . '">'
                     . esc_html( sprintf( __( 'Open #%d', 'presshub-ai-editor' ), $row['id'] ) ) . '</a></td></tr>';
             }
             $html .= '</tbody></table>';

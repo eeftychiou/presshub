@@ -3008,6 +3008,8 @@ class PressHub_AI_Audio_Synthesizer {
                         'tts' => [
                             'engine'        => (string) $engine,
                             'model'         => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : '',
+                            // The models that actually spoke (fallbacks included), from the calls logged so far.
+                            'models_used'   => class_exists( 'PressHub_AI_TTS_Call_Recorder' ) && null !== $script_record ? PressHub_AI_TTS_Call_Recorder::stored_summary( PressHub_AI_TTS_Call_Recorder::summarize( $script_record['tts_calls'] ?? null ) ) : [],
                             'payload_mode'  => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : '',
                             'voices'        => [
                                 'presenter_1' => (string) $saved_p1,

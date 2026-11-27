@@ -2478,11 +2478,17 @@ class PressHub_Social_TikTok_Shorts {
         if ( $record_id <= 0 || ! class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
             return;
         }
+        // The models that actually spoke, read from the calls logged on this record.
+        $used = class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ? PressHub_AI_TTS_Call_Recorder::summarize_record( $record_id ) : [];
         if ( is_wp_error( $result ) || empty( $result['url'] ) ) {
-            PressHub_AI_Generation_Recorder::update_record( $record_id, [
+            $fields = [
                 'status'        => 'error',
                 'error_message' => is_wp_error( $result ) ? $result->get_error_message() : 'Synthesized audio has no URL.',
-            ] );
+            ];
+            if ( ! empty( $used['models'] ) ) {
+                $fields['tts'] = [ 'models_used' => PressHub_AI_TTS_Call_Recorder::stored_summary( $used ) ];
+            }
+            PressHub_AI_Generation_Recorder::update_record( $record_id, $fields );
             return;
         }
         $has_settings = class_exists( 'PressHub_AI_Settings_Storage' );
@@ -2490,6 +2496,7 @@ class PressHub_Social_TikTok_Shorts {
             'tts' => [
                 'engine'         => $has_settings ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : '',
                 'model'          => $has_settings ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : '',
+                'models_used'    => ! empty( $used ) ? PressHub_AI_TTS_Call_Recorder::stored_summary( $used ) : [],
                 'voices'         => (array) ( $result['voices'] ?? [] ),
                 'speed'          => self::speed(),
                 'style'          => self::style(),
