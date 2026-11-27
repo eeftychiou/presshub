@@ -226,53 +226,90 @@ class PressHub_AI_TTS_Call_Recorder {
     // Summary (which models and voices actually spoke)
     // ---------------------------------------------------------------------
 
+    /** Label used as the "model" of Google Cloud calls, whose model field holds a voice name. */
+    const GOOGLE_CLOUD_LABEL = 'Google Cloud TTS';
+
     /**
      * Summarize the TTS calls of an envelope: the models that produced audio, with
      * how many calls each, the voices and the engines. The model of a call is the
-     * substituted one when a fallback was used. When no call succeeded, `models`
-     * lists the models that were tried and `failed` is true.
+     * substituted one when a fallback was used. Google Cloud calls carry a voice
+     * name in their model fields, so they count under GOOGLE_CLOUD_LABEL and their
+     * voice goes to `voices`. Turns served from the cache count under `cached`.
+     * When no call succeeded, `models` lists the models that were tried and
+     * `failed` is true. `partial` is true when the call log was truncated.
      *
      * @param mixed $envelope Stored tts_calls envelope (see class docblock).
-     * @return array{models: array<string,int>, voices: string[], engines: string[], failed: bool}
+     * @return array{models: array<string,int>, cached: array<string,int>, voices: string[], engines: string[], failed: bool, partial: bool}
      */
     public static function summarize( $envelope ): array {
         $ok      = [];
         $tried   = [];
+        $cached  = [];
         $voices  = [];
         $engines = [];
         $entries = is_array( $envelope ) && is_array( $envelope['entries'] ?? null ) ? $envelope['entries'] : [];
         foreach ( $entries as $entry ) {
-            if ( ! is_array( $entry ) || 'request' !== (string) ( $entry['phase'] ?? '' ) ) {
+            $phase = is_array( $entry ) ? (string) ( $entry['phase'] ?? '' ) : '';
+            if ( 'request' !== $phase && 'cache_hit' !== $phase ) {
                 continue;
             }
+            $engine   = (string) ( $entry['engine'] ?? '' );
             $fallback = (string) ( $entry['fallback_model'] ?? '' );
             $model    = '' !== $fallback ? $fallback : (string) ( $entry['model'] ?? '' );
+            $voice    = (string) ( $entry['voice'] ?? '' );
+            if ( 'google_cloud' === $engine ) {
+                $voice = '' !== $voice ? $voice : $model;
+                $model = self::GOOGLE_CLOUD_LABEL;
+            }
             if ( '' === $model ) {
                 continue;
             }
-            if ( '' === (string) ( $entry['error'] ?? '' ) ) {
+            $spoke = 'cache_hit' === $phase || '' === (string) ( $entry['error'] ?? '' );
+            if ( 'cache_hit' === $phase ) {
+                $cached[ $model ] = ( $cached[ $model ] ?? 0 ) + 1;
+            } elseif ( $spoke ) {
                 $ok[ $model ] = ( $ok[ $model ] ?? 0 ) + 1;
-                if ( '' !== (string) ( $entry['voice'] ?? '' ) ) {
-                    $voices[] = (string) $entry['voice'];
+            } else {
+                $tried[ $model ] = ( $tried[ $model ] ?? 0 ) + 1;
+            }
+            if ( $spoke ) {
+                if ( '' !== $voice ) {
+                    $voices[] = $voice;
                 }
                 foreach ( is_array( $entry['speakers'] ?? null ) ? $entry['speakers'] : [] as $speaker ) {
                     if ( is_array( $speaker ) && '' !== (string) ( $speaker['voice'] ?? '' ) ) {
                         $voices[] = (string) $speaker['voice'];
                     }
                 }
-            } else {
-                $tried[ $model ] = ( $tried[ $model ] ?? 0 ) + 1;
             }
-            if ( '' !== (string) ( $entry['engine'] ?? '' ) ) {
-                $engines[] = (string) $entry['engine'];
+            if ( '' !== $engine ) {
+                $engines[] = $engine;
             }
         }
         return [
-            'models'  => ! empty( $ok ) ? $ok : $tried,
+            'models'  => ! empty( $ok ) || ! empty( $cached ) ? $ok : $tried,
+            'cached'  => $cached,
             'voices'  => array_values( array_unique( $voices ) ),
             'engines' => array_values( array_unique( $engines ) ),
-            'failed'  => empty( $ok ) && ! empty( $tried ),
+            'failed'  => empty( $ok ) && empty( $cached ) && ! empty( $tried ),
+            'partial' => is_array( $envelope ) && ! empty( $envelope['truncated'] ),
         ];
+    }
+
+    /**
+     * The part of a summary stored on a record as tts.models_used: models with
+     * call counts, plus `cached`, `failed` and `partial` when set.
+     *
+     * @param array $summary From summarize().
+     */
+    public static function stored_summary( array $summary ): array {
+        $out = [ 'models' => (array) ( $summary['models'] ?? [] ) ];
+        foreach ( [ 'cached', 'failed', 'partial' ] as $key ) {
+            if ( ! empty( $summary[ $key ] ) ) {
+                $out[ $key ] = $summary[ $key ];
+            }
+        }
+        return $out;
     }
 
     /**
@@ -293,17 +330,38 @@ class PressHub_AI_TTS_Call_Recorder {
     }
 
     /**
-     * One-line label for a summary: "model-a (12), model-b (1)", or "" when empty.
+     * One-line label for a summary: "model-a (12), model-b (1)", then cached turns,
+     * "(no call succeeded)" and "(partial log)" when they apply; "" when empty.
+     * Accepts summarize() output or a stored tts.models_used value.
      *
-     * @param array $summary From summarize().
+     * @param array $summary From summarize() or stored_summary().
      */
     public static function models_label( array $summary ): string {
-        $models = is_array( $summary['models'] ?? null ) ? $summary['models'] : [];
-        $parts  = [];
-        foreach ( $models as $model => $count ) {
-            $parts[] = count( $models ) > 1 ? sprintf( '%s (%d)', $model, (int) $count ) : (string) $model;
+        $list = static function ( array $models ): string {
+            $parts = [];
+            foreach ( $models as $model => $count ) {
+                $parts[] = count( $models ) > 1 ? sprintf( '%s (%d)', $model, (int) $count ) : (string) $model;
+            }
+            return implode( ', ', $parts );
+        };
+        $label = $list( is_array( $summary['models'] ?? null ) ? $summary['models'] : [] );
+        if ( ! empty( $summary['cached'] ) && is_array( $summary['cached'] ) ) {
+            $cached = 0;
+            foreach ( $summary['cached'] as $count ) {
+                $cached += (int) $count;
+            }
+            $label = trim( $label . ( '' !== $label ? ' + ' : '' ) . sprintf( 'cached turns: %s (%d)', implode( ', ', array_keys( $summary['cached'] ) ), $cached ) );
         }
-        return implode( ', ', $parts );
+        if ( '' === $label ) {
+            return '';
+        }
+        if ( ! empty( $summary['failed'] ) ) {
+            $label .= ' (no call succeeded)';
+        }
+        if ( ! empty( $summary['partial'] ) ) {
+            $label .= ' (partial log)';
+        }
+        return $label;
     }
 
     // ---------------------------------------------------------------------

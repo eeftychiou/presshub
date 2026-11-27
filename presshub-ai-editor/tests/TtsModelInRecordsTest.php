@@ -46,11 +46,24 @@ $sum = PressHub_AI_TTS_Call_Recorder::summarize( $env );
 ttsm_check( [ 'gemini-2.5-flash-preview-tts' => 2, 'gemini-2.5-pro-preview-tts' => 1 ] === $sum['models'], 'summarize counts successful calls per spoken model (fallback wins, cache hits and summaries ignored)' );
 ttsm_check( [ 'Puck', 'Kore' ] === $sum['voices'], 'summarize lists the voices once each' );
 ttsm_check( [ 'gemini' ] === $sum['engines'] && false === $sum['failed'], 'summarize lists engines; not failed' );
-ttsm_check( 'gemini-2.5-flash-preview-tts (2), gemini-2.5-pro-preview-tts (1)' === PressHub_AI_TTS_Call_Recorder::models_label( $sum ), 'models_label with counts for several models' );
+ttsm_check( 'gemini-2.5-flash-preview-tts (2), gemini-2.5-pro-preview-tts (1) + cached turns: cached-model (1)' === PressHub_AI_TTS_Call_Recorder::models_label( $sum ), 'models_label with counts for several models and cached turns' );
 $failed = PressHub_AI_TTS_Call_Recorder::summarize( [ 'entries' => [ ttsm_call( [ 'error' => 'quota' ] ) ] ] );
 ttsm_check( [ 'gemini-2.5-pro-preview-tts' => 1 ] === $failed['models'] && true === $failed['failed'], 'only failed calls: tried models, failed=true' );
-ttsm_check( 'gemini-2.5-pro-preview-tts' === PressHub_AI_TTS_Call_Recorder::models_label( $failed ), 'models_label without count for one model' );
+ttsm_check( 'gemini-2.5-pro-preview-tts (no call succeeded)' === PressHub_AI_TTS_Call_Recorder::models_label( $failed ), 'models_label without count for one model, failed marked' );
 ttsm_check( [] === PressHub_AI_TTS_Call_Recorder::summarize( null )['models'], 'summarize(null) is empty' );
+ttsm_check( 'gemini-2.5-pro-preview-tts (no call succeeded)' === PressHub_AI_TTS_Call_Recorder::models_label( PressHub_AI_TTS_Call_Recorder::stored_summary( $failed ) ), 'stored summary keeps the failed marker' );
+ttsm_check( [ 'cached-model' => 1 ] === $sum['cached'], 'cache hits counted apart' );
+
+// Google Cloud: the model field holds a voice name.
+$gc = PressHub_AI_TTS_Call_Recorder::summarize( [ 'entries' => [
+    ttsm_call( [ 'engine' => 'google_cloud', 'model' => 'el-GR-Wavenet-A', 'voice' => 'el-GR-Wavenet-A' ] ),
+    ttsm_call( [ 'engine' => 'google_cloud', 'model' => 'el-GR-Wavenet-B', 'voice' => 'el-GR-Wavenet-B' ] ),
+] ] );
+ttsm_check( [ 'Google Cloud TTS' => 2 ] === $gc['models'] && [ 'el-GR-Wavenet-A', 'el-GR-Wavenet-B' ] === $gc['voices'], 'Google Cloud calls count as one engine label, voices listed' );
+
+// All turns from the cache.
+$all_cached = PressHub_AI_TTS_Call_Recorder::summarize( [ 'truncated' => true, 'entries' => [ ttsm_call( [ 'phase' => 'cache_hit' ] ), ttsm_call( [ 'phase' => 'cache_hit' ] ) ] ] );
+ttsm_check( 'cached turns: gemini-2.5-pro-preview-tts (2) (partial log)' === PressHub_AI_TTS_Call_Recorder::models_label( $all_cached ) && false === $all_cached['failed'], 'all-cached run labelled as cached, truncated log marked partial' );
 
 // 2. Records.
 global $wpdb;
@@ -62,10 +75,14 @@ PressHub_AI_Generation_Recorder::create_table();
 $podcast = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => 'podcast_script', 'briefing_date' => '2026-11-27', 'config' => [ 'model' => 'gemini-3.1-pro' ], 'response_text' => 'x' ] );
 PressHub_AI_Generation_Recorder::update_record( $podcast, [ 'tts_calls' => $env ] );
 ttsm_check( 2 === PressHub_AI_TTS_Call_Recorder::summarize_record( $podcast )['models']['gemini-2.5-flash-preview-tts'], 'summarize_record reads the stored calls' );
-PressHub_AI_Generation_Recorder::update_record( $podcast, [ 'tts' => [ 'engine' => 'gemini', 'model' => 'gemini-2.5-pro-preview-tts', 'models_used' => PressHub_AI_TTS_Call_Recorder::summarize_record( $podcast )['models'], 'voices' => [ 'presenter_1' => 'Kore' ] ] ] );
+PressHub_AI_Generation_Recorder::update_record( $podcast, [ 'tts' => [ 'engine' => 'gemini', 'model' => 'gemini-2.5-pro-preview-tts', 'models_used' => PressHub_AI_TTS_Call_Recorder::stored_summary( PressHub_AI_TTS_Call_Recorder::summarize_record( $podcast ) ), 'voices' => [ 'presenter_1' => 'Kore' ] ] ] );
 
 $narration = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => 'tiktok_narration', 'config' => [ 'module' => 'tts' ] ] );
 PressHub_AI_Generation_Recorder::update_record( $narration, [ 'tts' => [ 'engine' => 'gemini', 'model' => 'old-configured-tts' ] ] );
+$gc_short = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => 'tiktok_short' ] );
+PressHub_AI_Generation_Recorder::update_record( $gc_short, [ 'tts' => [ 'engine' => 'google_cloud', 'model' => 'gemini-2.5-pro-preview-tts' ] ] );
+$failed_short = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => 'tiktok_short', 'status' => 'error' ] );
+PressHub_AI_Generation_Recorder::update_record( $failed_short, [ 'tts' => [ 'models_used' => PressHub_AI_TTS_Call_Recorder::stored_summary( $failed ) ] ] );
 $test = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => 'tts_test', 'config' => [ 'model' => 'el-GR-Chirp3-HD-Aoede' ] ] );
 $brief = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => 'briefing_text', 'config' => [ 'model' => 'gemini-3.1-flash' ] ] );
 
@@ -73,9 +90,11 @@ $by_id = [];
 foreach ( PressHub_AI_Generation_Inspector::query_records( [] ) as $row ) {
     $by_id[ (int) $row['id'] ] = $row;
 }
-ttsm_check( 'gemini-2.5-flash-preview-tts (2), gemini-2.5-pro-preview-tts (1)' === $by_id[ $podcast ]['tts_model'], 'list: podcast TTS model from models_used' );
+ttsm_check( 0 === strpos( $by_id[ $podcast ]['tts_model'], 'gemini-2.5-flash-preview-tts (2), gemini-2.5-pro-preview-tts (1) + cached' ), 'list: podcast TTS model from models_used' );
 ttsm_check( 'gemini-3.1-pro' === $by_id[ $podcast ]['model'], 'list: podcast Model stays the text model' );
 ttsm_check( 'old-configured-tts' === $by_id[ $narration ]['tts_model'], 'list: falls back to tts.model' );
+ttsm_check( '' === $by_id[ $gc_short ]['tts_model'], 'list: Gemini model setting not shown for a Google Cloud run' );
+ttsm_check( 'gemini-2.5-pro-preview-tts (no call succeeded)' === $by_id[ $failed_short ]['tts_model'], 'list: failed run marked' );
 ttsm_check( 'el-GR-Chirp3-HD-Aoede' === $by_id[ $test ]['tts_model'] && '' === $by_id[ $test ]['model'], 'list: tts_test shows its model as TTS model only' );
 ttsm_check( '' === $by_id[ $brief ]['tts_model'] && 'gemini-3.1-flash' === $by_id[ $brief ]['model'], 'list: text records have no TTS model' );
 
@@ -91,6 +110,11 @@ ttsm_check( false !== strpos( $overview, 'TTS voices' ) && false !== strpos( $ov
 ttsm_check( false === strpos( $overview, 'Configured TTS model' ), 'no Configured row when the configured model spoke' );
 $tab = PressHub_AI_Generation_Inspector::render_tab( $record, 'tts' );
 ttsm_check( false !== strpos( $tab, 'TTS model' ) && false !== strpos( $tab, 'Configured model' ), 'TTS tab shows the spoken and configured model' );
+ttsm_check( false === strpos( $tab, '>Voices<' ) && false === strpos( $tab, '>Engine<' ), 'TTS tab does not repeat engine and voices' );
+$test_overview = PressHub_AI_Generation_Inspector::render_tab( PressHub_AI_Generation_Inspector::get_structured_record( $test ), 'overview' );
+ttsm_check( false === strpos( $test_overview, '>Model<' ) && false !== strpos( $test_overview, 'el-GR-Chirp3-HD-Aoede' ), 'TTS test overview shows its model once, as TTS model' );
+$failed_tab = PressHub_AI_Generation_Inspector::render_tab( PressHub_AI_Generation_Inspector::get_structured_record( $failed_short ), 'tts' );
+ttsm_check( false === strpos( $failed_tab, 'Payload mode' ), 'failed run with only models_used shows no empty settings table' );
 
 $brief_overview = PressHub_AI_Generation_Inspector::render_tab( PressHub_AI_Generation_Inspector::get_structured_record( $brief ), 'overview' );
 ttsm_check( false === strpos( $brief_overview, 'TTS model' ), 'text record overview has no TTS rows' );
