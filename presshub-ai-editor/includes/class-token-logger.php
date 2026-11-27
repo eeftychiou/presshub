@@ -14,6 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-cost-estimator.php';
+
 class PressHub_AI_Token_Logger {
 
     /** DB table version for schema migration checks. */
@@ -599,6 +601,13 @@ class PressHub_AI_Token_Logger {
             $item['metric_units']      = (int) ( $item['metric_units'] ?? 0 );
             $item['duration_ms']       = (int) ( $item['duration_ms'] ?? 0 );
             $item['user_id']           = (int) ( $item['user_id'] ?? 0 );
+            // 2.90.0: estimated cost and Gemini thinking tokens (billed as output, kept in metadata).
+            $cost                      = PressHub_AI_Cost_Estimator::estimate( $item );
+            $item['cost_usd']          = $cost['usd'];
+            $item['cost_priced']       = $cost['priced'];
+            $item['cost_estimated']    = $cost['estimated'];
+            $meta                      = is_string( $item['metadata'] ?? null ) ? json_decode( (string) $item['metadata'], true ) : ( $item['metadata'] ?? null );
+            $item['thoughts_tokens']   = is_array( $meta ) ? max( 0, (int) ( $meta['thoughts_tokens'] ?? 0 ) ) : 0;
         }
         unset( $item );
 
@@ -631,6 +640,15 @@ class PressHub_AI_Token_Logger {
                 'tokens_by_model'      => [],
                 'tokens_by_action'     => [],
                 'requests_by_provider' => [],
+                'cost_total'           => 0.0,
+                'cost_per_day'         => 0.0,
+                'cost_days'            => 1,
+                'cost_by_action'       => [],
+                'cost_by_model'        => [],
+                'cost_unpriced'        => 0,
+                'cost_estimated_usd'   => 0.0,
+                'thoughts_tokens'      => 0,
+                'prices_as_of'         => PressHub_AI_Cost_Estimator::PRICES_AS_OF,
             ];
         }
 
@@ -676,6 +694,13 @@ class PressHub_AI_Token_Logger {
         $tokens_by_model      = [];
         $tokens_by_action     = [];
         $requests_by_provider = [];
+        $cost_total           = 0.0;
+        $cost_estimated_usd   = 0.0;
+        $cost_unpriced        = 0;
+        $cost_by_action       = [];
+        $cost_by_model        = [];
+        $thoughts_total       = 0;
+        $first_ts             = null;
 
         foreach ( $rows as $row ) {
             $p_tokens = (int) ( $row['prompt_tokens'] ?? 0 );
@@ -719,7 +744,56 @@ class PressHub_AI_Token_Logger {
             if ( '' !== $provider ) {
                 $requests_by_provider[ $provider ] = ( $requests_by_provider[ $provider ] ?? 0 ) + 1;
             }
+
+            // 2.90.0: estimated cost, grouped by action and by model.
+            $cost = PressHub_AI_Cost_Estimator::estimate( $row );
+            if ( ! $cost['priced'] ) {
+                $cost_unpriced++;
+            }
+            $usd         = (float) $cost['usd'];
+            $cost_total += $usd;
+            if ( $cost['estimated'] ) {
+                $cost_estimated_usd += $usd;
+            }
+            if ( '' !== $action && in_array( $cost['basis'], [ 'text', 'tts', 'cloud_tts', 'image', 'unpriced' ], true ) ) {
+                if ( ! isset( $cost_by_action[ $action ] ) ) {
+                    $cost_by_action[ $action ] = [ 'action' => $action, 'label' => self::action_label( $action ), 'usd' => 0.0, 'calls' => 0, 'unpriced' => 0 ];
+                }
+                $cost_by_action[ $action ]['usd']   += $usd;
+                $cost_by_action[ $action ]['calls'] += 1;
+                $cost_by_action[ $action ]['unpriced'] += $cost['priced'] ? 0 : 1;
+                $model_key = '' !== $model ? $model : $provider;
+                if ( ! isset( $cost_by_model[ $model_key ] ) ) {
+                    $cost_by_model[ $model_key ] = [ 'model' => $model_key, 'provider' => $provider, 'usd' => 0.0, 'calls' => 0, 'unpriced' => 0 ];
+                }
+                $cost_by_model[ $model_key ]['usd']   += $usd;
+                $cost_by_model[ $model_key ]['calls'] += 1;
+                $cost_by_model[ $model_key ]['unpriced'] += $cost['priced'] ? 0 : 1;
+            }
+            $meta = is_string( $row['metadata'] ?? null ) ? json_decode( (string) $row['metadata'], true ) : null;
+            if ( is_array( $meta ) ) {
+                $thoughts_total += max( 0, (int) ( $meta['thoughts_tokens'] ?? 0 ) );
+            }
+            $ts = strtotime( (string) ( $row['created_at'] ?? '' ) );
+            if ( false !== $ts && ( null === $first_ts || $ts < $first_ts ) ) {
+                $first_ts = $ts;
+            }
         }
+
+        $cost_sort = static function ( $a, $b ) {
+            return $b['usd'] <=> $a['usd'] ?: $b['calls'] <=> $a['calls'];
+        };
+        foreach ( [ &$cost_by_action, &$cost_by_model ] as &$group ) {
+            foreach ( $group as &$entry ) {
+                $entry['usd']   = round( $entry['usd'], 4 );
+                $entry['share'] = $cost_total > 0 ? round( $entry['usd'] / $cost_total * 100, 1 ) : 0.0;
+            }
+            unset( $entry );
+            uasort( $group, $cost_sort );
+            $group = array_values( $group );
+        }
+        unset( $group );
+        $cost_days = self::range_days( $range, $first_ts );
 
         $success_rate = $total_requests > 0 ? round( ( $success_count / $total_requests ) * 100, 2 ) : 100.0;
 
@@ -738,7 +812,33 @@ class PressHub_AI_Token_Logger {
             'tokens_by_model'      => $tokens_by_model,
             'tokens_by_action'     => $tokens_by_action,
             'requests_by_provider' => $requests_by_provider,
+            'cost_total'           => round( $cost_total, 4 ),
+            'cost_per_day'         => round( $cost_total / max( 1, $cost_days ), 4 ),
+            'cost_days'            => $cost_days,
+            'cost_by_action'       => $cost_by_action,
+            'cost_by_model'        => $cost_by_model,
+            'cost_unpriced'        => $cost_unpriced,
+            'cost_estimated_usd'   => round( $cost_estimated_usd, 4 ),
+            'thoughts_tokens'      => $thoughts_total,
+            'prices_as_of'         => PressHub_AI_Cost_Estimator::PRICES_AS_OF,
         ];
+    }
+
+    /**
+     * Days a summary range covers, for the cost per day: 1 for today, 7 / 30 / 90 for
+     * those ranges (or fewer when the log starts later), from the first row for all time.
+     *
+     * @param string   $range    today | 7d | 30d | 90d | all.
+     * @param int|null $first_ts Time of the oldest row in the range, if any.
+     */
+    public static function range_days( string $range, ?int $first_ts, ?int $now = null ): int {
+        $now  = $now ?? time();
+        $span = null === $first_ts ? 1 : max( 1, (int) ceil( ( $now - $first_ts ) / 86400 ) );
+        $caps = [ 'today' => 1, '7d' => 7, '30d' => 30, '90d' => 90 ];
+        if ( isset( $caps[ $range ] ) ) {
+            return 'today' === $range ? 1 : max( 1, min( $caps[ $range ], $span ) );
+        }
+        return $span;
     }
 
     /**
@@ -768,6 +868,8 @@ class PressHub_AI_Token_Logger {
             'status',
             'user_id',
             'error_message',
+            'thoughts_tokens',
+            'cost_usd_estimate',
         ] );
 
         foreach ( $rows as $row ) {
@@ -785,6 +887,8 @@ class PressHub_AI_Token_Logger {
                 $row['status'] ?? '',
                 $row['user_id'] ?? 0,
                 $row['error_message'] ?? '',
+                $row['thoughts_tokens'] ?? 0,
+                ( $row['cost_priced'] ?? true ) ? number_format( (float) ( $row['cost_usd'] ?? 0 ), 6, '.', '' ) : '',
             ] );
         }
 

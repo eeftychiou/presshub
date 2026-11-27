@@ -2742,6 +2742,7 @@ class PressHub_AI_API_Client {
         $mime_type     = 'audio/pcm;rate=24000';
         $last_error    = '';
         $used_model    = '';
+        $tts_usage     = []; // 2.90.0: the response's token counts, for the cost estimate.
         $start_time    = microtime( true );
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -2923,11 +2924,13 @@ class PressHub_AI_API_Client {
                                 $audio_base64 = $part['inlineData']['data'];
                                 $mime_type    = $part['inlineData']['mimeType'] ?? $mime_type;
                                 $used_model   = $model;
+                                $tts_usage    = self::tts_usage( $res_body );
                                 break 2;
                             } elseif ( ! empty( $part['inline_data']['data'] ) ) {
                                 $audio_base64 = $part['inline_data']['data'];
                                 $mime_type    = $part['inline_data']['mime_type'] ?? $mime_type;
                                 $used_model   = $model;
+                                $tts_usage    = self::tts_usage( $res_body );
                                 break 2;
                             }
                         }
@@ -3039,7 +3042,7 @@ class PressHub_AI_API_Client {
             PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Success with model "%s" in %d ms (raw audio: %d bytes)', $used_model, $duration_ms, strlen( $raw_audio ) ) );
         }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-            PressHub_AI_Token_Logger::log_tts_request( $log_action, 'gemini', $used_model ?: $configured_model, mb_strlen( $clean_text ), $duration_ms, 'success', null );
+            PressHub_AI_Token_Logger::log_tts_request( $log_action, 'gemini', $used_model ?: $configured_model, mb_strlen( $clean_text ), $duration_ms, 'success', null, ! empty( $tts_usage ) ? [ 'usage' => $tts_usage ] : [] );
         }
 
         // If it is PCM data, extract sample rate or default to 24000
@@ -3202,6 +3205,23 @@ class PressHub_AI_API_Client {
      * @param mixed  $body   Decoded response body.
      * @return array<string,int>
      */
+    /**
+     * Token counts of a Gemini TTS response (2.90.0), for PressHub_AI_Cost_Estimator:
+     * prompt_tokens (text in) and output_tokens (audio out). Empty when not reported.
+     *
+     * @param mixed $body Decoded generateContent response.
+     */
+    public static function tts_usage( $body ): array {
+        $u = is_array( $body ) && is_array( $body['usageMetadata'] ?? null ) ? $body['usageMetadata'] : [];
+        if ( ! isset( $u['promptTokenCount'] ) && ! isset( $u['candidatesTokenCount'] ) ) {
+            return [];
+        }
+        return [
+            'prompt_tokens' => max( 0, (int) ( $u['promptTokenCount'] ?? 0 ) ),
+            'output_tokens' => max( 0, (int) ( $u['candidatesTokenCount'] ?? 0 ) ),
+        ];
+    }
+
     public static function usage_extras( string $format, $body ): array {
         if ( ! is_array( $body ) ) {
             return [];
