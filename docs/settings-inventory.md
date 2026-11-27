@@ -409,6 +409,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_composed_podcast_system_prompt` | code only |
 | `presshub_ai_composed_research_system_prompt` | code only |
 | `presshub_ai_composed_system_prompt` | code only |
+| `presshub_ai_cost_prices` | code only |
 | `presshub_ai_crawl_delay_ms` | code only |
 | `presshub_ai_curator_system_prompt` | code only |
 | `presshub_ai_debug_prompts` | `presshub_ai_debug_prompts` |
