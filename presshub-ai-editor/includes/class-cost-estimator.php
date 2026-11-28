@@ -28,6 +28,12 @@
  * - Images: a price per successful image for the model (1K for Gemini image models,
  *   the size the plugin asks for; Imagen calls are logged from 2.90.1).
  * - TTS from a provider other than Gemini or Google Cloud is unpriced.
+ * - A Gemini model that is not on Google's price page yet (e.g. gemini-3.8-flash) is
+ *   priced like the listed model of its family (FAMILY_FALLBACK) and marked ≈ (2.91.1).
+ *   A prefix only matches the same variant, so a -lite, -image or -tts model is never
+ *   priced as the full model.
+ * - Podcast audio rows logged under a Gemini voice name (Kore, Charon...) before 2.72.0
+ *   repeat calls already logged under the model, and cost nothing here.
  * - Free: the web scraper, the podcast_audio_run summary row and the "stitched" podcast
  *   audio rows (their characters are already on the per-turn rows).
  *
@@ -55,6 +61,18 @@ class PressHub_AI_Cost_Estimator {
      * a Greek newsreader speaks about 17.5 characters per second.
      */
     const AUDIO_TOKENS_PER_CHAR = 1.43;
+
+    /**
+     * Listed models that price a Gemini model Google's page does not list yet (2.91.1),
+     * by family. The cost is then marked as an estimate (≈).
+     */
+    const FAMILY_FALLBACK = [
+        'image'     => 'gemini-3.1-flash-image',
+        'tts'       => 'gemini-3.1-flash-tts',
+        'pro'       => 'gemini-3.1-pro',
+        'flash-lite' => 'gemini-3.1-flash-lite',
+        'flash'     => 'gemini-3.5-flash',
+    ];
 
     /** Gemini TTS model assumed for a TTS row whose model field holds a voice name. */
     const DEFAULT_TTS_MODEL = 'gemini-3.1-flash-tts';
@@ -173,7 +191,12 @@ class PressHub_AI_Cost_Estimator {
                 return self::result( 0.0, true, false, 'none' );
             }
             $price = self::match( self::prices()['image'] ?? [], $model );
-            return null === $price ? self::result( 0.0, false, false, 'unpriced' ) : self::result( (float) $price, true, false, 'image' );
+            $guess = false;
+            if ( null === $price && null !== ( $family = self::family_model( $model ) ) ) {
+                $price = self::match( self::prices()['image'] ?? [], $family );
+                $guess = null !== $price;
+            }
+            return null === $price ? self::result( 0.0, false, false, 'unpriced' ) : self::result( (float) $price, true, $guess, 'image' );
         }
 
         // Text-to-speech: rows with characters and no tokens, or a TTS model.
@@ -184,6 +207,12 @@ class PressHub_AI_Cost_Estimator {
         if ( $is_tts ) {
             if ( ! $is_ok ) {
                 return self::result( 0.0, true, false, 'none' );
+            }
+            // Before 2.72.0 the podcast synthesizer logged every Gemini turn a second time,
+            // under the voice name (Kore, Charon...), next to the API client's row under the
+            // model. Those rows repeat calls already counted.
+            if ( 'podcast_audio' === $action && in_array( $provider, [ 'gemini', 'gemini_tts' ], true ) && 0 !== strpos( $model, 'gemini' ) ) {
+                return self::result( 0.0, true, false, 'duplicate' );
             }
             if ( in_array( $provider, [ 'google_cloud', 'google_cloud_tts' ], true ) ) {
                 return self::cloud_tts( $model, $units );
@@ -200,6 +229,11 @@ class PressHub_AI_Cost_Estimator {
         }
 
         $price = self::match( self::prices()['text'] ?? [], $model );
+        $guess = false;
+        if ( null === $price && null !== ( $family = self::family_model( $model ) ) ) {
+            $price = self::match( self::prices()['text'] ?? [], $family );
+            $guess = null !== $price;
+        }
         if ( null === $price ) {
             return self::result( 0.0, false, false, 'unpriced' );
         }
@@ -214,7 +248,7 @@ class PressHub_AI_Cost_Estimator {
         $cache_rate = (float) ( $long && isset( $price['cache_long'] ) ? $price['cache_long'] : ( $price['cache'] ?? $in_rate ) );
 
         $usd = ( ( $prompt - $cached ) * $in_rate + $cached * $cache_rate + ( $output + $thoughts ) * $out_rate ) / 1000000;
-        return self::result( $usd, true, false, 'text', $thoughts );
+        return self::result( $usd, true, $guess, 'text', $thoughts );
     }
 
     /**
@@ -225,7 +259,7 @@ class PressHub_AI_Cost_Estimator {
         $price = self::match( $table, $model );
         $guess = false;
         if ( null === $price ) {
-            // The model field holds a voice name (rows logged by the synthesizer): assume the default model.
+            // A TTS model Google does not list yet, or a voice name in the model field: assume the default model.
             $price = self::match( $table, self::DEFAULT_TTS_MODEL );
             $guess = true;
         }
@@ -265,16 +299,56 @@ class PressHub_AI_Cost_Estimator {
      * Value of the longest key of $table that $model starts with, or null.
      */
     private static function match( array $table, string $model ) {
-        $best = null;
-        $len  = 0;
+        $best  = null;
+        $len   = 0;
+        $flags = self::variant_flags( $model );
         foreach ( $table as $prefix => $value ) {
             $prefix = strtolower( (string) $prefix );
-            if ( '' !== $prefix && 0 === strpos( $model, $prefix ) && strlen( $prefix ) > $len ) {
+            // A prefix of another variant does not match: gemini-3.5-flash is not gemini-3.5-flash-lite.
+            if ( '' !== $prefix && 0 === strpos( $model, $prefix ) && strlen( $prefix ) > $len && self::variant_flags( $prefix ) === $flags ) {
                 $best = $value;
                 $len  = strlen( $prefix );
             }
         }
         return $best;
+    }
+
+    /**
+     * The variant words of a model id that change its price.
+     */
+    private static function variant_flags( string $model ): array {
+        return [
+            'lite'  => false !== strpos( $model, '-lite' ),
+            'image' => false !== strpos( $model, '-image' ),
+            'tts'   => false !== strpos( $model, '-tts' ),
+        ];
+    }
+
+    /**
+     * The listed model that prices an unlisted Gemini model of the same family, or null.
+     */
+    public static function family_model( string $model ): ?string {
+        $model = self::normalize_model( $model );
+        if ( 0 !== strpos( $model, 'gemini' ) ) {
+            return null;
+        }
+        $f = self::FAMILY_FALLBACK;
+        if ( false !== strpos( $model, '-image' ) ) {
+            return $f['image'];
+        }
+        if ( false !== strpos( $model, '-tts' ) ) {
+            return $f['tts'];
+        }
+        if ( false !== strpos( $model, '-pro' ) ) {
+            return $f['pro'];
+        }
+        if ( false !== strpos( $model, 'flash-lite' ) ) {
+            return $f['flash-lite'];
+        }
+        if ( false !== strpos( $model, 'flash' ) ) {
+            return $f['flash'];
+        }
+        return null;
     }
 
     private static function is_image_model( string $model ): bool {
