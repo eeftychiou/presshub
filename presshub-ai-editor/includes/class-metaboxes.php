@@ -141,7 +141,10 @@ class PressHub_AI_Metaboxes {
                 <label for="presshub-ai-image-prompt" style="display: block; font-weight: 600; margin-bottom: 5px;">
                     <?php echo esc_html__( 'Visual Image Prompt (editable):', 'presshub-ai-editor' ); ?>
                 </label>
-                <?php $current_img_prompt = (string) get_post_meta( $post->ID, '_presshub_ai_image_prompt', true ); ?>
+                <?php
+                $current_img_prompt = (string) get_post_meta( $post->ID, '_presshub_ai_image_prompt', true );
+                wp_nonce_field( 'presshub_ai_image_prompt_save', 'presshub_ai_image_prompt_nonce' );
+                ?>
                 <textarea id="presshub-ai-image-prompt" name="presshub_ai_image_prompt" rows="3" style="width: 100%; font-size: 13px; line-height: 1.4;" placeholder="<?php echo esc_attr__( 'Click "Draft Image Prompt from Content" or enter a custom prompt...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $current_img_prompt ); ?></textarea>
             </div>
 
@@ -417,13 +420,14 @@ class PressHub_AI_Metaboxes {
         if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
             return;
         }
-        if ( ! isset( $_POST['presshub_podcast_save_nonce'] ) || ! wp_verify_nonce( $_POST['presshub_podcast_save_nonce'], 'presshub_podcast_save_script' ) ) {
+        if ( ! isset( $_POST['presshub_podcast_save_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['presshub_podcast_save_nonce'] ) ), 'presshub_podcast_save_script' ) ) {
             return;
         }
         if ( ! current_user_can( 'edit_post', $post_id ) ) {
             return;
         }
         if ( isset( $_POST['presshub_podcast_script'] ) ) {
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- free-form podcast script text; stored as post meta and escaped on output.
             $script = wp_unslash( $_POST['presshub_podcast_script'] );
             update_post_meta( $post_id, '_presshub_podcast_script', $script );
         }
@@ -436,6 +440,9 @@ class PressHub_AI_Metaboxes {
      */
     public function save_post_data( $post_id ) {
         if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+            return;
+        }
+        if ( ! isset( $_POST['presshub_ai_image_prompt_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['presshub_ai_image_prompt_nonce'] ) ), 'presshub_ai_image_prompt_save' ) ) {
             return;
         }
         if ( ! current_user_can( 'edit_post', $post_id ) ) {

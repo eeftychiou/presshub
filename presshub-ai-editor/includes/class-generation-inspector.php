@@ -104,6 +104,7 @@ class PressHub_AI_Generation_Inspector {
             return 0;
         }
         $table  = PressHub_AI_Generation_Recorder::get_table_name();
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
         $json   = $wpdb->get_var( $wpdb->prepare( "SELECT config_json FROM {$table} WHERE id = %d", $id ) );
         $config = ( null !== $json && '' !== (string) $json ) ? json_decode( (string) $json, true ) : [];
         return is_array( $config ) ? max( 0, (int) ( $config['user_id'] ?? 0 ) ) : 0;
@@ -244,6 +245,7 @@ class PressHub_AI_Generation_Inspector {
             return null;
         }
         $table = PressHub_AI_Generation_Recorder::get_table_name();
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
         $row   = $wpdb->get_row( $wpdb->prepare( 'SELECT ' . self::LIGHT_COLUMNS . " FROM {$table} WHERE id = %d", $id ), ARRAY_A );
         if ( ! is_array( $row ) || empty( $row ) ) {
             return null;
@@ -272,6 +274,7 @@ class PressHub_AI_Generation_Inspector {
             return null;
         }
         $table = PressHub_AI_Generation_Recorder::get_table_name();
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
         $row   = $wpdb->get_row( $wpdb->prepare( 'SELECT ' . self::JSON_COLUMNS . " FROM {$table} WHERE id = %d", $id ), ARRAY_A );
         $row   = is_array( $row ) ? $row : [];
         foreach ( PressHub_AI_Generation_Recorder::JSON_COLUMNS as $column => $key ) {
@@ -293,6 +296,7 @@ class PressHub_AI_Generation_Inspector {
             return null;
         }
         $table = PressHub_AI_Generation_Recorder::get_table_name();
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
         $value = $wpdb->get_var( $wpdb->prepare( "SELECT {$field} FROM {$table} WHERE id = %d", $id ) );
         return null === $value ? '' : (string) $value;
     }
@@ -389,6 +393,7 @@ class PressHub_AI_Generation_Inspector {
         $sql .= $where ? ' WHERE ' . implode( ' AND ', $where ) : '';
         $sql .= ' ORDER BY created_at DESC, id DESC LIMIT ' . max( 1, (int) $limit );
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $results = $wpdb->get_results( $sql, ARRAY_A );
         $rows    = [];
         foreach ( is_array( $results ) ? $results : [] as $row ) {

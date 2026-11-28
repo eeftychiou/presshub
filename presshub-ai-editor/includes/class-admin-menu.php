@@ -265,7 +265,7 @@ class PressHub_Admin_Menu {
         if ( ! is_admin() || ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) ) {
             return;
         }
-        if ( 'GET' !== strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ) ) {
+        if ( 'GET' !== strtoupper( sanitize_text_field( wp_unslash( (string) ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ) ) ) ) {
             return;
         }
         $pagenow = (string) ( $GLOBALS['pagenow'] ?? '' );

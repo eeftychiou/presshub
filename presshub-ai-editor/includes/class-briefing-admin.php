@@ -900,6 +900,7 @@ class PressHub_AI_Briefing_Admin {
                     return [];
                 }
                 $table = PressHub_AI_Memory_Store::get_entries_table();
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 $rows  = $wpdb->get_results( "SELECT id, scope, period_start, edition, error_message, updated_at FROM {$table} WHERE scope = 'daily' AND status = 'failed' ORDER BY period_start DESC LIMIT 10", ARRAY_A );
                 return is_array( $rows ) ? $rows : [];
             } )(),
@@ -919,7 +920,7 @@ class PressHub_AI_Briefing_Admin {
         }
 
         if ( empty( $date ) ) {
-            $raw_date = isset( $_GET['briefing_date'] ) ? sanitize_text_field( wp_unslash( $_GET['briefing_date'] ) ) : '';
+            $raw_date = isset( $_GET['briefing_date'] ) ? sanitize_text_field( wp_unslash( $_GET['briefing_date'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only date filter.
             // Issue #83 — anchor the page-default in the WP-local timezone
             // used by the token-log writer so the page does not open on
             // yesterday's UTC date for operators east of UTC.
@@ -927,7 +928,7 @@ class PressHub_AI_Briefing_Admin {
         }
 
         if ( empty( $edition ) ) {
-            $raw_edition = isset( $_GET['edition'] ) ? sanitize_key( wp_unslash( $_GET['edition'] ) ) : 'morning';
+            $raw_edition = isset( $_GET['edition'] ) ? sanitize_key( wp_unslash( $_GET['edition'] ) ) : 'morning'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only edition filter.
             $edition     = ( 'noon' === $raw_edition ) ? 'noon' : 'morning';
         }
 

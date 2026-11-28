@@ -189,7 +189,7 @@ class PressHub_AI_Ajax_Handlers {
         $uploaded_files = [];
         if ( ! empty( $_FILES['files'] ) ) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
-            $files = $_FILES['files'];
+            $files = $_FILES['files']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
 
             // Upload validation (Low-15): whitelist the extensions the AI
             // providers actually accept, and cap each file at 50 MB. The
@@ -364,6 +364,11 @@ class PressHub_AI_Ajax_Handlers {
     /**
      * Build the SEO review input from the editor state sent with the review
      * request, falling back to the saved post.
+     *
+     * The caller has already verified the AJAX nonce with check_ajax_referer(),
+     * so the nonce sniff is disabled for this helper only.
+     *
+     * phpcs:disable WordPress.Security.NonceVerification.Missing -- nonce checked by the calling AJAX handler.
      */
     private function collect_seo_review_input( int $post_id, string $content ): array {
         $post = $post_id > 0 ? get_post( $post_id ) : null;
@@ -383,14 +388,14 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $tags = [];
-        foreach ( (array) ( $_POST['tag_ids'] ?? [] ) as $tid ) {
+        foreach ( array_map( 'intval', (array) wp_unslash( $_POST['tag_ids'] ?? [] ) ) as $tid ) {
             $term = function_exists( 'get_term' ) ? get_term( (int) $tid, 'post_tag' ) : null;
             if ( $term && ! is_wp_error( $term ) && isset( $term->name ) ) {
                 $tags[] = (string) $term->name;
             }
         }
-        foreach ( (array) ( $_POST['tag_names'] ?? [] ) as $tname ) {
-            $tname = sanitize_text_field( wp_unslash( (string) $tname ) );
+        foreach ( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['tag_names'] ?? [] ) ) as $tname ) {
+            $tname = (string) $tname;
             if ( '' !== $tname ) {
                 $tags[] = $tname;
             }
@@ -405,7 +410,7 @@ class PressHub_AI_Ajax_Handlers {
 
         $categories = [];
         if ( isset( $_POST['category_ids'] ) ) {
-            $cat_ids = (array) $_POST['category_ids'];
+            $cat_ids = array_map( 'intval', (array) wp_unslash( $_POST['category_ids'] ) );
         } elseif ( ! $from_editor && $post_id > 0 && function_exists( 'wp_get_post_categories' ) ) {
             $cat_ids = (array) wp_get_post_categories( $post_id );
         } else {
@@ -418,7 +423,7 @@ class PressHub_AI_Ajax_Handlers {
             }
         }
 
-        $featured = isset( $_POST['featured_media'] ) ? (int) $_POST['featured_media'] : ( ( ! $from_editor && $post_id > 0 && function_exists( 'get_post_thumbnail_id' ) ) ? (int) get_post_thumbnail_id( $post_id ) : 0 );
+        $featured = isset( $_POST['featured_media'] ) ? (int) wp_unslash( $_POST['featured_media'] ) : ( ( ! $from_editor && $post_id > 0 && function_exists( 'get_post_thumbnail_id' ) ) ? (int) get_post_thumbnail_id( $post_id ) : 0 );
 
         return [
             'post_id'           => $post_id,
@@ -430,6 +435,7 @@ class PressHub_AI_Ajax_Handlers {
             'featured_image_id' => $featured,
         ];
     }
+    // phpcs:enable WordPress.Security.NonceVerification.Missing
 
     public function handle_chat_routing() {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
@@ -1174,14 +1180,14 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $selected_articles = [];
         if ( isset( $_POST['selected_articles'] ) ) {
             if ( is_array( $_POST['selected_articles'] ) ) {
-                foreach ( $_POST['selected_articles'] as $item ) {
+                foreach ( (array) wp_unslash( $_POST['selected_articles'] ) as $item ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                     if ( is_numeric( $item ) ) {
                         $selected_articles[] = (int) $item;
                     } elseif ( is_string( $item ) && '' !== trim( $item ) ) {
                         $selected_articles[] = sanitize_text_field( wp_unslash( $item ) );
                     }
                 }
-            } elseif ( is_string( $_POST['selected_articles'] ) && '' !== trim( $_POST['selected_articles'] ) ) {
+            } elseif ( is_string( $_POST['selected_articles'] ) && '' !== trim( $_POST['selected_articles'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 $raw_items = explode( ',', sanitize_text_field( wp_unslash( $_POST['selected_articles'] ) ) );
                 foreach ( $raw_items as $item ) {
                     $item = trim( $item );
@@ -1270,14 +1276,14 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $selected_articles = [];
         if ( isset( $_POST['selected_articles'] ) ) {
             if ( is_array( $_POST['selected_articles'] ) ) {
-                foreach ( $_POST['selected_articles'] as $item ) {
+                foreach ( (array) wp_unslash( $_POST['selected_articles'] ) as $item ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                     if ( is_numeric( $item ) ) {
                         $selected_articles[] = (int) $item;
                     } elseif ( is_string( $item ) && '' !== trim( $item ) ) {
                         $selected_articles[] = sanitize_text_field( wp_unslash( $item ) );
                     }
                 }
-            } elseif ( is_string( $_POST['selected_articles'] ) && '' !== trim( $_POST['selected_articles'] ) ) {
+            } elseif ( is_string( $_POST['selected_articles'] ) && '' !== trim( $_POST['selected_articles'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 $raw_items = explode( ',', sanitize_text_field( wp_unslash( $_POST['selected_articles'] ) ) );
                 foreach ( $raw_items as $item ) {
                     $item = trim( $item );
@@ -1480,7 +1486,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
-        $script  = isset( $_POST['script'] ) ? wp_unslash( $_POST['script'] ) : '';
+        $script  = isset( $_POST['script'] ) ? wp_unslash( $_POST['script'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
 
         if ( empty( $post_id ) ) {
             wp_send_json_error( [ 'message' => __( 'Missing post ID.', 'presshub-ai-editor' ) ], 400 );
@@ -1563,9 +1569,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         // 2. Uploaded files (PDF, DOCX, TXT)
-        if ( ! empty( $_FILES['files'] ) && is_array( $_FILES['files']['name'] ) ) {
+        if ( ! empty( $_FILES['files'] ) && is_array( $_FILES['files']['name'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
             require_once ABSPATH . 'wp-admin/includes/file.php';
-            $files = $_FILES['files'];
+            $files = $_FILES['files']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
             $allowed_extensions = [ 'pdf', 'docx', 'txt' ];
             $max_file_size      = 25 * 1024 * 1024; // 25 MB
 
@@ -1713,7 +1719,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         require_once __DIR__ . '/class-settings-storage.php';
         require_once __DIR__ . '/class-api-client.php';
 
-        $text               = isset( $_POST['text'] ) ? wp_unslash( $_POST['text'] ) : '';
+        $text               = isset( $_POST['text'] ) ? wp_unslash( $_POST['text'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
         $speaker1           = isset( $_POST['speaker1'] ) ? sanitize_text_field( wp_unslash( $_POST['speaker1'] ) ) : PressHub_AI_Settings_Storage::get_voice_female();
         $speaker2           = isset( $_POST['speaker2'] ) ? sanitize_text_field( wp_unslash( $_POST['speaker2'] ) ) : PressHub_AI_Settings_Storage::get_voice_male();
         $speed              = isset( $_POST['speed'] ) ? floatval( $_POST['speed'] ) : PressHub_AI_Settings_Storage::get_voice_speed();
@@ -1721,7 +1727,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $style              = isset( $_POST['style'] ) ? sanitize_key( wp_unslash( $_POST['style'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_style();
         $custom_style       = isset( $_POST['custom_style'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_style'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_custom_style();
         $payload_mode       = isset( $_POST['payload_mode'] ) ? sanitize_key( wp_unslash( $_POST['payload_mode'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode();
-        $system_instruction = isset( $_POST['system_instruction'] ) ? wp_unslash( $_POST['system_instruction'] ) : PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction();
+        $system_instruction = isset( $_POST['system_instruction'] ) ? wp_unslash( $_POST['system_instruction'] ) : PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
         $two_hosts          = ! empty( $_POST['two_hosts'] ) && '0' !== $_POST['two_hosts'] && 'false' !== $_POST['two_hosts'];
 
         if ( '' === trim( $text ) ) {
@@ -1795,7 +1801,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         require_once __DIR__ . '/class-settings-storage.php';
         require_once __DIR__ . '/class-api-client.php';
 
-        $text               = isset( $_POST['text'] ) ? wp_unslash( $_POST['text'] ) : '';
+        $text               = isset( $_POST['text'] ) ? wp_unslash( $_POST['text'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
         $speaker1           = isset( $_POST['speaker1'] ) ? sanitize_text_field( wp_unslash( $_POST['speaker1'] ) ) : PressHub_AI_Settings_Storage::get_voice_female();
         $speaker2           = isset( $_POST['speaker2'] ) ? sanitize_text_field( wp_unslash( $_POST['speaker2'] ) ) : PressHub_AI_Settings_Storage::get_voice_male();
         $speed              = isset( $_POST['speed'] ) ? floatval( $_POST['speed'] ) : PressHub_AI_Settings_Storage::get_voice_speed();
@@ -1803,7 +1809,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $style              = isset( $_POST['style'] ) ? sanitize_key( wp_unslash( $_POST['style'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_style();
         $custom_style       = isset( $_POST['custom_style'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_style'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_custom_style();
         $payload_mode       = isset( $_POST['payload_mode'] ) ? sanitize_key( wp_unslash( $_POST['payload_mode'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode();
-        $system_instruction = isset( $_POST['system_instruction'] ) ? wp_unslash( $_POST['system_instruction'] ) : PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction();
+        $system_instruction = isset( $_POST['system_instruction'] ) ? wp_unslash( $_POST['system_instruction'] ) : PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
         $two_hosts          = ! empty( $_POST['two_hosts'] ) && '0' !== $_POST['two_hosts'] && 'false' !== $_POST['two_hosts'];
 
         if ( '' === trim( $text ) ) {
@@ -1858,7 +1864,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
             $post_data = $_POST;
             if ( isset( $_POST['payload_b64'] ) && is_string( $_POST['payload_b64'] ) ) {
-                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) );
+                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 if ( false !== $raw_json ) {
                     $decoded = json_decode( $raw_json, true );
                     if ( is_array( $decoded ) ) {
@@ -1866,12 +1872,12 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                     }
                 }
             } elseif ( isset( $_POST['payload'] ) && is_string( $_POST['payload'] ) ) {
-                $decoded = json_decode( wp_unslash( $_POST['payload'] ), true );
+                $decoded = json_decode( wp_unslash( $_POST['payload'] ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 if ( is_array( $decoded ) ) {
                     $post_data = array_merge( $post_data, $decoded );
                 }
             } elseif ( isset( $_POST['settings'] ) && is_string( $_POST['settings'] ) ) {
-                parse_str( $_POST['settings'], $parsed );
+                parse_str( $_POST['settings'], $parsed ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 if ( is_array( $parsed ) ) {
                     $post_data = array_merge( $post_data, $parsed );
                 }
@@ -1948,7 +1954,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
             $post_data = $_POST;
             if ( isset( $_POST['payload_b64'] ) && is_string( $_POST['payload_b64'] ) ) {
-                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) );
+                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 if ( false !== $raw_json ) {
                     $decoded = json_decode( $raw_json, true );
                     if ( is_array( $decoded ) ) {
@@ -1956,12 +1962,12 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                     }
                 }
             } elseif ( isset( $_POST['payload'] ) && is_string( $_POST['payload'] ) ) {
-                $decoded = json_decode( wp_unslash( $_POST['payload'] ), true );
+                $decoded = json_decode( wp_unslash( $_POST['payload'] ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 if ( is_array( $decoded ) ) {
                     $post_data = array_merge( $post_data, $decoded );
                 }
             } elseif ( isset( $_POST['settings'] ) && is_string( $_POST['settings'] ) ) {
-                parse_str( $_POST['settings'], $parsed );
+                parse_str( $_POST['settings'], $parsed ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 if ( is_array( $parsed ) ) {
                     $post_data = array_merge( $post_data, $parsed );
                 }
@@ -2164,15 +2170,15 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $data = [];
         if ( isset( $_POST['provider_data'] ) ) {
             if ( is_array( $_POST['provider_data'] ) ) {
-                $data = $_POST['provider_data'];
+                $data = $_POST['provider_data']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
             } else {
-                $decoded = json_decode( wp_unslash( (string) $_POST['provider_data'] ), true );
+                $decoded = json_decode( wp_unslash( (string) $_POST['provider_data'] ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
                 if ( is_array( $decoded ) ) {
                     $data = $decoded;
                 }
             }
         } elseif ( ! empty( $_POST['payload'] ) ) {
-            $decoded = json_decode( wp_unslash( (string) $_POST['payload'] ), true );
+            $decoded = json_decode( wp_unslash( (string) $_POST['payload'] ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
             if ( is_array( $decoded ) ) {
                 $data = $decoded;
             }
@@ -2256,8 +2262,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         if ( ! empty( $_POST['provider_data'] ) ) {
             $raw_data = is_array( $_POST['provider_data'] )
-                ? $_POST['provider_data']
-                : json_decode( wp_unslash( (string) $_POST['provider_data'] ), true );
+                ? $_POST['provider_data'] // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
+                : json_decode( wp_unslash( (string) $_POST['provider_data'] ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
 
             if ( is_array( $raw_data ) ) {
                 if ( empty( $raw_data['id'] ) ) {
@@ -2317,8 +2323,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-token-logger.php';
 
-        $page        = max( 1, (int) ( $_REQUEST['page'] ?? 1 ) );
-        $per_page    = max( 1, min( 500, (int) ( $_REQUEST['per_page'] ?? 20 ) ) );
+        $page        = max( 1, (int) wp_unslash( $_REQUEST['page'] ?? 1 ) );
+        $per_page    = max( 1, min( 500, (int) wp_unslash( $_REQUEST['per_page'] ?? 20 ) ) );
         $action_filt = sanitize_text_field( wp_unslash( $_REQUEST['action_filter'] ?? ( $_REQUEST['action_trigger'] ?? '' ) ) );
         $provider    = sanitize_text_field( wp_unslash( $_REQUEST['provider'] ?? '' ) );
         $status      = sanitize_text_field( wp_unslash( $_REQUEST['status'] ?? '' ) );
@@ -2459,8 +2465,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-audit-logger.php';
 
-        $page        = max( 1, (int) ( $_REQUEST['page'] ?? 1 ) );
-        $per_page    = max( 1, min( 500, (int) ( $_REQUEST['per_page'] ?? 20 ) ) );
+        $page        = max( 1, (int) wp_unslash( $_REQUEST['page'] ?? 1 ) );
+        $per_page    = max( 1, min( 500, (int) wp_unslash( $_REQUEST['per_page'] ?? 20 ) ) );
         $event_type  = sanitize_text_field( wp_unslash( $_REQUEST['event_type'] ?? '' ) );
         $entity_type = sanitize_text_field( wp_unslash( $_REQUEST['entity_type'] ?? '' ) );
         $search      = sanitize_text_field( wp_unslash( $_REQUEST['search'] ?? '' ) );
@@ -2949,8 +2955,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         if ( ! empty( $_POST['provider_data'] ) ) {
             $raw_data = is_array( $_POST['provider_data'] )
-                ? $_POST['provider_data']
-                : json_decode( wp_unslash( (string) $_POST['provider_data'] ), true );
+                ? $_POST['provider_data'] // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
+                : json_decode( wp_unslash( (string) $_POST['provider_data'] ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
 
             if ( is_array( $raw_data ) ) {
                 $data = $raw_data;
@@ -3100,7 +3106,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $defaults = [];
         if ( isset( $_POST['defaults'] ) ) {
-            $raw_defaults = wp_unslash( $_POST['defaults'] );
+            $raw_defaults = wp_unslash( $_POST['defaults'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
             if ( is_string( $raw_defaults ) ) {
                 $decoded = json_decode( $raw_defaults, true );
                 if ( is_array( $decoded ) ) {
@@ -3152,7 +3158,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
-        $content = isset( $_POST['content'] ) ? (string) wp_unslash( $_POST['content'] ) : '';
+        $content = isset( $_POST['content'] ) ? (string) wp_unslash( $_POST['content'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
         $title   = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
 
         // Draft from the article text, or from the dialogue script for podcast
@@ -3323,7 +3329,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         // Article context for the image's Media Library metadata (title, alt,
         // caption, description). Unsaved editor text wins over the saved post.
-        $ctx_content = isset( $_POST['content'] ) ? (string) wp_unslash( $_POST['content'] ) : '';
+        $ctx_content = isset( $_POST['content'] ) ? (string) wp_unslash( $_POST['content'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw payload (content, JSON or file upload); validated and sanitized when parsed below.
         $ctx_title   = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
 
         require_once __DIR__ . '/class-api-client.php';

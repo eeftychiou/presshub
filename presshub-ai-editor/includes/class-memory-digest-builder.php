@@ -550,6 +550,7 @@ class PressHub_AI_Memory_Digest_Builder {
             $posts_table    = isset( $wpdb->posts ) ? $wpdb->posts : 'wp_posts';
             $postmeta_table = isset( $wpdb->postmeta ) ? $wpdb->postmeta : 'wp_postmeta';
 
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names come from $wpdb, not user input.
             $rows = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT p.ID, pm_date.meta_value as briefing_date, pm_edition.meta_value as briefing_edition
@@ -565,6 +566,7 @@ class PressHub_AI_Memory_Digest_Builder {
                 ),
                 ARRAY_A
             );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
             if ( is_array( $rows ) ) {
                 foreach ( $rows as $r ) {

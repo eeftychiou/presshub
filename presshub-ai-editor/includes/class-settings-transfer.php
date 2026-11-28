@@ -265,7 +265,8 @@ class PressHub_Settings_Transfer {
 
     public static function handle_preview(): void {
         self::guard();
-        $file = $_FILES['presshub_settings_file'] ?? null; // phpcs:ignore WordPress.Security.NonceVerification -- checked in guard().
+        // phpcs:ignore WordPress.Security.NonceVerification,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce checked in guard(); only tmp_name is read, after is_uploaded_file().
+        $file = $_FILES['presshub_settings_file'] ?? null;
         $json = ( is_array( $file ) && ! empty( $file['tmp_name'] ) && is_uploaded_file( $file['tmp_name'] ) ) ? (string) file_get_contents( $file['tmp_name'] ) : '';
         $parsed = '' === $json ? [ 'error' => __( 'Choose an export file first.', 'presshub-ai-editor' ) ] : self::parse( $json );
         if ( isset( $parsed['error'] ) ) {

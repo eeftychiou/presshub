@@ -220,6 +220,7 @@ global $wpdb;
 if ( isset( $wpdb ) && is_object( $wpdb ) && ! empty( $wpdb->usermeta ) ) {
     $presshub_ai_placeholders = implode( ', ', array_fill( 0, count( $presshub_ai_user_meta_keys ), '%s' ) );
     $wpdb->query( $wpdb->prepare(
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- table name from $wpdb; the %s placeholders are built from the key count.
         "DELETE FROM {$wpdb->usermeta} WHERE meta_key IN ( {$presshub_ai_placeholders} )",
         $presshub_ai_user_meta_keys
     ) );
