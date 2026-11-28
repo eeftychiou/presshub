@@ -125,7 +125,11 @@ tp_check( 'legacy: current article default is not legacy', ! PressHub_Social_Set
 
 $old_rule = 'Ημερομηνίες και αριθμοί γραμμένοι όπως εκφωνούνται (π.χ. «3 Μαΐου»), χωρίς σύμβολα, emoji ή συνδέσμους.';
 $new_rule_start = 'Αριθμοί με ψηφία';
+// Undo the 2.91.0 caption and hook digits rule first (NumberDigitsTest checks that step).
 $old_article = (string) file_get_contents( $assets . 'social_tiktok_article_short.txt' );
+$old_article = str_replace( ' Αριθμοί με ψηφία (π.χ. 28, 15%).', '', $old_article );
+$old_article = (string) preg_replace( '/^3\. Αριθμοί με ψηφία, όπως στο σενάριο[^\n]*\n/mu', '', $old_article );
+$old_article = str_replace( [ "\n4. Στο τέλος", "\n5. 3 έως" ], [ "\n3. Στο τέλος", "\n4. 3 έως" ], $old_article );
 $pos = strpos( $old_article, $new_rule_start );
 $end = strpos( $old_article, "\n", $pos );
 $old_article = substr( $old_article, 0, $pos ) . $old_rule . substr( $old_article, $end );

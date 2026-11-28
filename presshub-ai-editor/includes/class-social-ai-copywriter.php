@@ -295,6 +295,12 @@ class PressHub_Social_AI_Copywriter {
             $copy = trim( mb_substr( $copy, 1, -1, 'UTF-8' ) );
         }
 
+        // A podcast's script spells numbers out for the voice and the model copies that;
+        // post text is read, so they become digits ("είκοσι οκτώ" → "28", 2.91.0).
+        if ( class_exists( 'PressHub_AI_Number_Digits' ) ) {
+            $copy = PressHub_AI_Number_Digits::apply( $copy );
+        }
+
         // Every post carries hashtags: when the model left them out, add the post's own.
         $copy = self::ensure_hashtags( $copy, (string) ( $article_data['hashtags'] ?? '' ), $platform );
 
