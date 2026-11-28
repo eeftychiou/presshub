@@ -893,6 +893,15 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
+     * Numbers spelled out in words written as digits (PressHub_AI_Number_Digits), for the
+     * text a short is posted with: its caption, hook and video title. The script is never
+     * passed through it, so the voice reads what the plan wrote.
+     */
+    public static function digits( string $text ): string {
+        return class_exists( 'PressHub_AI_Number_Digits' ) ? PressHub_AI_Number_Digits::apply( $text ) : $text;
+    }
+
+    /**
      * Attach a prepared short's audio, caption and on-screen hook to a claimed job.
      * Makes no LLM or TTS call: an unprepared job is an error (claims skip those).
      *
@@ -912,7 +921,7 @@ class PressHub_Social_TikTok_Shorts {
         // The placeholder becomes the short's caption; a copy an editor wrote stays.
         $copy = (string) ( $job['post_copy'] ?? '' );
         if ( self::is_placeholder_copy( $copy ) ) {
-            $copy = (string) $short['caption'];
+            $copy = self::digits( (string) $short['caption'] );
             if ( $job_id > 0 ) {
                 PressHub_Social_Queue::update_job_copy( $job_id, $copy );
             }
@@ -938,13 +947,13 @@ class PressHub_Social_TikTok_Shorts {
         $job['post_copy']    = $copy;
         $job['test_render']  = ! empty( $short['test'] );
         $job['audio_url']    = (string) $short['audio']['audio_url'];
-        $job['video_title']  = (string) $short['hook'];
+        $job['video_title']  = self::digits( (string) $short['hook'] );
         $job['tiktok_short'] = [
             'index' => (int) $short['index'],
             // Stories the plan actually has (surplus jobs are cancelled), for the n/N badge.
             'count' => (int) ( $short['total'] ?? $short['count'] ?? 0 ),
             'topic'    => (string) ( $short['topic'] ?? '' ),
-            'hook'     => (string) $short['hook'],
+            'hook'     => self::digits( (string) $short['hook'] ),
             'images'   => array_values( array_filter( array_map( fn( $img ) => is_array( $img ) ? (string) ( $img['url'] ?? '' ) : '', (array) ( $short['images'] ?? [] ) ) ) ),
             'segments' => array_values( (array) ( $short['audio']['segments'] ?? [] ) ),
         ];
@@ -987,7 +996,7 @@ class PressHub_Social_TikTok_Shorts {
             'index'       => (int) $short['index'],
             'count'       => (int) ( $short['total'] ?? $short['count'] ?? 0 ),
             'topic'       => (string) ( $short['topic'] ?? '' ),
-            'hook'        => (string) $short['hook'],
+            'hook'        => self::digits( (string) $short['hook'] ),
             'slides'      => $texts,
             'images'      => array_values( array_filter( array_map( fn( $img ) => is_array( $img ) ? (string) ( $img['url'] ?? '' ) : '', (array) ( $short['images'] ?? [] ) ) ) ),
             'mood'        => $mood,
@@ -1751,6 +1760,9 @@ class PressHub_Social_TikTok_Shorts {
                 $script = PressHub_Social_YouTube::youtube_cta( $script );
             }
             $caption = trim( (string) preg_replace( '/[ \t]*\b(?:https?:\/\/|www\.)\S+/iu', '', (string) ( $item['caption'] ?? '' ) ) );
+            // Post text is read, not heard: numbers the podcast spelled out become digits.
+            $hook    = self::digits( $hook );
+            $caption = self::digits( $caption );
             if ( '' === $hook || '' === $script || '' === $caption ) {
                 return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'short %d is missing its hook, script or caption.', $i + 1 ) );
             }
@@ -1823,6 +1835,8 @@ class PressHub_Social_TikTok_Shorts {
         }
         $hook    = trim( (string) ( $item['hook'] ?? '' ) );
         $caption = trim( (string) preg_replace( '/[ \t]*\b(?:https?:\/\/|www\.)\S+/iu', '', (string) ( $item['caption'] ?? '' ) ) );
+        $hook    = self::digits( $hook );
+        $caption = self::digits( $caption );
         if ( '' === $hook || '' === $caption ) {
             return new WP_Error( 'tiktok_short_invalid_json', 'the brief is missing its hook or caption.' );
         }

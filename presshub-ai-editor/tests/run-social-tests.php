@@ -496,6 +496,9 @@ if ( file_exists( $base_dir . '/includes/class-social-settings-render.php' ) ) {
 if ( file_exists( $base_dir . '/includes/class-social-ai-copywriter.php' ) ) {
     require_once $base_dir . '/includes/class-social-ai-copywriter.php';
 }
+if ( file_exists( $base_dir . '/includes/class-number-digits.php' ) ) {
+    require_once $base_dir . '/includes/class-number-digits.php';
+}
 require_once $base_dir . '/includes/class-social-activator.php';
 require_once $base_dir . '/includes/class-social-queue.php';
 require_once $base_dir . '/includes/class-social-tiktok-narrator.php';
@@ -1038,6 +1041,15 @@ PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $config ) {
 } );
 $tagged = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Big Story', 'url' => 'https://presshub.ai/story', 'hashtags' => '#Κύπρος' ], 'instagram' );
 assert_equals( "Είδηση.\n\n#cyprus #news", $tagged, 'AI copy that has hashtags is left as written' );
+
+// 2.91.0: numbers the podcast script spelled out are digits in the AI post text.
+PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $config ) {
+    return "Σάββατο είκοσι οκτώ Νοεμβρίου: ανεργία είκοσι έξι τοις εκατό και δύο υπουργοί.\n\n#cyprus";
+} );
+foreach ( [ 'facebook', 'instagram', 'tiktok', 'youtube', 'twitter' ] as $digits_platform ) {
+    $digits_copy = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Big Story', 'url' => 'https://presshub.ai/story', 'hashtags' => '#Κύπρος' ], $digits_platform );
+    assert_true( is_string( $digits_copy ) && str_contains( $digits_copy, 'Σάββατο 28 Νοεμβρίου: ανεργία 26% και δύο υπουργοί.' ), "AI {$digits_platform} copy writes spelled-out numbers as digits" );
+}
 assert_true( PressHub_Social_AI_Copywriter::has_hashtag( 'Νέα #κύπρος' ), 'has_hashtag finds a Greek hashtag' );
 assert_false( PressHub_Social_AI_Copywriter::has_hashtag( 'https://presshub.cy/a#section C# &#8217; #2026' ), 'has_hashtag ignores URL fragments, C#, HTML entities and bare numbers' );
 assert_equals( 'Κείμενο', PressHub_Social_AI_Copywriter::ensure_hashtags( 'Κείμενο', '' ), 'ensure_hashtags adds nothing when the post has no hashtags' );
@@ -2035,6 +2047,12 @@ $legacy_brief = str_replace(
     [ 'με τις 6 έως 8 πιο σημαντικές ειδήσεις', '30 έως 45 λέξεις', 'Ημερομηνίες και αριθμοί γραμμένοι όπως εκφωνούνται (π.χ. «3 Μαΐου»), χωρίς σύμβολα, emoji ή συνδέσμους.' ],
     PressHub_Social_Prompt_Loader::load( 'social_tiktok_brief.txt' )
 );
+// Without the 2.91.0 caption and hook digits rule either.
+$legacy_brief = str_replace(
+    [ ' Αριθμοί με ψηφία (π.χ. 28, 15%).', "\n4. Αριθμοί με ψηφία, όπως στο σενάριο (π.χ. 28 Νοεμβρίου, 45, 15%, 1.200 ευρώ), ακόμη κι αν το podcast τους γράφει ολογράφως.", "\n5. Η ίδια", "\n6. Στο τέλος", "\n7. 3 έως" ],
+    [ '', '', "\n4. Η ίδια", "\n5. Στο τέλος", "\n6. 3 έως" ],
+    $legacy_brief
+);
 update_option( 'presshub_social_prompt_tiktok_brief', $legacy_brief );
 assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_brief_prompt(), '3 έως 4 κύριες ειδήσεις' ), 'An unedited 6-8 story brief prompt is upgraded to the 3-4 story default' );
 update_option( 'presshub_social_prompt_tiktok_brief', 'Δικό μου prompt "stories"' );
@@ -2162,6 +2180,14 @@ $short_json = function ( int $n ): string {
 };
 
 $parsed = PressHub_Social_TikTok_Shorts::parse_plan( "```json\n" . $short_json( 4 ) . "\n```", 3 );
+$digits_plan = PressHub_Social_TikTok_Shorts::parse_plan( wp_json_encode( [ 'shorts' => [ [
+    'hook'    => 'Είκοσι έξι τοις εκατό ανεργία',
+    'script'  => '[SPEAKER_1]: Είκοσι έξι τοις εκατό των νέων.',
+    'caption' => 'Τριάντα τρία από ογδόντα οκτώ πάρκα #κύπρος',
+] ] ] ), 1 );
+assert_equals( '33 από 88 πάρκα #κύπρος', $digits_plan[0]['caption'] ?? '', 'parse_plan writes the caption numbers as digits (2.91.0)' );
+assert_equals( '26% ανεργία', $digits_plan[0]['hook'] ?? '', 'parse_plan writes the hook numbers as digits' );
+assert_equals( '[SPEAKER_1]: Είκοσι έξι τοις εκατό των νέων.', $digits_plan[0]['script'] ?? '', 'parse_plan keeps the script (the voice) as written' );
 assert_true( is_array( $parsed ) && 3 === count( $parsed ), 'parse_plan strips code fences and keeps at most the configured count' );
 assert_equals( 'Hook 1 σε λίγες λέξεις', $parsed[0]['hook'] ?? '', 'parse_plan keeps the hook' );
 assert_equals( [ 'Limassol harbour at dawn 1', 'Close-up of a payslip 1' ], $parsed[0]['visuals'] ?? null, 'parse_plan keeps the image descriptions, trimmed, without empty ones' );
@@ -2528,6 +2554,15 @@ assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_jso
 assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 1 ), 300, 10 ) ), 'A brief with a single story is rejected' );
 assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 3, 30, [ 'hook' => '' ] ), 300, 10 ) ), 'A brief without its hook is rejected' );
 assert_equals( 10, count( PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 12, 10 ), 300, 20 )[0]['stories'] ), 'A brief keeps at most BRIEF_MAX_STORIES stories' );
+// 2.91.0: the brief's caption and hook (post text, YouTube title) get digits; the script keeps its words.
+$bp_digits = PressHub_Social_TikTok_Shorts::parse_brief( $brief_json( 3, 30, [
+    'hook'    => 'Οι ειδήσεις της είκοσι οκτώ Νοεμβρίου',
+    'intro'   => '[SPEAKER_1]: Σάββατο είκοσι οκτώ Νοεμβρίου.',
+    'caption' => 'Σάββατο είκοσι οκτώ Νοεμβρίου με είκοσι εννέα εκατομμύρια ευρώ #κύπρος',
+] ), 300, 10 );
+assert_equals( 'Σάββατο 28 Νοεμβρίου με 29 εκατομμύρια ευρώ #κύπρος', $bp_digits[0]['caption'] ?? '', 'The brief caption writes spelled-out numbers as digits' );
+assert_equals( 'Οι ειδήσεις της 28 Νοεμβρίου', $bp_digits[0]['hook'] ?? '', 'The brief hook writes spelled-out numbers as digits' );
+assert_true( str_contains( $bp_digits[0]['script'] ?? '', 'Σάββατο είκοσι οκτώ Νοεμβρίου.' ), 'The brief script (the voice) keeps its spelling' );
 
 // Image order: each worker slot shows the story being read.
 $seq_short = [
@@ -2592,6 +2627,13 @@ assert_equals( PressHub_Social_TikTok_Shorts::BRIEF_BADGE, $brief_claimed['tikto
 assert_equals( 30, count( $brief_claimed['tiktok_short']['images'] ?? [] ), 'The claimed brief has one image per worker slot (119 s voice + 1 s tail)' );
 assert_equals( 6, count( array_unique( $brief_claimed['tiktok_short']['images'] ?? [] ) ), 'Every story image is shown' );
 assert_equals( $brief_prep['images'][5]['url'] ?? 'x', end( $brief_claimed['tiktok_short']['images'] ), 'The last slots show the last story' );
+// A plan made before 2.91.0 kept the spelled-out hook: the claim writes it as digits.
+$old_meta = json_decode( (string) PressHub_Social_Queue::get_job( $brief_ids[0] )['metadata'], true );
+$old_meta['tiktok_short']['hook'] = 'Οι ειδήσεις της είκοσι οκτώ Νοεμβρίου';
+PressHub_Social_Queue::update_job( $brief_ids[0], [ 'metadata' => wp_json_encode( $old_meta ) ] );
+$old_claimed = PressHub_Social_TikTok_Shorts::attach_short( PressHub_Social_Queue::get_job( $brief_ids[0] ) );
+assert_equals( 'Οι ειδήσεις της 28 Νοεμβρίου', $old_claimed['video_title'] ?? '', 'An older plan gets a digits video title at claim' );
+assert_equals( 'Οι ειδήσεις της 28 Νοεμβρίου', $old_claimed['tiktok_short']['hook'] ?? '', 'An older plan gets a digits on-screen hook at claim' );
 
 // YouTube episode scenes take one image group per story of the brief.
 $groups = PressHub_Social_YouTube::short_image_groups( 880 );
