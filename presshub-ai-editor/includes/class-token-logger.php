@@ -606,8 +606,7 @@ class PressHub_AI_Token_Logger {
             $item['cost_usd']          = $cost['usd'];
             $item['cost_priced']       = $cost['priced'];
             $item['cost_estimated']    = $cost['estimated'];
-            $meta                      = is_string( $item['metadata'] ?? null ) ? json_decode( (string) $item['metadata'], true ) : ( $item['metadata'] ?? null );
-            $item['thoughts_tokens']   = is_array( $meta ) ? max( 0, (int) ( $meta['thoughts_tokens'] ?? 0 ) ) : 0;
+            $item['thoughts_tokens']   = (int) $cost['thoughts_tokens'];
         }
         unset( $item );
 
@@ -674,7 +673,8 @@ class PressHub_AI_Token_Logger {
             $params[]  = $cutoff;
         }
 
-        $query = "SELECT * FROM {$table_name} WHERE {$where_sql}";
+        // 2.90.1: only the columns the summary reads (not id or user_id).
+        $query = "SELECT created_at, action_trigger, provider, model, prompt_tokens, completion_tokens, total_tokens, metric_units, status, error_message, metadata FROM {$table_name} WHERE {$where_sql}";
         if ( ! empty( $params ) ) {
             $query = $wpdb->prepare( $query, ...$params );
         }
@@ -770,10 +770,7 @@ class PressHub_AI_Token_Logger {
                 $cost_by_model[ $model_key ]['calls'] += 1;
                 $cost_by_model[ $model_key ]['unpriced'] += $cost['priced'] ? 0 : 1;
             }
-            $meta = is_string( $row['metadata'] ?? null ) ? json_decode( (string) $row['metadata'], true ) : null;
-            if ( is_array( $meta ) ) {
-                $thoughts_total += max( 0, (int) ( $meta['thoughts_tokens'] ?? 0 ) );
-            }
+            $thoughts_total += (int) $cost['thoughts_tokens'];
             $ts = strtotime( (string) ( $row['created_at'] ?? '' ) );
             if ( false !== $ts && ( null === $first_ts || $ts < $first_ts ) ) {
                 $first_ts = $ts;
@@ -785,8 +782,9 @@ class PressHub_AI_Token_Logger {
         };
         foreach ( [ &$cost_by_action, &$cost_by_model ] as &$group ) {
             foreach ( $group as &$entry ) {
-                $entry['usd']   = round( $entry['usd'], 4 );
+                // Share from the unrounded amount, so a tiny total still splits.
                 $entry['share'] = $cost_total > 0 ? round( $entry['usd'] / $cost_total * 100, 1 ) : 0.0;
+                $entry['usd']   = round( $entry['usd'], 4 );
             }
             unset( $entry );
             uasort( $group, $cost_sort );

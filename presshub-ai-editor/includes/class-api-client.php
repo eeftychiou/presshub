@@ -1608,7 +1608,8 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'no_gc_key', __( 'Google Cloud API key is missing.', 'presshub-ai-editor' ) );
         }
 
-        $url = $this->build_imagen_url();
+        $url            = $this->build_imagen_url();
+        $imagen_started = microtime( true );
 
         $body = [
             'instances' => [
@@ -1639,6 +1640,21 @@ class PressHub_AI_API_Client {
         }
 
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        // 2.90.1: one token-log row per Imagen call, so its images are in the cost totals.
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            $imagen_ok = isset( $res_body['predictions'][0]['bytesBase64Encoded'] );
+            PressHub_AI_Token_Logger::log_llm_request(
+                'generate_featured_image',
+                'google_cloud',
+                'imagen-3.0-generate-002',
+                0,
+                0,
+                (int) round( ( microtime( true ) - $imagen_started ) * 1000 ),
+                $imagen_ok ? 'success' : 'error',
+                $imagen_ok ? null : (string) ( $res_body['error']['message'] ?? 'Imagen returned no prediction.' )
+            );
+        }
 
         if ( isset( $res_body['error']['message'] ) ) {
             // D-3: log the provider's error before falling back to mock.
@@ -3646,7 +3662,7 @@ class PressHub_AI_API_Client {
                 PressHub_AI_Logger::warning( sprintf( 'LLM output truncated: provider "gemini", model "%s" reached maximum output tokens limit (%d tokens).', $this->model, $this->max_tokens ) );
             }
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', 'LLM output truncated: maximum output tokens limit reached (finishReason: MAX_TOKENS).', [ 'truncated' => true, 'finish_reason' => $finish_reason, 'max_tokens' => $this->max_tokens ] );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', 'LLM output truncated: maximum output tokens limit reached (finishReason: MAX_TOKENS).', array_merge( [ 'truncated' => true, 'finish_reason' => $finish_reason, 'max_tokens' => $this->max_tokens ], self::usage_extras( 'gemini', $body ) ) );
             }
             return new WP_Error( 'output_truncated', __( 'The AI response was truncated because it reached the maximum output tokens limit. Please increase Maximum Output Tokens in settings or request a shorter response.', 'presshub-ai-editor' ) );
         }
@@ -3694,7 +3710,7 @@ class PressHub_AI_API_Client {
             : __( 'Invalid response from Gemini.', 'presshub-ai-editor' );
 
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-            PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', $err_msg );
+            PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', $err_msg, self::usage_extras( 'gemini', $body ) );
         }
         $this->log_provider_error( 'gemini', $this->model, $err_msg, $response, $duration_ms );
         return new WP_Error( 'api_error', $err_msg );
