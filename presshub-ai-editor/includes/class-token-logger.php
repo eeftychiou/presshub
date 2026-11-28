@@ -757,18 +757,20 @@ class PressHub_AI_Token_Logger {
             }
             if ( '' !== $action && in_array( $cost['basis'], [ 'text', 'tts', 'cloud_tts', 'image', 'unpriced' ], true ) ) {
                 if ( ! isset( $cost_by_action[ $action ] ) ) {
-                    $cost_by_action[ $action ] = [ 'action' => $action, 'label' => self::action_label( $action ), 'usd' => 0.0, 'calls' => 0, 'unpriced' => 0 ];
+                    $cost_by_action[ $action ] = [ 'action' => $action, 'label' => self::action_label( $action ), 'usd' => 0.0, 'calls' => 0, 'unpriced' => 0, 'estimated' => 0 ];
                 }
                 $cost_by_action[ $action ]['usd']   += $usd;
                 $cost_by_action[ $action ]['calls'] += 1;
                 $cost_by_action[ $action ]['unpriced'] += $cost['priced'] ? 0 : 1;
+                $cost_by_action[ $action ]['estimated'] += $cost['estimated'] ? 1 : 0;
                 $model_key = '' !== $model ? $model : $provider;
                 if ( ! isset( $cost_by_model[ $model_key ] ) ) {
-                    $cost_by_model[ $model_key ] = [ 'model' => $model_key, 'provider' => $provider, 'usd' => 0.0, 'calls' => 0, 'unpriced' => 0 ];
+                    $cost_by_model[ $model_key ] = [ 'model' => $model_key, 'provider' => $provider, 'usd' => 0.0, 'calls' => 0, 'unpriced' => 0, 'estimated' => 0 ];
                 }
                 $cost_by_model[ $model_key ]['usd']   += $usd;
                 $cost_by_model[ $model_key ]['calls'] += 1;
                 $cost_by_model[ $model_key ]['unpriced'] += $cost['priced'] ? 0 : 1;
+                $cost_by_model[ $model_key ]['estimated'] += $cost['estimated'] ? 1 : 0;
             }
             $thoughts_total += (int) $cost['thoughts_tokens'];
             $ts = strtotime( (string) ( $row['created_at'] ?? '' ) );

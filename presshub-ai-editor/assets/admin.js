@@ -3527,7 +3527,7 @@ jQuery(document).ready(function($) {
             var perCall = e.calls > 0 ? e.usd / e.calls : 0;
             var cost = e.unpriced > 0 && e.unpriced === e.calls
                 ? '<span title="' + presshubEsc(__('No price known for this model', 'presshub-ai-editor')) + '">-</span>'
-                : '<strong>' + presshubEsc(formatUsd(e.usd)) + '</strong>' + (e.unpriced > 0 ? ' <span style="color:#996800;" title="' + presshubEsc(__('Some calls have no known price', 'presshub-ai-editor')) + '">*</span>' : '');
+                : '<strong>' + presshubEsc((e.estimated > 0 ? '≈ ' : '') + formatUsd(e.usd)) + '</strong>' + (e.unpriced > 0 ? ' <span style="color:#996800;" title="' + presshubEsc(__('Some calls have no known price', 'presshub-ai-editor')) + '">*</span>' : '');
             html += '<tr>' +
                 '<td>' + nameFn(e) + '</td>' +
                 '<td>' + presshubEsc(formatNumber(e.calls)) + '</td>' +
@@ -3594,7 +3594,7 @@ jQuery(document).ready(function($) {
                     notes.push(sprintf(__('Includes %s Gemini thinking tokens, billed as output but not part of the token totals above.', 'presshub-ai-editor'), formatNumber(summary.thoughts_tokens)));
                 }
                 if (summary.cost_estimated_usd > 0) {
-                    notes.push(sprintf(__('%s of it is estimated from characters (TTS rows logged before token counts were kept).', 'presshub-ai-editor'), formatUsd(summary.cost_estimated_usd)));
+                    notes.push(sprintf(__('≈ %s of it is estimated: TTS rows logged before token counts were kept, and models not yet on Google\'s price list, priced like the listed model of their family.', 'presshub-ai-editor'), formatUsd(summary.cost_estimated_usd)));
                 }
                 if (summary.cost_unpriced > 0) {
                     notes.push(sprintf(__('%d calls use a model with no known price and count as $0.', 'presshub-ai-editor'), summary.cost_unpriced));

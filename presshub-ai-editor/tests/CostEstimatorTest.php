@@ -196,4 +196,41 @@ cost_check( [] !== array_filter( (array) $wpdb->queries, static function ( $q ) 
 } ), 'summary selects named columns, not SELECT *' );
 echo '  [9] Review fixes (2.90.1): OK' . PHP_EOL;
 
+// 16. 2.91.1: duplicate voice rows, unlisted models, variant-safe prefixes.
+PressHub_AI_Cost_Estimator::reset();
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'podcast_audio', 'model' => 'Kore', 'metric_units' => 2000 ] ) );
+cost_check( 0.0 === $c['usd'] && 'duplicate' === $c['basis'], 'Gemini voice-name podcast row is a duplicate' );
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'podcast_audio', 'model' => 'Kore+Charon', 'metric_units' => 2000 ] ) );
+cost_check( 'duplicate' === $c['basis'], 'two-voice label is a duplicate too' );
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'podcast_audio', 'provider' => 'google_cloud', 'model' => 'el-GR-Chirp3-HD-Kore', 'metric_units' => 1000000 ] ) );
+cost_near( $c['usd'], 30.0, 'Google Cloud voice rows are still priced' );
+// Flash-Lite is never priced as Flash.
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'model' => 'gemini-3.5-flash-lite', 'prompt_tokens' => 1000000 ] ) );
+cost_near( $c['usd'], 0.25, '3.5 Flash-Lite priced like the listed Flash-Lite, not 3.5 Flash' );
+cost_check( $c['estimated'], 'unlisted model is an estimate' );
+// Unlisted models get their family's price.
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'model' => 'gemini-3.8-flash', 'prompt_tokens' => 1000000, 'completion_tokens' => 100000 ] ) );
+cost_near( $c['usd'], 1.50 + 0.90, '3.8 Flash priced like 3.5 Flash' );
+cost_check( $c['priced'] && $c['estimated'], '3.8 Flash is priced, as an estimate' );
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'generate_featured_image', 'model' => 'gemini-3.1-flash-lite-image' ] ) );
+cost_near( $c['usd'], 0.067, 'lite image model priced like Flash Image' );
+cost_check( $c['estimated'], 'lite image is an estimate' );
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'generate_image_metadata', 'model' => 'gemini-3.8-flash', 'prompt_tokens' => 1000 ] ) );
+cost_check( $c['usd'] > 0, 'image SEO metadata call priced' );
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'podcast_audio', 'model' => 'gemini-3.8-flash-tts', 'metric_units' => 1000, 'metadata' => wp_json_encode( [ 'usage' => [ 'prompt_tokens' => 100, 'output_tokens' => 1000 ] ] ) ] ) );
+cost_near( $c['usd'], ( 100 * 1.00 + 1000 * 20.00 ) / 1000000, 'unlisted TTS model priced like 3.1 Flash TTS' );
+cost_check( null === PressHub_AI_Cost_Estimator::family_model( 'gpt-9' ), 'no family for non-Gemini models' );
+// Listed models are not estimates.
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'model' => 'gemini-3.1-flash-lite', 'prompt_tokens' => 1000000 ] ) );
+cost_check( ! $c['estimated'], 'listed model is exact' );
+// Duplicate rows stay out of the model table; estimated counts are carried.
+$wpdb->tables = [];
+PressHub_AI_Token_Logger::create_table();
+PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', 'Kore', 1000, 10, 'success', null, [], 1 );
+PressHub_AI_Token_Logger::log_llm_request( 'generate_image_metadata', 'gemini', 'gemini-3.8-flash', 1000, 100, 10, 'success', null, [], 1 );
+$stats = PressHub_AI_Token_Logger::get_summary_stats( 'all' );
+cost_check( [ 'gemini-3.8-flash' ] === array_column( $stats['cost_by_model'], 'model' ), 'voice row not listed as a model' );
+cost_check( 1 === (int) $stats['cost_by_model'][0]['estimated'], 'estimated count carried' );
+echo '  [10] Duplicates and unlisted models (2.91.1): OK' . PHP_EOL;
+
 echo 'CostEstimatorTest: ALL TESTS PASSED! OK' . PHP_EOL;
