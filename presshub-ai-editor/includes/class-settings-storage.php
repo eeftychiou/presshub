@@ -1236,7 +1236,7 @@ class PressHub_AI_Settings_Storage {
     public static function get_source_priority_map(): array {
         $map = [];
         foreach ( self::normalize_sources( self::get_briefing_sources() ) as $src ) {
-            $host = strtolower( preg_replace( '/^www\./i', '', (string) parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) ) );
+            $host = strtolower( preg_replace( '/^www\./i', '', (string) wp_parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) ) );
             if ( '' === $host ) {
                 continue;
             }
@@ -1275,7 +1275,7 @@ class PressHub_AI_Settings_Storage {
         $map = [];
         foreach ( self::normalize_sources( self::get_briefing_sources() ) as $src ) {
             $alignment = self::sanitize_source_alignment( $src['alignment'] ?? '' );
-            $host      = strtolower( preg_replace( '/^www\./i', '', (string) parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) ) );
+            $host      = strtolower( preg_replace( '/^www\./i', '', (string) wp_parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) ) );
             if ( '' === $alignment || '' === $host || isset( $map[ $host ] ) ) {
                 continue;
             }
@@ -1341,7 +1341,7 @@ class PressHub_AI_Settings_Storage {
             foreach ( $value as $item ) {
                 if ( is_string( $item ) ) {
                     // Legacy URL string in array
-                    $url = trim( strip_tags( $item ) );
+                    $url = trim( strip_tags( $item ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
                     if ( '' === $url || ! preg_match( '/^https?:\/\/[^\s]+$/i', $url ) || ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
                         continue;
                     }
@@ -1351,7 +1351,7 @@ class PressHub_AI_Settings_Storage {
                     }
                     $seen_urls[ $norm_url ] = true;
 
-                    $host      = (string) parse_url( $url, PHP_URL_HOST );
+                    $host      = (string) wp_parse_url( $url, PHP_URL_HOST );
                     $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
 
                     $clean_sources[] = [
@@ -1384,7 +1384,7 @@ class PressHub_AI_Settings_Storage {
                         $id = 'src_' . substr( md5( $norm_url ), 0, 8 );
                     }
 
-                    $host      = (string) parse_url( $url, PHP_URL_HOST );
+                    $host      = (string) wp_parse_url( $url, PHP_URL_HOST );
                     $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
                     $name      = sanitize_text_field( (string) ( $item['name'] ?? '' ) );
                     if ( '' === trim( $name ) ) {
@@ -1431,7 +1431,7 @@ class PressHub_AI_Settings_Storage {
             // Legacy plaintext newline-separated URLs
             $lines = preg_split( '/[\r\n,]+/', $value );
             foreach ( (array) $lines as $line ) {
-                $line = trim( strip_tags( (string) $line ) );
+                $line = trim( strip_tags( (string) $line ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
                 if ( '' === $line || ! preg_match( '/^https?:\/\/[^\s]+$/i', $line ) || ! filter_var( $line, FILTER_VALIDATE_URL ) ) {
                     continue;
                 }
@@ -1441,7 +1441,7 @@ class PressHub_AI_Settings_Storage {
                 }
                 $seen_urls[ $norm_url ] = true;
 
-                $host      = (string) parse_url( $line, PHP_URL_HOST );
+                $host      = (string) wp_parse_url( $line, PHP_URL_HOST );
                 $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
 
                 $clean_sources[] = [
@@ -1587,7 +1587,7 @@ class PressHub_AI_Settings_Storage {
             }
             $existing_keys[ $norm_url ] = true;
 
-            $host      = (string) parse_url( $url, PHP_URL_HOST );
+            $host      = (string) wp_parse_url( $url, PHP_URL_HOST );
             $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
 
             $name = sanitize_text_field( $raw_name );
@@ -1669,7 +1669,7 @@ class PressHub_AI_Settings_Storage {
 
         foreach ( $lines as $line ) {
             $line = (string) $line;
-            $trimmed = trim( strip_tags( $line ) );
+            $trimmed = trim( strip_tags( $line ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
             if ( '' === $trimmed ) {
                 continue;
             }
@@ -2096,7 +2096,7 @@ class PressHub_AI_Settings_Storage {
         }
         $path = dirname( __DIR__ ) . '/assets/data/tts-voice-catalog.json';
         if ( is_file( $path ) && is_readable( $path ) ) {
-            $decoded = json_decode( (string) file_get_contents( $path ), true );
+            $decoded = json_decode( (string) file_get_contents( $path ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
             if ( is_array( $decoded ) && isset( $decoded['engines'] ) && is_array( $decoded['engines'] ) ) {
                 $names = [];
                 foreach ( $decoded['engines'] as $engine ) {
@@ -3018,8 +3018,8 @@ class PressHub_AI_Settings_Storage {
             if ( ! preg_match( '#^https?://(?:www\.|m\.|web\.)?facebook\.com/(.+)$#i', $line, $m ) ) {
                 continue;
             }
-            $path = trim( (string) parse_url( 'https://x/' . $m[1], PHP_URL_PATH ), '/' );
-            $query = (string) parse_url( 'https://x/' . $m[1], PHP_URL_QUERY );
+            $path = trim( (string) wp_parse_url( 'https://x/' . $m[1], PHP_URL_PATH ), '/' );
+            $query = (string) wp_parse_url( 'https://x/' . $m[1], PHP_URL_QUERY );
             if ( 'profile.php' === $path && preg_match( '/(?:^|&)id=(\d+)/', $query, $q ) ) {
                 $url = 'https://www.facebook.com/profile.php?id=' . $q[1];
             } elseif ( preg_match( '#^[A-Za-z0-9.\-]{2,100}$#', $path ) ) {
@@ -4008,7 +4008,7 @@ class PressHub_AI_Settings_Storage {
                 'post_type'      => 'post',
                 'post_status'    => [ 'publish', 'draft', 'future', 'pending', 'private' ],
                 'posts_per_page' => 50,
-                'meta_query'     => [
+                'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded lookup of the plugin's own posts by meta key.
                     [
                         'key'     => '_presshub_briefing_date',
                         'value'   => $date,

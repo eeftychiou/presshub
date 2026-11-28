@@ -480,7 +480,7 @@ class PressHub_AI_Pool_Cleaner {
 
     /** A date in the URL path: /2026/11/08/, -08-11-2026, -081126- style slugs are ignored. */
     public static function find_url_date( string $url ): string {
-        $path = (string) parse_url( $url, PHP_URL_PATH );
+        $path = (string) wp_parse_url( $url, PHP_URL_PATH );
         if ( '' === $path ) {
             return '';
         }

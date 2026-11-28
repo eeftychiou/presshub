@@ -88,7 +88,7 @@ class PressHub_AI_Log_Exposure_Check {
         }
 
         try {
-            if ( false === @file_put_contents( $canary, 'presshub-canary-' . $random ) ) {
+            if ( false === @file_put_contents( $canary, 'presshub-canary-' . $random ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
                 return [ 'unverified', __( 'Could not write the canary file into the log folder.', 'presshub-ai-editor' ) ];
             }
 
@@ -114,7 +114,7 @@ class PressHub_AI_Log_Exposure_Check {
             return [ 'unverified', sprintf( /* translators: %d: HTTP status code */ __( 'Unexpected HTTP status %d for the canary file.', 'presshub-ai-editor' ), $code ) ];
         } finally {
             if ( file_exists( $canary ) ) {
-                @unlink( $canary );
+                wp_delete_file( $canary );
             }
         }
     }

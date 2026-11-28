@@ -74,7 +74,7 @@ class PressHub_Social_Prompt_Loader {
             throw new RuntimeException( $error_msg );
         }
 
-        $content = file_get_contents( $full_path );
+        $content = file_get_contents( $full_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
         if ( false === $content || '' === trim( $content ) ) {
             $error_msg = sprintf( 'Prompt template asset file is empty: %s', $clean_path );
             PressHub_Social_Logger::error( $error_msg, [

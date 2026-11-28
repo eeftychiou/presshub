@@ -78,8 +78,8 @@ class PressHub_AI_Social_Monitor {
      * Account handle from a profile URL.
      */
     public static function parse_handle( string $url, string $platform ): string {
-        $path = (string) parse_url( trim( $url ), PHP_URL_PATH );
-        $host = strtolower( (string) parse_url( trim( $url ), PHP_URL_HOST ) );
+        $path = (string) wp_parse_url( trim( $url ), PHP_URL_PATH );
+        $host = strtolower( (string) wp_parse_url( trim( $url ), PHP_URL_HOST ) );
         $seg  = explode( '/', trim( $path, '/' ) )[0] ?? '';
         if ( 'x' === $platform ) {
             if ( ! preg_match( '/(^|\.)(x|twitter)\.com$/', $host ) ) {
@@ -108,14 +108,14 @@ class PressHub_AI_Social_Monitor {
      */
     public static function parse_facebook_handle( string $url ): string {
         $url  = trim( $url );
-        $host = strtolower( (string) parse_url( $url, PHP_URL_HOST ) );
+        $host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
         if ( ! preg_match( '/^((www|m|web|mbasic|touch)\.)?(facebook|fb)\.com$/', $host ) ) {
             return '';
         }
-        $segs = array_values( array_filter( explode( '/', trim( (string) parse_url( $url, PHP_URL_PATH ), '/' ) ), 'strlen' ) );
+        $segs = array_values( array_filter( explode( '/', trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' ) ), 'strlen' ) );
         $first = strtolower( $segs[0] ?? '' );
         if ( 'profile.php' === $first ) {
-            parse_str( (string) parse_url( $url, PHP_URL_QUERY ), $q );
+            parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $q );
             $id = (string) ( $q['id'] ?? '' );
             return preg_match( '/^\d{5,25}$/', $id ) ? 'id-' . $id : '';
         }
@@ -155,12 +155,12 @@ class PressHub_AI_Social_Monitor {
      */
     public static function facebook_post_url( string $url, string $post_id ): string {
         $url  = trim( $url );
-        $host = strtolower( (string) parse_url( $url, PHP_URL_HOST ) );
+        $host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
         if ( 0 !== strpos( $url, 'https://' ) || ! preg_match( '/^((www|m|web)\.)?facebook\.com$/', $host ) ) {
             return 'https://www.facebook.com/' . $post_id;
         }
-        $path = (string) parse_url( $url, PHP_URL_PATH );
-        parse_str( (string) parse_url( $url, PHP_URL_QUERY ), $q );
+        $path = (string) wp_parse_url( $url, PHP_URL_PATH );
+        parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $q );
         $keep = array_intersect_key( $q, array_flip( [ 'story_fbid', 'id', 'fbid', 'v', 'set' ] ) );
         return 'https://www.facebook.com' . ( '' !== $path ? $path : '/' ) . ( $keep ? '?' . http_build_query( $keep ) : '' );
     }

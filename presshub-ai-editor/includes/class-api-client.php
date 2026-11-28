@@ -53,7 +53,7 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
         // Auto-rotate if > 8MB
         if ( ! is_wp_error( $log_file ) && file_exists( $log_file ) && filesize( $log_file ) > 8 * 1024 * 1024 ) {
             $rotated = $log_file . '.' . gmdate( 'Ymd_His' ) . '.old';
-            @rename( $log_file, $rotated );
+            @rename( $log_file, $rotated ); // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
 
         $entry = [
@@ -69,7 +69,7 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
 
         $json = wp_json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
         if ( false !== $json && ! is_wp_error( $log_file ) ) {
-            @file_put_contents( $log_file, $json . "\n", FILE_APPEND | LOCK_EX );
+            @file_put_contents( $log_file, $json . "\n", FILE_APPEND | LOCK_EX ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
 
         do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt, $response, $meta, $trace_id );
@@ -1136,7 +1136,7 @@ class PressHub_AI_API_Client {
      */
     private function sideload_media( $filename, $data, $post_id, $title ) {
         $filepath = get_temp_dir() . $filename;
-        file_put_contents( $filepath, $data );
+        file_put_contents( $filepath, $data ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
 
         require_once ABSPATH . 'wp-admin/includes/image.php';
         require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -1148,7 +1148,7 @@ class PressHub_AI_API_Client {
         ];
 
         $media_id = media_handle_sideload( $file_array, $post_id, $title );
-        @unlink( $filepath );
+        wp_delete_file( $filepath );
 
         if ( is_wp_error( $media_id ) ) {
             return $media_id;
@@ -1412,7 +1412,7 @@ class PressHub_AI_API_Client {
                 return new WP_Error( 'gemini_no_image', __( 'Gemini did not return image data.', 'presshub-ai-editor' ) );
             }
 
-            $image_data = base64_decode( $found_b64 );
+            $image_data = base64_decode( $found_b64 ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
             $ext        = ( false !== strpos( $mime_type, 'png' ) ) ? 'png' : 'jpg';
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
@@ -1470,7 +1470,7 @@ class PressHub_AI_API_Client {
 
             $b64 = $json['data'][0]['b64_json'] ?? '';
             if ( ! empty( $b64 ) ) {
-                $image_data = base64_decode( $b64 );
+                $image_data = base64_decode( $b64 ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
                 $mime_type  = 'image/png';
                 $ext        = 'png';
             } elseif ( ! empty( $json['data'][0]['url'] ) ) {
@@ -1646,7 +1646,7 @@ class PressHub_AI_API_Client {
         }
 
         if ( isset( $res_body['predictions'][0]['bytesBase64Encoded'] ) ) {
-            $image_data = base64_decode( $res_body['predictions'][0]['bytesBase64Encoded'] );
+            $image_data = base64_decode( $res_body['predictions'][0]['bytesBase64Encoded'] ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
             $ret = $this->sideload_media(
                 'ai-image-' . time() . '-' . uniqid() . '.jpg',
                 $image_data,
@@ -1736,7 +1736,7 @@ class PressHub_AI_API_Client {
             $this->log_provider_error( 'google_cloud_tts', 'en-US-Journey-F', $res_body['error']['message'], $response );
         }
         if ( isset( $res_body['audioContent'] ) ) {
-            $audio_data = base64_decode( $res_body['audioContent'] );
+            $audio_data = base64_decode( $res_body['audioContent'] ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
 
             return $this->sideload_media(
                 'ai-report-' . time() . '-' . uniqid() . '.mp3',
@@ -1864,7 +1864,7 @@ class PressHub_AI_API_Client {
         }
 
         if ( isset( $res_body['audioContent'] ) ) {
-            $mp3_bytes = base64_decode( $res_body['audioContent'] );
+            $mp3_bytes = base64_decode( $res_body['audioContent'] ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
             $record_tts_call( (int) wp_remote_retrieve_response_code( $response ), '', strlen( (string) $mp3_bytes ) );
             if ( function_exists( 'presshub_ai_log_prompts' ) ) {
                 $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
@@ -1985,10 +1985,10 @@ class PressHub_AI_API_Client {
         // Auto-rotate if the file grows past 8 MB to avoid filling uploads.
         if ( file_exists( $log_file ) && filesize( $log_file ) > 8 * 1024 * 1024 ) {
             $rotated = $log_file . '.' . gmdate( 'Ymd_His' ) . '.old';
-            @rename( $log_file, $rotated );
+            @rename( $log_file, $rotated ); // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
 
-        @file_put_contents( $log_file, $line, FILE_APPEND | LOCK_EX );
+        @file_put_contents( $log_file, $line, FILE_APPEND | LOCK_EX ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
     }
 
     /**
@@ -2456,7 +2456,7 @@ class PressHub_AI_API_Client {
         }
 
         $tts_api_key = $this->resolve_gemini_api_key();
-        $gen_url     = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $configured_model ) . ':generateContent?key=' . urlencode( $tts_api_key );
+        $gen_url     = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $configured_model ) . ':generateContent?key=' . rawurlencode( $tts_api_key );
         $masked_url  = self::mask_api_key_in_url( $gen_url );
         $masked_key  = class_exists( 'PressHub_AI_Provider_Store' ) ? PressHub_AI_Provider_Store::mask_key( $tts_api_key ) : '***masked***';
 
@@ -2592,13 +2592,13 @@ class PressHub_AI_API_Client {
             );
         }
 
-        $raw_pcm = base64_decode( $audio_base64 );
+        $raw_pcm = base64_decode( $audio_base64 ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
         $sample_rate = 24000;
         if ( preg_match( '/rate=(\d+)/i', $mime_type, $rm ) ) {
             $sample_rate = (int) $rm[1];
         }
         $wav_binary = ( substr( $raw_pcm, 0, 4 ) === 'RIFF' ) ? $raw_pcm : self::pcm_to_wav( $raw_pcm, $sample_rate );
-        $data_url   = 'data:audio/wav;base64,' . base64_encode( $wav_binary );
+        $data_url   = 'data:audio/wav;base64,' . base64_encode( $wav_binary ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- decodes or encodes an API / transport payload, not obfuscating code.
 
         return [
             'success'         => true,
@@ -2773,7 +2773,7 @@ class PressHub_AI_API_Client {
             // Issue #153 — wait applied before the next attempt (server retry hint or backoff).
             $retry_wait_ms     = 0;
             $retry_wait_source = '';
-            $gen_url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
+            $gen_url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . rawurlencode( $tts_api_key );
 
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::debug( sprintf( '[LogosAI Speech] POST %s with model "%s"', 'generateContent', $model ) );
@@ -3032,7 +3032,7 @@ class PressHub_AI_API_Client {
             return new WP_Error( $error_code, $err_msg );
         }
 
-        $raw_audio = base64_decode( $audio_base64 );
+        $raw_audio = base64_decode( $audio_base64 ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
         if ( false === $raw_audio || '' === $raw_audio ) {
             return new WP_Error( 'decode_failed', __( 'Failed to decode base64 audio from Gemini.', 'presshub-ai-editor' ) );
         }
@@ -3479,7 +3479,7 @@ class PressHub_AI_API_Client {
                     'source' => [
                         'type' => 'base64',
                         'media_type' => 'application/pdf',
-                        'data' => base64_encode( file_get_contents( $file_path ) )
+                        'data' => base64_encode( file_get_contents( $file_path ) ) // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- decodes or encodes an API / transport payload, not obfuscating code.
                     ]
                 ];
             } else {
@@ -3578,7 +3578,7 @@ class PressHub_AI_API_Client {
             $parts[] = [
                 'inlineData' => [
                     'mimeType' => $mime,
-                    'data' => base64_encode( file_get_contents( $file_path ) )
+                    'data' => base64_encode( file_get_contents( $file_path ) ) // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- decodes or encodes an API / transport payload, not obfuscating code.
                 ]
             ];
         }
@@ -3786,10 +3786,10 @@ class PressHub_AI_API_Client {
                 }
             }
         } elseif ( 'gemini' === $type ) {
-            $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . urlencode( $api_key );
+            $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . rawurlencode( $api_key );
             if ( ! empty( $base_url ) ) {
                 $base = preg_replace( '#/models/?$#i', '', rtrim( $base_url, '/' ) );
-                $endpoint = $base . '/models?key=' . urlencode( $api_key );
+                $endpoint = $base . '/models?key=' . rawurlencode( $api_key );
             }
 
             $referer  = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';

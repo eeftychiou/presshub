@@ -591,7 +591,7 @@ class PressHub_Social_AI_Copywriter {
         // Strip HTML tags and decode entities
         $clean = function_exists( 'wp_strip_all_tags' )
             ? wp_strip_all_tags( html_entity_decode( $script, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) )
-            : strip_tags( html_entity_decode( $script, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+            : strip_tags( html_entity_decode( $script, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
 
         // Collapse multiple whitespace/newlines into a single space
         $clean = preg_replace( '/\s+/', ' ', $clean );
@@ -713,7 +713,7 @@ class PressHub_Social_AI_Copywriter {
                         foreach ( $filenames as $fn ) {
                             $fpath = $slash_dir . $fn;
                             if ( file_exists( $fpath ) ) {
-                                $fcontent = @file_get_contents( $fpath );
+                                $fcontent = @file_get_contents( $fpath ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
                                 if ( false !== $fcontent && '' !== trim( $fcontent ) ) {
                                     $podcast_script = $fcontent;
                                     break;

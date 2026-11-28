@@ -283,7 +283,7 @@ class PressHub_Social_TikTok_Shorts {
         }
         $content = (string) preg_replace( '/<(script|style|audio|video|figure)\b[^>]*>.*?<\/\1>/isu', ' ', $content );
         $content = (string) preg_replace( '/<\/(p|h[1-6]|li|blockquote|div)>|<br\s*\/?>/iu', "\n", $content );
-        $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
+        $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
         $content = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
         // &nbsp; (U+00A0) and other Unicode spaces count as spaces, so an empty spacer
         // paragraph is no text.
@@ -1270,7 +1270,7 @@ class PressHub_Social_TikTok_Shorts {
             }
             $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], $prepared );
             PressHub_Social_Queue::update_job( $job_id, [
-                'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
+                'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : wp_json_encode( $metadata ),
             ] );
             PressHub_Social_Logger::info( sprintf( '%s %d/%d prepared for job #%d (post #%d): "%s"', ( $story_posts ? 'TikTok story post, ' : '' ) . ( $slides_job ? 'TikTok photo slides' : 'TikTok short' ), $index + 1, count( $plan['shorts'] ), $job_id, $post_id, $short['hook'] ) );
         }

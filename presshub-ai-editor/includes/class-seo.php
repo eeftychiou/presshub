@@ -48,7 +48,7 @@ class PressHub_AI_SEO {
         $text = preg_replace( '/\[\s*(?:SPEAKER[_\s]*\d+|Presenter\s*\d+)\s*\]\s*:?\s*/iu', '', $text );
         $text = preg_replace( '/^\s*(?:SPEAKER[_\s]*\d+|Presenter\s*\d+)\s*:\s*/imu', '', $text );
         $text = preg_replace( '/<!--.*?-->/s', ' ', (string) $text );
-        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $text ) : strip_tags( $text );
+        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $text ) : strip_tags( $text ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
         $text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
         $text = preg_replace( '/[ \t]+/u', ' ', $text );
         $text = preg_replace( '/\n{3,}/', "\n\n", $text );
@@ -743,7 +743,7 @@ class PressHub_AI_SEO {
      * Lower-cased host of a URL without "www." ('' for relative URLs).
      */
     private static function url_host( string $url ): string {
-        $host = function_exists( 'wp_parse_url' ) ? wp_parse_url( $url, PHP_URL_HOST ) : parse_url( $url, PHP_URL_HOST );
+        $host = function_exists( 'wp_parse_url' ) ? wp_parse_url( $url, PHP_URL_HOST ) : wp_parse_url( $url, PHP_URL_HOST );
         return is_string( $host ) ? strtolower( (string) preg_replace( '/^www\./', '', $host ) ) : '';
     }
 
@@ -752,7 +752,7 @@ class PressHub_AI_SEO {
     }
 
     private static function clean_line( string $text, int $max ): string {
-        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $text ) : strip_tags( $text );
+        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $text ) : strip_tags( $text ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
         $text = trim( preg_replace( '/\s+/u', ' ', $text ) );
         $text = trim( $text, "\"'`" );
         if ( mb_strlen( $text ) > $max ) {

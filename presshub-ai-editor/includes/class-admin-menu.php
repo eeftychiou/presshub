@@ -153,7 +153,7 @@ class PressHub_Admin_Menu {
         if ( empty( $submenu[ self::PARENT ] ) || ! is_array( $submenu[ self::PARENT ] ) ) {
             return;
         }
-        $submenu[ self::PARENT ] = self::sorted( self::without_auto_parent_row( $submenu[ self::PARENT ] ) );
+        $submenu[ self::PARENT ] = self::sorted( self::without_auto_parent_row( $submenu[ self::PARENT ] ) ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- reorders the plugin's own submenu entries.
     }
 
     /**

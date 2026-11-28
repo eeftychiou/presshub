@@ -301,7 +301,7 @@ add_action( 'rest_api_init', [ 'PressHub_Social_REST_Controller', 'register_rout
 add_action( 'rest_api_init', [ 'PressHub_AI_Social_Monitor', 'register_routes' ] );
 
 // Register Social custom cron schedule interval
-add_filter( 'cron_schedules', function( array $schedules ): array {
+add_filter( 'cron_schedules', function( array $schedules ): array { // phpcs:ignore WordPress.WP.CronInterval.CronSchedulesInterval -- one-minute interval needed by the social queue worker.
     if ( ! isset( $schedules['presshub_social_interval'] ) ) {
         $schedules['presshub_social_interval'] = [
             'interval' => 60,
@@ -1807,7 +1807,7 @@ function presshub_ai_find_podcast_post_id( $date, $edition ) {
         'post_status'    => [ 'publish', 'pending', 'draft', 'future', 'private' ],
         'posts_per_page' => 1,
         'fields'         => 'ids',
-        'meta_query'     => $meta_query,
+        'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded lookup of the plugin's own posts by meta key.
     ] );
     $first = is_array( $posts ) && ! empty( $posts ) ? reset( $posts ) : 0;
     return is_object( $first ) ? (int) ( $first->ID ?? 0 ) : (int) $first;

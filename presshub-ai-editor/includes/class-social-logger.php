@@ -101,7 +101,7 @@ class PressHub_Social_Logger {
                     break;
             }
         } elseif ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            $context_str = ! empty( $context ) ? ' ' . ( function_exists( 'wp_json_encode' ) ? wp_json_encode( $context ) : json_encode( $context ) ) : '';
+            $context_str = ! empty( $context ) ? ' ' . ( function_exists( 'wp_json_encode' ) ? wp_json_encode( $context ) : wp_json_encode( $context ) ) : '';
             error_log( sprintf( '[Social AutoPost] [%s] %s%s', $normalized_level, $message, $context_str ) );
         }
     }

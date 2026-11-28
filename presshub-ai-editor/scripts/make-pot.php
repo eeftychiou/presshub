@@ -33,7 +33,7 @@
  */
 
 if ( PHP_SAPI !== 'cli' ) {
-    fwrite( STDERR, "This script must be run from the command line.\n" );
+    fwrite( STDERR, "This script must be run from the command line.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
     exit( 1 );
 }
 
@@ -113,7 +113,7 @@ $add = function ( string $msgid, string $context, string $location ) use ( &$str
 };
 
 foreach ( $php_sources as $file ) {
-    $contents = file_get_contents( $file );
+    $contents = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
     $rel      = str_replace( PLUGIN_ROOT . '/', '', $file );
     // Strip line comments (// ...) and block comments (/* ... */) so a
     // developer comment in source never lands in the catalogue. The "//" of
@@ -167,7 +167,7 @@ foreach ( $js_files as $file ) {
     if ( ! is_file( $file ) ) {
         continue;
     }
-    $contents = file_get_contents( $file );
+    $contents = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
     $rel      = str_replace( PLUGIN_ROOT . '/', '', $file );
     // Strip block + line comments so developer notes don't end up in POT.
     $stripped = preg_replace( '#//[^\n]*#', '', $contents );
@@ -184,7 +184,7 @@ foreach ( $js_files as $file ) {
 }
 
 if ( empty( $strings ) ) {
-    fwrite( STDERR, "No translatable strings found — aborting.\n" );
+    fwrite( STDERR, "No translatable strings found — aborting.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
     exit( 1 );
 }
 
@@ -192,8 +192,8 @@ if ( empty( $strings ) ) {
 // 2. Emit a GNU gettext POT file.
 // ---------------------------------------------------------------------------
 
-if ( ! is_dir( OUT_DIR ) && ! mkdir( OUT_DIR, 0755, true ) && ! is_dir( OUT_DIR ) ) {
-    fwrite( STDERR, "Failed to create " . OUT_DIR . "\n" );
+if ( ! is_dir( OUT_DIR ) && ! mkdir( OUT_DIR, 0755, true ) && ! is_dir( OUT_DIR ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
+    fwrite( STDERR, "Failed to create " . OUT_DIR . "\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
     exit( 1 );
 }
 
@@ -245,8 +245,8 @@ foreach ( $strings as $entry ) {
     }
 }
 
-if ( file_put_contents( OUT_FILE, $out ) === false ) {
-    fwrite( STDERR, "Failed to write " . OUT_FILE . "\n" );
+if ( file_put_contents( OUT_FILE, $out ) === false ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
+    fwrite( STDERR, "Failed to write " . OUT_FILE . "\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
     exit( 1 );
 }
 

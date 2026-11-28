@@ -59,7 +59,7 @@ class PressHub_Social_Worker_Client {
         ];
 
         if ( 'GET' !== strtoupper( $method ) && ! empty( $data ) ) {
-            $args['body'] = function_exists( 'wp_json_encode' ) ? wp_json_encode( $data ) : json_encode( $data );
+            $args['body'] = function_exists( 'wp_json_encode' ) ? wp_json_encode( $data ) : wp_json_encode( $data );
         }
 
         $response = wp_remote_request( $endpoint, $args );
@@ -80,7 +80,7 @@ class PressHub_Social_Worker_Client {
 
         if ( $code >= 400 || ( is_array( $body ) && isset( $body['success'] ) && false === $body['success'] ) ) {
             $err_msg = is_array( $body ) && ! empty( $body['error'] )
-                ? ( is_array( $body['error'] ) ? ( $body['error']['message'] ?? json_encode( $body['error'] ) ) : (string) $body['error'] )
+                ? ( is_array( $body['error'] ) ? ( $body['error']['message'] ?? wp_json_encode( $body['error'] ) ) : (string) $body['error'] )
                 : sprintf( 'Social Worker responded with HTTP %d: %s', $code, substr( $raw, 0, 300 ) );
 
             if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {

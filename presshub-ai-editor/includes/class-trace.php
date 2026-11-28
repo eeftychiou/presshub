@@ -27,7 +27,7 @@ class PressHub_AI_Trace {
         try {
             return 'tr_' . bin2hex( random_bytes( 8 ) );
         } catch ( \Throwable $e ) {
-            return 'tr_' . substr( md5( uniqid( (string) mt_rand(), true ) ), 0, 16 );
+            return 'tr_' . substr( md5( uniqid( (string) wp_rand(), true ) ), 0, 16 );
         }
     }
 
