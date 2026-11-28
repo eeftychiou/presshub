@@ -266,8 +266,9 @@ class PressHub_AI_Number_Digits {
         } );
         $word = '(?:' . implode( '|', $alts ) . ')';
         $b    = '(?![\p{L}\p{M}\p{N}])';
-        // Not right after a letter, digit, # @ / _ - or "τοις " (a lone "εκατό" of "τοις εκατό").
-        $pre = '(?<![\p{L}\p{M}\p{N}#@\/_\-])(?<!' . self::loose( 'τοις' ) . ' )';
+        // Not right after a letter, digit, # @ / _ - = ? & (hashtags, links, queries) or
+        // "τοις " (a lone "εκατό" of "τοις εκατό", with one or two spaces or tabs).
+        $pre = '(?<![\p{L}\p{M}\p{N}#@\/_\-=?&])(?<!' . self::loose( 'τοις' ) . '[ \t])(?<!' . self::loose( 'τοις' ) . '[ \t]{2})';
         self::$pattern = '/' . $pre . '(?<run>' . $word . $b . '(?:[ \t]+' . $word . $b . ')*)'
             . '(?<pct>[ \t]+' . self::loose( 'τοις' ) . '[ \t]+' . self::loose( 'εκατο' ) . $b . ')?'
             . '(?=[ \t]+(?<next>\p{L}+)|)/iu';

@@ -953,7 +953,7 @@ class PressHub_Social_TikTok_Shorts {
             // Stories the plan actually has (surplus jobs are cancelled), for the n/N badge.
             'count' => (int) ( $short['total'] ?? $short['count'] ?? 0 ),
             'topic'    => (string) ( $short['topic'] ?? '' ),
-            'hook'     => (string) $short['hook'],
+            'hook'     => self::digits( (string) $short['hook'] ),
             'images'   => array_values( array_filter( array_map( fn( $img ) => is_array( $img ) ? (string) ( $img['url'] ?? '' ) : '', (array) ( $short['images'] ?? [] ) ) ) ),
             'segments' => array_values( (array) ( $short['audio']['segments'] ?? [] ) ),
         ];
@@ -996,7 +996,7 @@ class PressHub_Social_TikTok_Shorts {
             'index'       => (int) $short['index'],
             'count'       => (int) ( $short['total'] ?? $short['count'] ?? 0 ),
             'topic'       => (string) ( $short['topic'] ?? '' ),
-            'hook'        => (string) $short['hook'],
+            'hook'        => self::digits( (string) $short['hook'] ),
             'slides'      => $texts,
             'images'      => array_values( array_filter( array_map( fn( $img ) => is_array( $img ) ? (string) ( $img['url'] ?? '' ) : '', (array) ( $short['images'] ?? [] ) ) ) ),
             'mood'        => $mood,

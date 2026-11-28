@@ -2627,6 +2627,13 @@ assert_equals( PressHub_Social_TikTok_Shorts::BRIEF_BADGE, $brief_claimed['tikto
 assert_equals( 30, count( $brief_claimed['tiktok_short']['images'] ?? [] ), 'The claimed brief has one image per worker slot (119 s voice + 1 s tail)' );
 assert_equals( 6, count( array_unique( $brief_claimed['tiktok_short']['images'] ?? [] ) ), 'Every story image is shown' );
 assert_equals( $brief_prep['images'][5]['url'] ?? 'x', end( $brief_claimed['tiktok_short']['images'] ), 'The last slots show the last story' );
+// A plan made before 2.91.0 kept the spelled-out hook: the claim writes it as digits.
+$old_meta = json_decode( (string) PressHub_Social_Queue::get_job( $brief_ids[0] )['metadata'], true );
+$old_meta['tiktok_short']['hook'] = 'Οι ειδήσεις της είκοσι οκτώ Νοεμβρίου';
+PressHub_Social_Queue::update_job( $brief_ids[0], [ 'metadata' => wp_json_encode( $old_meta ) ] );
+$old_claimed = PressHub_Social_TikTok_Shorts::attach_short( PressHub_Social_Queue::get_job( $brief_ids[0] ) );
+assert_equals( 'Οι ειδήσεις της 28 Νοεμβρίου', $old_claimed['video_title'] ?? '', 'An older plan gets a digits video title at claim' );
+assert_equals( 'Οι ειδήσεις της 28 Νοεμβρίου', $old_claimed['tiktok_short']['hook'] ?? '', 'An older plan gets a digits on-screen hook at claim' );
 
 // YouTube episode scenes take one image group per story of the brief.
 $groups = PressHub_Social_YouTube::short_image_groups( 880 );

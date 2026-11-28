@@ -82,6 +82,9 @@ foreach ( [
     '#δεκαπέντε',
     'Twenty eight people',
     'ένα χιλιάδες',
+    'https://e.test/?a=είκοσι&b=δέκα',
+    "μισό τοις\tεκατό",
+    'μισό τοις  εκατό',
     'Ήδη 28 Νοεμβρίου και 15%',
 ] as $kept ) {
     nd_check( "apply keeps: {$kept}", $kept === $D::apply( $kept ) );
