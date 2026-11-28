@@ -26,7 +26,8 @@
  * - Google Cloud TTS: characters at the voice type's price (Chirp 3 HD, Studio, Neural2,
  *   WaveNet, Standard).
  * - Images: a price per successful image for the model (1K for Gemini image models,
- *   the size the plugin asks for).
+ *   the size the plugin asks for; Imagen calls are logged from 2.90.1).
+ * - TTS from a provider other than Gemini or Google Cloud is unpriced.
  * - Free: the web scraper, the podcast_audio_run summary row and the "stitched" podcast
  *   audio rows (their characters are already on the per-turn rows).
  *
@@ -145,8 +146,9 @@ class PressHub_AI_Cost_Estimator {
      * Estimated cost of one token-log row.
      *
      * @param array $row Row of the token-log table (metadata as JSON text or array).
-     * @return array{usd: float, priced: bool, estimated: bool, basis: string}
+     * @return array{usd: float, priced: bool, estimated: bool, basis: string, thoughts_tokens: int}
      *               basis: text | tts | cloud_tts | image | free | none (nothing billed) | unpriced.
+     *               thoughts_tokens: Gemini thinking tokens billed on a text row (0 otherwise).
      */
     public static function estimate( array $row ): array {
         $action    = (string) ( $row['action_trigger'] ?? '' );
@@ -186,7 +188,11 @@ class PressHub_AI_Cost_Estimator {
             if ( in_array( $provider, [ 'google_cloud', 'google_cloud_tts' ], true ) ) {
                 return self::cloud_tts( $model, $units );
             }
-            return self::gemini_tts( $model, $units, $meta );
+            if ( in_array( $provider, [ '', 'gemini', 'gemini_tts' ], true ) ) {
+                return self::gemini_tts( $model, $units, $meta );
+            }
+            // TTS from another provider (e.g. OpenAI tts-1): no price known.
+            return self::result( 0.0, false, false, 'unpriced' );
         }
 
         if ( 0 === $prompt && 0 === $output ) {
@@ -208,7 +214,7 @@ class PressHub_AI_Cost_Estimator {
         $cache_rate = (float) ( $long && isset( $price['cache_long'] ) ? $price['cache_long'] : ( $price['cache'] ?? $in_rate ) );
 
         $usd = ( ( $prompt - $cached ) * $in_rate + $cached * $cache_rate + ( $output + $thoughts ) * $out_rate ) / 1000000;
-        return self::result( $usd, true, false, 'text' );
+        return self::result( $usd, true, false, 'text', $thoughts );
     }
 
     /**
@@ -245,7 +251,7 @@ class PressHub_AI_Cost_Estimator {
     private static function cloud_tts( string $voice, int $chars ): array {
         $rate  = null;
         foreach ( (array) ( self::prices()['cloud_tts'] ?? [] ) as $type => $per_m ) {
-            if ( false !== strpos( $voice, (string) $type ) ) {
+            if ( '' !== (string) $type && false !== stripos( $voice, (string) $type ) ) {
                 $rate = (float) $per_m;
                 break;
             }
@@ -293,12 +299,13 @@ class PressHub_AI_Cost_Estimator {
         return [];
     }
 
-    private static function result( float $usd, bool $priced, bool $estimated, string $basis ): array {
+    private static function result( float $usd, bool $priced, bool $estimated, string $basis, int $thoughts = 0 ): array {
         return [
-            'usd'       => round( max( 0.0, $usd ), 6 ),
-            'priced'    => $priced,
-            'estimated' => $estimated,
-            'basis'     => $basis,
+            'usd'             => round( max( 0.0, $usd ), 6 ),
+            'priced'          => $priced,
+            'estimated'       => $estimated,
+            'basis'           => $basis,
+            'thoughts_tokens' => $thoughts,
         ];
     }
 }

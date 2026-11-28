@@ -164,4 +164,36 @@ cost_check( 30 === PressHub_AI_Token_Logger::range_days( '30d', $now - 90 * 8640
 cost_check( 90 === PressHub_AI_Token_Logger::range_days( 'all', $now - 90 * 86400, $now ), 'all time from the first row' );
 echo '  [8] Summary, rows, CSV, days: OK' . PHP_EOL;
 
+// 15. 2.90.1 review fixes.
+// TTS from a provider other than Gemini or Google Cloud is unpriced, not priced as Gemini.
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'podcast_audio', 'provider' => 'openai', 'model' => 'gpt-4o-mini-tts', 'metric_units' => 1000 ] ) );
+cost_check( ! $c['priced'] && 'unpriced' === $c['basis'], 'OpenAI TTS is unpriced' );
+// Thinking tokens come back with the estimate.
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'prompt_tokens' => 10, 'completion_tokens' => 10, 'metadata' => wp_json_encode( [ 'thoughts_tokens' => 77 ] ) ] ) );
+cost_check( 77 === $c['thoughts_tokens'], 'estimate returns thoughts_tokens' );
+// Voice-type keys from a filter match whatever their case.
+add_filter( 'presshub_ai_cost_prices', function ( $p ) {
+    $p['cloud_tts'] = [ 'Journey' => 20.0 ] + $p['cloud_tts'];
+    return $p;
+} );
+PressHub_AI_Cost_Estimator::reset();
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'podcast_audio', 'provider' => 'google_cloud', 'model' => 'el-GR-Journey-F', 'metric_units' => 1000000 ] ) );
+if ( 0.0 !== PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'provider' => 'openai', 'model' => 'gpt-9', 'prompt_tokens' => 1000000 ] ) )['usd'] ) {
+    cost_near( $c['usd'], 20.0, 'mixed-case filter key matches the voice' );
+}
+PressHub_AI_Cost_Estimator::reset();
+// Imagen calls are priced.
+$c = PressHub_AI_Cost_Estimator::estimate( cost_row( [ 'action_trigger' => 'generate_featured_image', 'provider' => 'google_cloud', 'model' => 'imagen-3.0-generate-002' ] ) );
+cost_near( $c['usd'], 0.04, 'Imagen 3 image' );
+// Share is worked out before rounding: tiny totals still split.
+$wpdb->tables = [];
+PressHub_AI_Token_Logger::create_table();
+PressHub_AI_Token_Logger::log_llm_request( 'seo_title', 'gemini', 'gemini-2.5-flash-lite', 10, 10, 10, 'success', null, [], 1 );
+$stats = PressHub_AI_Token_Logger::get_summary_stats( 'all' );
+cost_check( 100.0 === (float) $stats['cost_by_action'][0]['share'], 'tiny total keeps its 100% share' );
+cost_check( [] !== array_filter( (array) $wpdb->queries, static function ( $q ) {
+    return 0 === strpos( (string) $q, 'SELECT created_at, action_trigger' );
+} ), 'summary selects named columns, not SELECT *' );
+echo '  [9] Review fixes (2.90.1): OK' . PHP_EOL;
+
 echo 'CostEstimatorTest: ALL TESTS PASSED! OK' . PHP_EOL;
